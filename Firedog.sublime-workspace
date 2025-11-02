@@ -1,0 +1,1085 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"Magaz",
+				"Magazzino"
+			],
+			[
+				"VER",
+				"VERS_plug"
+			],
+			[
+				"VERS_",
+				"VERS_pro"
+			],
+			[
+				"ARR",
+				"ARR_P"
+			],
+			[
+				"eac",
+				"each\tfunc"
+			],
+			[
+				"hom",
+				"home\tfunc"
+			],
+			[
+				"home",
+				"user_home\tfunc"
+			],
+			[
+				"vecc",
+				"vecchio\tabc"
+			],
+			[
+				"hack",
+				"hack\tabc"
+			],
+			[
+				"up",
+				"up_hack\tabc"
+			],
+			[
+				"up_net",
+				"up_net\tabc"
+			],
+			[
+				"fun",
+				"fun_test\tabc"
+			],
+			[
+				"www",
+				"www.google.it\tabc"
+			],
+			[
+				"Net",
+				"Netclass\tabc"
+			],
+			[
+				"ARG",
+				"argv\tfunc"
+			],
+			[
+				"pin",
+				"ping_host\tabc"
+			],
+			[
+				"inf",
+				"info_remote\tabc"
+			],
+			[
+				"ping",
+				"pingato\tabc"
+			],
+			[
+				"rmt",
+				"rmt_info\tabc"
+			],
+			[
+				"chom",
+				"chomp\tfunc"
+			],
+			[
+				"add",
+				"addr\tfunc"
+			],
+			[
+				"ope",
+				"open\tfunc"
+			],
+			[
+				"pu",
+				"pub\tabc"
+			],
+			[
+				"rea",
+				"readlines\tfunc"
+			],
+			[
+				"ne",
+				"net_plg\tabc"
+			],
+			[
+				"path",
+				"path_helfo\tabc"
+			],
+			[
+				"tr",
+				"true\t(sublime_jedi.sublime-settings)"
+			],
+			[
+				"tw",
+				"two-panel"
+			],
+			[
+				"ali",
+				"alias\tabc"
+			],
+			[
+				"alai",
+				"alias\tabc"
+			],
+			[
+				"firefox",
+				"firefox\tabc"
+			],
+			[
+				"Itali",
+				"Italian\t🕮"
+			],
+			[
+				"prin",
+				"print"
+			],
+			[
+				"print",
+				"print_name"
+			],
+			[
+				"cas",
+				"case\t(fast.kill.sh)"
+			]
+		]
+	},
+	"buffers":
+	[
+		{
+			"file": "firewall-init.sh",
+			"settings":
+			{
+				"buffer_size": 9854,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			},
+			"undo_stack":
+			[
+				[
+					3,
+					1,
+					"toggle_comment",
+					{
+						"block": false
+					},
+					"BwAAAK4EAAAAAAAAsAQAAAAAAAAAAAAAowQAAAAAAAClBAAAAAAAAAAAAABFBAAAAAAAAEcEAAAAAAAAAAAAABQEAAAAAAAAFgQAAAAAAAAAAAAA9AMAAAAAAAD2AwAAAAAAAAAAAACsAwAAAAAAAK4DAAAAAAAAAAAAAIYDAAAAAAAAiAMAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAtwQAAAAAAACCAwAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					9,
+					1,
+					"insert",
+					{
+						"characters": "/usr"
+					},
+					"BAAAAF4iAAAAAAAAXyIAAAAAAAAAAAAAXyIAAAAAAABgIgAAAAAAAAAAAABgIgAAAAAAAGEiAAAAAAAAAAAAAGEiAAAAAAAAYiIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAXiIAAAAAAABeIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					12,
+					1,
+					"right_delete",
+					null,
+					"AQAAAEoiAAAAAAAASiIAAAAAAAAHAAAAPDwnRU9GJw",
+					"AQAAAAAAAAABAAAASiIAAAAAAABRIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					15,
+					1,
+					"right_delete",
+					null,
+					"AQAAAJEiAAAAAAAAkSIAAAAAAAADAAAARU9G",
+					"AQAAAAAAAAABAAAAlCIAAAAAAACRIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					18,
+					1,
+					"cut",
+					null,
+					"AQAAACIiAAAAAAAAIiIAAAAAAAAFAAAAY2F0ID4",
+					"AQAAAAAAAAABAAAAJyIAAAAAAAAiIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					22,
+					1,
+					"paste",
+					null,
+					"AQAAAEYiAAAAAAAASyIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAARiIAAAAAAABGIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					23,
+					1,
+					"insert",
+					{
+						"characters": " "
+					},
+					"AQAAAEsiAAAAAAAATCIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAASyIAAAAAAABLIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					28,
+					1,
+					"cut",
+					null,
+					"AQAAACMiAAAAAAAAIyIAAAAAAAAiAAAAL2V0Yy9uZXR3b3JrL2lmLXByZS11cC5kL2lwdGFibGVzIA",
+					"AQAAAAAAAAABAAAAIyIAAAAAAABFIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					31,
+					1,
+					"insert",
+					{
+						"characters": " >>"
+					},
+					"AwAAADUiAAAAAAAANiIAAAAAAAAAAAAANiIAAAAAAAA3IgAAAAAAAAAAAAA3IgAAAAAAADgiAAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAANSIAAAAAAAA1IgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					32,
+					1,
+					"insert",
+					{
+						"characters": " "
+					},
+					"AQAAADgiAAAAAAAAOSIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAOCIAAAAAAAA4IgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					33,
+					1,
+					"paste",
+					null,
+					"AQAAADkiAAAAAAAAWyIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAOSIAAAAAAAA5IgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					36,
+					2,
+					"left_delete",
+					null,
+					"AgAAACkiAAAAAAAAKSIAAAAAAAABAAAAICgiAAAAAAAAKCIAAAAAAAABAAAAPg",
+					"AQAAAAAAAAABAAAAKiIAAAAAAAAqIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					37,
+					1,
+					"insert",
+					{
+						"characters": "!"
+					},
+					"AQAAACgiAAAAAAAAKSIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAKCIAAAAAAAAoIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					38,
+					1,
+					"left_delete",
+					null,
+					"AQAAACgiAAAAAAAAKCIAAAAAAAABAAAAIQ",
+					"AQAAAAAAAAABAAAAKSIAAAAAAAApIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					39,
+					1,
+					"insert",
+					{
+						"characters": "\""
+					},
+					"AQAAACgiAAAAAAAAKSIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAKCIAAAAAAAAoIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					41,
+					1,
+					"insert",
+					{
+						"characters": "\""
+					},
+					"AQAAADQiAAAAAAAANSIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAANCIAAAAAAAA0IgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					46,
+					1,
+					"insert",
+					{
+						"characters": "cat"
+					},
+					"AwAAAFwiAAAAAAAAXSIAAAAAAAAAAAAAXSIAAAAAAABeIgAAAAAAAAAAAABeIgAAAAAAAF8iAAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAXCIAAAAAAABcIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					47,
+					1,
+					"insert",
+					{
+						"characters": " "
+					},
+					"AQAAAF8iAAAAAAAAYCIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAXyIAAAAAAABfIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					50,
+					1,
+					"left_delete",
+					null,
+					"AQAAACgiAAAAAAAAKCIAAAAAAAABAAAAIg",
+					"AQAAAAAAAAABAAAAKSIAAAAAAAApIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					51,
+					1,
+					"insert",
+					{
+						"characters": "'"
+					},
+					"AQAAACgiAAAAAAAAKSIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAKCIAAAAAAAAoIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					53,
+					1,
+					"left_delete",
+					null,
+					"AQAAADQiAAAAAAAANCIAAAAAAAABAAAAIg",
+					"AQAAAAAAAAABAAAANSIAAAAAAAA1IgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					54,
+					1,
+					"insert",
+					{
+						"characters": "'"
+					},
+					"AQAAADQiAAAAAAAANSIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAANCIAAAAAAAA0IgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					58,
+					1,
+					"insert",
+					{
+						"characters": "'"
+					},
+					"AQAAAGEiAAAAAAAAYiIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAYSIAAAAAAABhIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					60,
+					1,
+					"insert",
+					{
+						"characters": "'"
+					},
+					"AQAAAJoiAAAAAAAAmyIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAmiIAAAAAAACaIgAAAAAAAP///////+9/"
+				],
+				[
+					61,
+					1,
+					"insert",
+					{
+						"characters": " "
+					},
+					"AQAAAJsiAAAAAAAAnCIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAmyIAAAAAAACbIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					62,
+					1,
+					"paste",
+					null,
+					"AQAAAJwiAAAAAAAAviIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAnCIAAAAAAACcIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					65,
+					1,
+					"insert",
+					{
+						"characters": " >>"
+					},
+					"AwAAAJsiAAAAAAAAnCIAAAAAAAAAAAAAnCIAAAAAAACdIgAAAAAAAAAAAACdIgAAAAAAAJ4iAAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAmyIAAAAAAACbIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					71,
+					1,
+					"left_delete",
+					null,
+					"AQAAAGAiAAAAAAAAYCIAAAAAAAABAAAALw",
+					"AQAAAAAAAAABAAAAYSIAAAAAAABhIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					73,
+					1,
+					"insert",
+					{
+						"characters": "/"
+					},
+					"AQAAAGEiAAAAAAAAYiIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAYSIAAAAAAABhIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					87,
+					3,
+					"left_delete",
+					null,
+					"AwAAACYiAAAAAAAAJiIAAAAAAAABAAAAdCUiAAAAAAAAJSIAAAAAAAABAAAAYSQiAAAAAAAAJCIAAAAAAAABAAAAYw",
+					"AQAAAAAAAAABAAAAJyIAAAAAAAAnIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					88,
+					1,
+					"insert",
+					{
+						"characters": "echo\\"
+					},
+					"BQAAACQiAAAAAAAAJSIAAAAAAAAAAAAAJSIAAAAAAAAmIgAAAAAAAAAAAAAmIgAAAAAAACciAAAAAAAAAAAAACciAAAAAAAAKCIAAAAAAAAAAAAAKCIAAAAAAAApIgAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAJCIAAAAAAAAkIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					91,
+					3,
+					"left_delete",
+					null,
+					"AwAAAGAiAAAAAAAAYCIAAAAAAAABAAAAdF8iAAAAAAAAXyIAAAAAAAABAAAAYV4iAAAAAAAAXiIAAAAAAAABAAAAYw",
+					"AQAAAAAAAAABAAAAYSIAAAAAAABhIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					92,
+					1,
+					"insert",
+					{
+						"characters": "echo"
+					},
+					"BAAAAF4iAAAAAAAAXyIAAAAAAAAAAAAAXyIAAAAAAABgIgAAAAAAAAAAAABgIgAAAAAAAGEiAAAAAAAAAAAAAGEiAAAAAAAAYiIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAXiIAAAAAAABeIgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					95,
+					1,
+					"left_delete",
+					null,
+					"AQAAACgiAAAAAAAAKCIAAAAAAAABAAAAXA",
+					"AQAAAAAAAAABAAAAKSIAAAAAAAApIgAAAAAAAAAAAAAAAPC/"
+				]
+			]
+		},
+		{
+			"file": "README.md",
+			"settings":
+			{
+				"buffer_size": 12900,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		}
+	],
+	"build_system": "",
+	"build_system_choices":
+	[
+	],
+	"build_varint": "",
+	"command_palette":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+			[
+				"Package Control: ",
+				"Package Control: Install Package"
+			],
+			[
+				"Snippet: ",
+				"Snippet: Lorem ipsum"
+			],
+			[
+				"install",
+				"Package Control: Install Package"
+			],
+			[
+				"ins",
+				"Package Control: Install Package"
+			],
+			[
+				"install packa",
+				"Package Control: Advanced Install Package"
+			],
+			[
+				"insta",
+				"Package Control: Install Local Dependency"
+			]
+		],
+		"width": 0.0
+	},
+	"console":
+	{
+		"height": 230.0,
+		"history":
+		[
+			"exit()",
+			"quit()",
+			"exit",
+			"ls",
+			"exit",
+			"printf \"hello\"",
+			"printf hello",
+			"ls"
+		]
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"expanded_folders":
+	[
+		"/home/simone/Repos/Progetti/Firedog"
+	],
+	"file_history":
+	[
+		"/home/simone/Repos/Progetti/sentinelcore/README.md",
+		"/home/simone/Repos/Progetti/sentinelcore/Description_edited.md",
+		"/home/simone/Repos/Progetti/Firedog/README.md",
+		"/home/simone/Repos/Progetti/sentinelcore/Description_text..md",
+		"/home/simone/Desktop/Collegamento a Lavoro/DOGNET/Documentazione_Lavoro/Corso/CorsoHoway/modulo_1/NETWORK NAMESPACES-Spiegazione_Dettagliata.md",
+		"/home/simone/Immagini/ISO/SHA512_deb_net_iso",
+		"/home/simone/Documenti/RobePersonal/DogNet/Rimosso_dal_lavoro/TestoAccreditamento.txt",
+		"/home/simone/Repos/Progetti/sentinelcore/LICENSE",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/application_traceroute3.0-dev.py",
+		"/home/simone/Desktop/Collegamento a Lavoro/DOGNET/Documentazione_Lavoro/Corso/CorsoHoway/modulo_1/comandi_multivendor_spiegazione.md",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/application_traceroute2.8-dev.py",
+		"/home/simone/LUCAAvv.txt",
+		"/home/simone/Desktop/Collegamento a Lavoro/External/ILE/edimax.txt",
+		"/home/simone/Desktop/Collegamento a Lavoro/DOGNET/Documentazione_Lavoro/Corso/CorsoHoway/LAB/lab_wireshark_scenarios.txt",
+		"/home/simone/Documenti/RobePersonal/DogNet/Rimosso_dal_lavoro/yesterday_urls.txt",
+		"/home/simone/Lavoro/reports/https_be.valeo.it/__25-06-26_17-11-21.txt",
+		"/home/simone/Desktop/Collegamento a Lavoro/DOGNET/Documentazione_Lavoro/Corso/CorsoHoway/modulo_1/Modulo1_Networking_avanzato.txt",
+		"/home/simone/Documenti/RobePersonal/DogNet/TeleInput_parsed.txt",
+		"/home/simone/Lavoro/info.txt",
+		"/home/simone/Documenti/RobePersonal/DocumentiLavoro/Lutech.100.txt",
+		"/home/simone/Lavoro/CLIENTI/Normachem/PianoOperativo/piano_operativo_normachem.md",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/FwvI3n4s",
+		"/home/simone/Desktop/Collegamento a Lavoro/DOGNET/Documentazione_Lavoro/Corso/CorsoHoway/comandi_multivendo2r.md",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/application_traceroute2.8.0.py",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/icons.txt",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/application_traceroute2.5.0c.py",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/application_traceroute2.5.0c-dev.py",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/application_traceroute2.5-dev.py",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/application_traceroute2.5-dev-stdoutput.py",
+		"/home/simone/Repos/Progetti/application_traceroute/AppTraceroute/application_traceroute2.py",
+		"/home/simone/Repos/Progetti/application_traceroute/BypassValidator/bypass_validator.py",
+		"/home/simone/Documenti/RobePersonal/Letture/IntroduceMySelf.txt",
+		"/home/simone/Repos/Progetti/application_traceroute/application_traceroute2.py",
+		"/home/simone/Repos/Progetti/wpscanner/CVE-2025-30567.py",
+		"/home/simone/Lavoro/DOGNET/Documentazione_Lavoro/articoli/Post_Creati/IlMonitoraggio/Monitor.txt",
+		"/home/simone/Repos/Progetti/application_traceroute/debug",
+		"/home/simone/Desktop/Collegamento a Lavoro/CLIENTI/HOTEL_KURSAAL_CATTOLICA/testssl_hotelkursaalcattolica.json",
+		"/home/simone/Lavoro/CLIENTI/HOTEL_KURSAAL_CATTOLICA/Risposta_gap_analisi_scan2300.txt",
+		"/home/simone/Desktop/Collegamento a Repos/Default/Rec/Hacerone/hackerone",
+		"/home/simone/cracked.json",
+		"/home/simone/Desktop/Collegamento a Lavoro/info.txt",
+		"/home/simone/Lavoro/DOGNET/TestoAccreditamento.txt",
+		"/home/simone/Repos/Progetti/sentinelcore/Presentazione.html",
+		"/home/simone/Lavoro/DOGNET/Documentazione_Lavoro/Progetti/flow.html",
+		"/home/simone/Repos/Progetti/sentinelcore/.gitignore",
+		"/home/simone/Repos/Progetti/sentinelcore/vulnerability-manager/src/state.rs",
+		"/home/simone/Repos/zshplugins/zshnoyseapply.py",
+		"/home/simone/Repos/zshplugins/noyse_hack/noyse_hack.plugin.zsh",
+		"/home/simone/Repos/zshplugins/noyse_net/noyse_net.plugin.zsh",
+		"/home/simone/Repos/zshplugins/noyse_script/noyse_script.plugin.zsh",
+		"/home/simone/Repos/zshplugins/noyse_sys/noyse_sys.plugin.zsh",
+		"/home/simone/Repos/NoyseSysStuff/dom-xss-scanner/Struttura.txt",
+		"/home/simone/Repos/NoyseSysStuff/fast.kill/README.md",
+		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/sites.txt",
+		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/options.txt",
+		"/home/simone/Lavoro/Bounty/ATG/frame-1063.js",
+		"/home/simone/Lavoro/Bounty/ATG/url.txt",
+		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/Esempio_sites.txt",
+		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/js_crawler.py",
+		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/requirements.txt",
+		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/SetUp.sh",
+		"/home/simone/Repos/NoyseSysStuff/anonme/anonme.sh",
+		"/home/simone/Repos/NoyseSysStuff/net_tables/net_tables.sh",
+		"/home/noyse/Repos/NoyseSysStuff/Test/test.dirty.stuff/testbin.sh",
+		"/home/simone/Desktop/Repos/NoyseSysStuff/hola/hola.sh",
+		"/home/simone/Desktop/Documenti/HackTheBox/OSINT/cheatsheet-28.md",
+		"/home/simone/Desktop/Documenti/HackTheBox/AdvancedWebAttack/WebSocket/src_websocket_xss/server.py",
+		"/home/simone/Repos/noyse_sys/noyse_sys.plugin.zsh",
+		"/home/simone/Repos/NoyseSysStuff/Test/cddir.sh",
+		"/home/noyse/Lavoro/CLIENTI/Grifal/Anydesk.txt",
+		"/home/noyse/Scrivania/MEGAsync.log",
+		"/home/noyse/cracked.json",
+		"/home/noyse/Scrivania/Collegamento a Lavoro/External/WiFi_Jle_txt",
+		"/home/noyse/Scrivania/tplink.txt",
+		"/home/noyse/Lavoro/External/CTF-icsc/IP.txt",
+		"/home/noyse/Lavoro/External/Arp.txt",
+		"/home/noyse/Lavoro/External/CTF-icsc/seq_1.txt",
+		"/home/noyse/Lavoro/CLIENTI/Lutech/C-Management/Doc/prov.txt",
+		"/home/noyse/Lavoro/External/WiFi_Jle_txt",
+		"/home/noyse/Lavoro/DOGNET/Documentazione_Lavoro/Corso/CorsoBase/hacklab/Corso_1/corso_1.txt",
+		"/home/noyse/GIT/URLextractor-master/README.md",
+		"/home/noyse/Repos/noyse_net/noyse_net.plugin.zsh",
+		"/home/simone/.config/sublime-text/Packages/SideBarEnhancements/Side Bar.sublime-settings",
+		"/home/simone/.config/sublime-text/Packages/User/Side Bar.sublime-settings",
+		"/home/Coupon",
+		"/home/simone/Documenti/cheatsheet_privesc_win.txt",
+		"/home/noyse/Scaricati/cheatsheet-67(1).md",
+		"/home/noyse/Scrivania/Collegamento a Robe_Personal/HackTheBox/CheatSheet/cheatsheett_priv-esc.txt",
+		"/home/noyse/Documenti/Robe_Personal/HackTheBox/CheatSheet/cheatsheett_privesc_lin.txt",
+		"/home/noyse/Scaricati/cheatsheet-67.md",
+		"/Magazzino/EXTERNAL/WiFi.txt",
+		"/run/user/1000/gvfs/smb-share:domain=WORKGROUP,server=192.168.100.2,share=public,user=noyse/FILM/Harry Potter Saga Completa (2001-2011) 1080p H265 AC3 ITA.ENG sub ita.eng Sp33dy94-MIRCrew/INFO/Harry Potter 2.txt",
+		"/home/noyse/Lavoro/Sysdat/LavoroP.I/VAPT_2022/PrimoGiro/gsf20220525007.base64",
+		"/home/noyse/Documenti/Robe_Personal/HackTheBox/flag.txt",
+		"/home/noyse/Repos/Default/MasterPDF/Licenza",
+		"/home/noyse/.local/share/nemo/actions/shred.nemo_action",
+		"/Magazzino/3_List/The-Most-Common-Passwords-Pin-e-ScreenLocks-master/BIP39/bip-0039-wordlists.md",
+		"/home/noyse/Scaricati/gtkhash-master/README.md",
+		"/home/noyse/.local/share/nemo/actions/thunderbird.nemo_action",
+		"/home/noyse/.oh-my-zsh/plugins/noyse_sys/noyse_sys.plugin.zsh",
+		"/home/noyse/Scrivania/Collegamento a Repos/Default/Postman/API",
+		"/home/noyse/Repos/noyse_sys/noyse_sys.plugin.zsh",
+		"/home/noyse/Repos/NoyseSysStuff/upd-noyse/upd_noyse.sh",
+		"/home/noyse/Repos/NoyseSysStuff/upd-noyse/upd_noyse2.sh",
+		"/home/noyse/Scrivania/Collegamento a DocumentiLavoro/DogNet/AgenziaEntrate/CodiceSDI",
+		"/home/noyse/Documenti/VBoxCondivisa/sn.txt",
+		"/home/noyse/Lavoro/DOGNET/CTF/External/Result.txt",
+		"/home/noyse/VirtualBox VMs/MiddleManV2-Final/vmware.log",
+		"/home/noyse/VirtualBox VMs/MiddleManV2-Final/1.txt",
+		"/home/noyse/Scrivania/Collegamento a Lavoro/Sysdat/LavoroP.I/VAPT_2021/PrimoGiro/Vapt-Esterno_PrimoGruppoSaronno_15.03.3.2021/ListaIP.txt",
+		"/home/noyse/Lavoro/DOGNET/CSV/os\r",
+		"/home/noyse/Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/Report/Consegnato/INFO.txt",
+		"/home/noyse/Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/Report/Consegnato/Documento senza nome",
+		"/home/noyse/Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/Report/Consegnato/INFO.txt.txt",
+		"/home/noyse/Scrivania/Collegamento a Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/ListaIP.txt",
+		"/Magazzino/Musica/Ableton Live Suite 10.1.7 Multilingual [FileCR]/Crack/Instructions.txt",
+		"/home/noyse/BACK_13:22:49.txt",
+		"/home/noyse/Repos/NoyseSysStuff/upd-noyse/PluginUpdate.sh",
+		"/home/noyse/Repos/noyse_hack/noyse_hack.plugin.zsh",
+		"/home/noyse/Repos/NoyseSysStuff/hola/hola.sh",
+		"/home/noyse/Repos/Default/nemo/actions/thunderbird.nemo_action",
+		"/home/noyse/.local/share/cinnamon/applets/mybookmarks@markbokil.com/mybookmarks.properties",
+		"/home/noyse/.stardict/history",
+		"/home/noyse/Repos/NoyseSysStuff/fast.kill/fast.kill.sh",
+		"/media/noyse/External/Backup_01.10.2021/Documenti/ed",
+		"/home/noyse/.goldendict/config",
+		"/home/noyse/Repos/NoyseSysStuff/SysStuff.sublime-project",
+		"/home/noyse/Repos/Default/Cinnamon/BookmarkApplet/mybookmarks.properties"
+	],
+	"find":
+	{
+		"height": 25.0
+	},
+	"find_in_files":
+	{
+		"height": 166.0,
+		"where_history":
+		[
+			""
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": false,
+		"find_history":
+		[
+			"container_tests",
+			"container_config",
+			"container_fingerprinting",
+			"backend_paths",
+			".httppassword",
+			"_get_service_mesh_info",
+			"self.chain_map['layers'].append(f\"FW-{framework.upper()}\")",
+			"self.log_discovery(\"Runtime\", \"Framework\", framework)",
+			"if response.status_code in [200, 401, 403]:  # <- Problema qui?\n    self.log_discovery(\"Runtime\", \"Framework\", framework)",
+			"edge_cdn_detection",
+			"cdn_detection",
+			"FW-",
+			"FW-LARAVEL",
+			"FW-LARAVEL ",
+			"FW-LARAVEL",
+			"🏗️ INFRASTRUCTURE CHAIN:",
+			"proxy_detection",
+			"def create_fingerprint_payloads(self)",
+			"proxy_detection",
+			"waf_fingerprinting_extended",
+			"'waf_fingerprinting_extended'",
+			" markers['random_id']",
+			"KeyError: 'random_id'",
+			"KeyError: 'random_id'\n",
+			"class ApplicationTraceroute:",
+			"self.infrastructure_fingerprinting()",
+			"    def infrastructure_fingerprinting(self):",
+			"def create_fingerprint_payloads(self):",
+			"def infrastructure_fingerprinting(self):",
+			"infrastructure_fingerprinting",
+			"self.infrastructure_fingerprinting",
+			"self.infrastructure_fingerprinting()",
+			"self.create_fingerprint_payloads()",
+			"self.create_comprehensive_fingerprint_payloads()",
+			"self.create_fingerprint_payloads()",
+			"self.create_comprehensive_fingerprint_payloads()",
+			"fingerprints = self.create_comprehensive_fingerprint_payloads()",
+			"    def infrastructure_fingerprinting(self):",
+			"infra",
+			"forbidden",
+			"CommandGenerator",
+			"forb",
+			"infrastructure_fingerprinting",
+			"ParameterPatternTracker",
+			"src=",
+			"`",
+			"| `",
+			"read",
+			"INSTALLDIR"
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": false,
+		"replace_history":
+		[
+			"read -r"
+		],
+		"reverse": false,
+		"scrollbar_highlights": true,
+		"show_context": false,
+		"use_buffer2": true,
+		"use_gitignore": true,
+		"whole_word": false,
+		"wrap": false
+	},
+	"groups":
+	[
+		{
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "firewall-init.sh",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 9854,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								8804,
+								8804
+							]
+						],
+						"settings":
+						{
+							"bracket_highlighter.busy": false,
+							"bracket_highlighter.locations":
+							{
+								"close":
+								{
+								},
+								"icon":
+								{
+								},
+								"open":
+								{
+								},
+								"unmatched":
+								{
+								}
+							},
+							"bracket_highlighter.regions":
+							[
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_angle_content",
+								"bh_c_define",
+								"bh_c_define_center",
+								"bh_c_define_open",
+								"bh_c_define_close",
+								"bh_c_define_content",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_curly_content",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_default_content",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_double_quote_content",
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_regex_content",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_round_content",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close",
+								"bh_single_quote_content",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_square_content",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_tag_content",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_unmatched_content"
+							],
+							"syntax": "Packages/ShellScript/Bash.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 463.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "README.md",
+					"selected": true,
+					"semi_transient": true,
+					"settings":
+					{
+						"buffer_size": 12900,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								0,
+								0
+							]
+						],
+						"settings":
+						{
+							"bracket_highlighter.busy": false,
+							"bracket_highlighter.locations":
+							{
+								"close":
+								{
+								},
+								"icon":
+								{
+								},
+								"open":
+								{
+								},
+								"unmatched":
+								{
+								}
+							},
+							"bracket_highlighter.regions":
+							[
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_angle_content",
+								"bh_c_define",
+								"bh_c_define_center",
+								"bh_c_define_open",
+								"bh_c_define_close",
+								"bh_c_define_content",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_curly_content",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_default_content",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_double_quote_content",
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_regex_content",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_round_content",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close",
+								"bh_single_quote_content",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_square_content",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_tag_content",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_unmatched_content"
+							],
+							"syntax": "Packages/Markdown/Markdown.sublime-syntax"
+						},
+						"translation.x": 0.0,
+						"translation.y": 3579.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				}
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 25.0
+	},
+	"input":
+	{
+		"height": 58.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.SublimeLinter":
+	{
+		"height": 0.0
+	},
+	"output.exec":
+	{
+		"height": 230.0
+	},
+	"output.find_results":
+	{
+		"height": 0.0,
+		"history":
+		[
+		]
+	},
+	"output.mdpopups":
+	{
+		"height": 0.0
+	},
+	"output.summary-panel":
+	{
+		"height": 140.0
+	},
+	"output.unsaved_changes":
+	{
+		"height": 195.0
+	},
+	"pinned_build_system": "Packages/Python/Python.sublime-build",
+	"project": "Firedog.sublime-project",
+	"replace":
+	{
+		"height": 46.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"select_symbol":
+	{
+		"height": 0.0,
+		"last_filter": "",
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"selected_group": 0,
+	"settings":
+	{
+	},
+	"show_minimap": true,
+	"show_open_files": true,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 381.0,
+	"status_bar_visible": true,
+	"template_settings":
+	{
+		"max_columns": 1
+	}
+}

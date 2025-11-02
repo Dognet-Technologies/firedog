@@ -1,0 +1,265 @@
+/**
+ * TypeScript Types per FireDog Frontend
+ */
+
+// ========== API Response Types ==========
+
+export interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+// ========== Target Types ==========
+
+export interface Target {
+  id: number;
+  ip_address: string;
+  hostname: string;
+  description: string;
+  status: 'pending' | 'installing' | 'online' | 'offline' | 'error';
+  firedog_version: string;
+  ssh_port: number;
+  ssh_user: string;
+  last_seen: string | null;
+  last_fetch: string | null;
+  error_message: string;
+  created_at: string;
+  updated_at: string;
+  connection_string: string;
+  is_active: boolean;
+}
+
+export interface TargetCreate {
+  ip_address: string;
+  hostname?: string;
+  description?: string;
+  ssh_port?: number;
+  ssh_user?: string;
+}
+
+export interface TargetStatus {
+  ip_address: string;
+  hostname: string;
+  status: string;
+  firedog_version: string;
+  last_seen: string | null;
+  last_fetch: string | null;
+  is_active: boolean;
+  error_message: string;
+  rules_count: number;
+  threats_count: number;
+}
+
+// ========== Firewall Rule Types ==========
+
+export interface FirewallRule {
+  id: number;
+  target: number;
+  target_ip: string;
+  chain: 'INPUT' | 'OUTPUT' | 'FORWARD';
+  rule_number: number | null;
+  protocol: 'tcp' | 'udp' | 'icmp' | 'all';
+  port: number | null;
+  source_ip: string | null;
+  dest_ip: string | null;
+  action: 'ACCEPT' | 'DROP' | 'REJECT';
+  comment: string;
+  is_custom: boolean;
+  is_synced: boolean;
+  created_at: string;
+  updated_at: string;
+  rule_description: string;
+}
+
+export interface FirewallRuleCreate {
+  target: number;
+  chain: 'INPUT' | 'OUTPUT' | 'FORWARD';
+  protocol: 'tcp' | 'udp' | 'icmp' | 'all';
+  port?: number;
+  source_ip?: string;
+  dest_ip?: string;
+  action: 'ACCEPT' | 'DROP' | 'REJECT';
+  comment?: string;
+}
+
+// ========== Threat Types ==========
+
+export interface ThreatLog {
+  id: number;
+  target: number;
+  target_ip: string;
+  source_ip: string;
+  dest_port: number | null;
+  protocol: string;
+  threat_score: number;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  packet_count: number;
+  reasons: string[];
+  description: string;
+  country_code: string;
+  is_blocked: boolean;
+  is_resolved: boolean;
+  resolved_at: string | null;
+  detected_at: string;
+  updated_at: string;
+  attack_description: string;
+}
+
+export interface ThreatStats {
+  total_threats: number;
+  critical_threats: number;
+  high_threats: number;
+  medium_threats: number;
+  low_threats: number;
+  blocked_ips: number;
+  resolved_threats: number;
+  unresolved_threats: number;
+  top_attackers: Array<{
+    source_ip: string;
+    count: number;
+  }>;
+  recent_threats: ThreatLog[];
+}
+
+// ========== Dashboard Types ==========
+
+export interface Dashboard {
+  id: number;
+  user: number;
+  name: string;
+  description: string;
+  is_default: boolean;
+  is_public: boolean;
+  layout_config: any;
+  widgets: Widget[];
+  widget_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Widget {
+  id: number;
+  dashboard: number;
+  title: string;
+  widget_type: 
+    | 'threat_summary'
+    | 'threat_chart'
+    | 'target_status'
+    | 'recent_threats'
+    | 'top_attackers'
+    | 'rule_count'
+    | 'traffic_stats'
+    | 'activity_timeline'
+    | 'geo_map'
+    | 'custom';
+  config: any;
+  grid_position: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
+  is_visible: boolean;
+  refresh_interval: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// ========== Discovery Types ==========
+
+export interface DiscoveredHost {
+  id: number;
+  ip_address: string;
+  mac_address: string;
+  hostname: string;
+  vendor: string;
+  network: string;
+  netmask: string;
+  discovered_at: string;
+  last_seen: string;
+  scan_count: number;
+  is_alive: boolean;
+  is_imported: boolean;
+  notes: string;
+  display_name: string;
+  is_recently_discovered: boolean;
+}
+
+// ========== File Integrity Types ==========
+
+export interface FileIntegrity {
+  id: number;
+  file_path: string;
+  file_type: string;
+  sha512_hash: string;
+  previous_hash: string;
+  file_size: number;
+  file_permissions: string;
+  file_owner: string;
+  status: 'ok' | 'modified' | 'missing' | 'new';
+  last_checked: string;
+  last_modified: string | null;
+  change_detected_at: string | null;
+  is_change_approved: boolean;
+  approved_by: number | null;
+  approved_by_username: string;
+  approved_at: string | null;
+  change_notes: string;
+  alert_sent: boolean;
+  created_at: string;
+  needs_attention: boolean;
+}
+
+// ========== Audit Log Types ==========
+
+export interface AuditLog {
+  id: number;
+  user: number | null;
+  username: string;
+  action: string;
+  action_display: string;
+  description: string;
+  old_values: any;
+  new_values: any;
+  ip_address: string | null;
+  user_agent: string;
+  success: boolean;
+  error_message: string;
+  created_at: string;
+}
+
+// ========== Auth Types ==========
+
+export interface LoginCredentials {
+  username: string;
+  password: string;
+}
+
+export interface AuthTokens {
+  access: string;
+  refresh: string;
+}
+
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+// ========== Chart Data Types ==========
+
+export interface ChartDataPoint {
+  name: string;
+  value: number;
+  [key: string]: any;
+}
+
+export interface TimeSeriesDataPoint {
+  timestamp: string;
+  value: number;
+  [key: string]: any;
+}

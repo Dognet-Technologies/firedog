@@ -1,0 +1,135 @@
+#!/bin/bash
+#
+# Firewall Installation Script
+# Installa e configura il sistema di firewall completo
+#
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+echo -e "${GREEN}"
+cat << "EOF"
+╔═══════════════════════════════════════════════╗
+║   Firewall Installation Script                ║
+║   Advanced iptables + ulogd2 + Management CLI ║
+╚═══════════════════════════════════════════════╝
+EOF
+echo -e "${NC}"
+
+# Verifica root
+if [[ $EUID -ne 0 ]]; then
+    echo -e "${RED}[ERROR]${NC} Questo script richiede privilegi root"
+    exit 1
+fi
+
+# Verifica Debian/Ubuntu
+if ! grep -Eiq 'debian|ubuntu' /etc/os-release; then
+    echo -e "${YELLOW}[WARNING]${NC} Sistema non Debian/Ubuntu. Continuare? (y/n)"
+    read -r response
+    [[ "$response" != "y" ]] && exit 0
+fi
+
+echo -e "${GREEN}[1/8]${NC} Aggiornamento sistema..."
+apt-get update -qq
+
+echo -e "${GREEN}[2/8]${NC} Installazione dipendenze..."
+apt-get install -y -qq \
+    iptables \
+    iptables-persistent \
+    ulogd2 \
+    python3 \
+    python3-pip \
+    tcpdump \
+    logrotate \
+    git
+
+echo -e "${GREEN}[3/8]${NC} Installazione script firewall..."
+
+# Copia script inizializzazione
+install -m 755 firewall-init.sh /usr/local/sbin/firewall-init.sh
+
+# Copia manager Python
+install -m 755 firewall-manager.py /usr/local/bin/firewall-manager
+chmod +x /usr/local/bin/firewall-manager
+
+echo -e "${GREEN}[4/8]${NC} Configurazione ulogd2..."
+
+# Backup configurazione esistente
+if [[ -f /etc/ulogd.conf ]]; then
+    cp /etc/ulogd.conf /etc/ulogd.conf.backup.$(date +%s)
+fi
+
+# Copia nuova configurazione
+cp ulogd.conf /etc/ulogd.conf
+chmod 644 /etc/ulogd.conf
+
+# Crea directory log
+mkdir -p /var/log/ulogd
+chown root:adm /var/log/ulogd
+chmod 750 /var/log/ulogd
+
+# Riavvia ulogd2
+systemctl enable ulogd2
+systemctl restart ulogd2
+
+echo -e "${GREEN}[5/8]${NC} Configurazione logrotate..."
+cp firewall-pcap-logrotate /etc/logrotate.d/firewall-pcap
+chmod 644 /etc/logrotate.d/firewall-pcap
+
+echo -e "${GREEN}[6/8]${NC} Installazione systemd service..."
+cp firewall.service /etc/systemd/system/firewall.service
+chmod 644 /etc/systemd/system/firewall.service
+systemctl daemon-reload
+
+echo -e "${GREEN}[7/8]${NC} Creazione directory configurazione..."
+mkdir -p /etc/firewall
+mkdir -p /var/lib/firewall
+chmod 700 /etc/firewall
+chmod 700 /var/lib/firewall
+
+echo -e "${GREEN}[8/8]${NC} Inizializzazione firewall..."
+echo ""
+echo -e "${YELLOW}Attenzione:${NC} Stai per attivare il firewall con policy DROP."
+echo "Assicurati di avere accesso fisico o console seriale in caso di problemi."
+echo ""
+read -p "Procedere con l'inizializzazione? (yes/no): " confirm
+
+if [[ "$confirm" == "yes" ]]; then
+    # Esegui inizializzazione
+    /usr/local/sbin/firewall-init.sh
+    
+    # Abilita servizio
+    systemctl enable firewall.service
+    
+    echo ""
+    echo -e "${GREEN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  Installazione completata con successo!    ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "Comandi disponibili:"
+    echo "  firewall-manager --help          # Mostra aiuto completo"
+    echo "  firewall-manager --list          # Lista regole"
+    echo "  firewall-manager --stats         # Statistiche"
+    echo "  firewall-manager --analyze 24    # Analizza traffico 24h"
+    echo "  firewall-manager --threats       # Mostra minacce"
+    echo ""
+    echo "Servizio systemd:"
+    echo "  systemctl status firewall        # Stato servizio"
+    echo "  systemctl restart firewall       # Riavvia firewall"
+    echo ""
+    echo "File di configurazione:"
+    echo "  /etc/firewall/custom_rules.conf  # Regole personalizzate"
+    echo "  /etc/ulogd.conf                  # Configurazione logging"
+    echo "  /var/log/ulogd/*.pcap            # File PCAP"
+    echo ""
+else
+    echo -e "${YELLOW}Inizializzazione annullata.${NC}"
+    echo "Per avviare manualmente: sudo /usr/local/sbin/firewall-init.sh"
+fi
+
+echo ""
+echo -e "${GREEN}[INFO]${NC} Log installazione: /var/log/firewall-init.log"
