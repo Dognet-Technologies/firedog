@@ -39,7 +39,7 @@ class StatisticsViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         """Filtra stats per target"""
-        from api.models import Statistics
+        from targets.models import Statistics
         target_id = self.kwargs.get('target_pk')
         return Statistics.objects.filter(target_id=target_id).order_by('-collected_at')
     
@@ -239,8 +239,7 @@ class NetworkTrafficViewSet(viewsets.ViewSet):
         """
         GET /api/targets/{target_id}/traffic/realtime/
 
-        from targets.models import Target
-        from api.models import Statistics
+        from targets.models import Target, Statistics
         
         try:
             target = Target.objects.get(id=target_pk)

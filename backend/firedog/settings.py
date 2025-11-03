@@ -36,6 +36,8 @@ INSTALLED_APPS = [
     'django_celery_results',
     
     # FireDog apps
+    'api',
+    'api.apps.ApiConfig',
     'targets.apps.TargetsConfig',
     'rules.apps.RulesConfig',
     'threats.apps.ThreatsConfig',

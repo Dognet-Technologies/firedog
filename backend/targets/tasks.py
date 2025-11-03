@@ -119,10 +119,9 @@ def fetch_target_data(target_id):
             'error': str (se success=False)
         }
     """
-    from targets.models import Target
+    from targets.models import Target, Statistics, Alert
     from threats.models import ThreatLog
     from rules.models import FirewallRule
-    from api.models import Statistics, Alert
     
     try:
         target = Target.objects.get(id=target_id)

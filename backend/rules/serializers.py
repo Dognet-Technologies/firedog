@@ -3,8 +3,7 @@ Serializers per l'app Rules
 """
 from rest_framework import serializers
 from .models import FirewallRule
-from targets.models import Target
-from api.models import Statistics
+from targets.models import Target, Statistics
 from threats.models import ThreatLog
 from audit.models import AuditLog
 from rules.models import FirewallRule
