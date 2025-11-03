@@ -22,7 +22,7 @@ app.autodiscover_tasks()
 app.conf.beat_schedule = {
     'fetch-all-targets-data': {
         'task': 'targets.tasks.fetch_all_targets_data',
-        'schedule': crontab(minute=f'*/{settings.FIREDOG_FETCH_INTERVAL}'),
+        'schedule': crontab(minute=f'*/10'),
     },
     'check-file-integrity': {
         'task': 'integrity.tasks.check_all_integrity',

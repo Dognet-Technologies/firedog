@@ -3,17 +3,23 @@ SSH Manager per FireDog
 Gestione connessioni SSH e trasferimento file via SCP
 Conforme a OWASP/NIST security standards
 """
+from core.firewall_output_parser import (
+    parse_firewall_stats,
+    parse_firewall_rules,
+    parse_firewall_threats,
+    parse_firewall_analyze
+)
 import paramiko
 import socket
-import logging
 import os
 from pathlib import Path
 from typing import Optional, Tuple, List
 from django.conf import settings
 from contextlib import contextmanager
+from typing import Dict, List, Optional, Tuple
+import logging
 
 logger = logging.getLogger('firedog.ssh')
-
 
 class SSHConnectionError(Exception):
     """Errore di connessione SSH"""
@@ -353,6 +359,132 @@ class SSHManager:
         """Context manager: disconnessione automatica"""
         self.disconnect()
         return False
+
+def get_statistics(self) -> Optional[Dict]:
+    """
+    Ottieni statistiche firewall (VERSIONE AGGIORNATA)
+    
+    Returns:
+        Dict con statistiche parsate o None se errore
+    """
+    try:
+        cmd = "sudo firewall-manager --stats"
+        exit_code, stdout, stderr = self.execute_command(cmd)
+
+        if exit_code == 0:
+            # Usa il parser per convertire output testuale in dict
+            from core.firewall_output_parser import parse_firewall_stats
+            stats = parse_firewall_stats(stdout)
+            
+            if stats:
+                logger.info(f"Stats retrieved: {stats['input_packets']} input packets")
+                return stats
+            else:
+                logger.warning("Failed to parse stats output")
+                return None
+
+        logger.error(f"Command failed: {stderr}")
+        return None
+
+    except Exception as e:
+        logger.error(f"Failed to get stats: {e}")
+        return None
+
+
+def get_threats(self, min_score: int = 30) -> List[Dict]:
+    """
+    Ottieni lista minacce rilevate (NUOVO METODO)
+    
+    Args:
+        min_score: Score minimo per includere minaccia (default 30)
+        
+    Returns:
+        List[Dict] con minacce parsate
+    """
+    try:
+        cmd = f"sudo firewall-manager --threats {min_score}"
+        exit_code, stdout, stderr = self.execute_command(cmd)
+
+        if exit_code == 0:
+            from core.firewall_output_parser import parse_firewall_threats
+            threats = parse_firewall_threats(stdout)
+            
+            logger.info(f"Retrieved {len(threats)} threats (score >= {min_score})")
+            return threats
+
+        logger.error(f"Command failed: {stderr}")
+        return []
+
+    except Exception as e:
+        logger.error(f"Failed to get threats: {e}")
+        return []
+
+
+def get_firewall_rules(self, chain: str = None) -> List[Dict]:
+    """
+    Ottieni regole iptables (VERSIONE AGGIORNATA)
+    
+    Args:
+        chain: Nome chain specifica (INPUT, OUTPUT, FORWARD) o None per tutte
+        
+    Returns:
+        List[Dict] con regole parsate
+    """
+    try:
+        if chain:
+            cmd = f"sudo firewall-manager --list {chain.upper()}"
+        else:
+            cmd = "sudo firewall-manager --list"
+
+        exit_code, stdout, stderr = self.execute_command(cmd)
+
+        if exit_code == 0:
+            from core.firewall_output_parser import parse_firewall_rules
+            rules = parse_firewall_rules(stdout, chain)
+            
+            logger.info(f"Retrieved {len(rules)} firewall rules")
+            return rules
+
+        logger.error(f"Command failed: {stderr}")
+        return []
+
+    except Exception as e:
+        logger.error(f"Failed to get rules: {e}")
+        return []
+
+
+def analyze_traffic(self, hours: int = 1) -> Optional[Dict]:
+    """
+    Analizza traffico bloccato (NUOVO METODO)
+    
+    Args:
+        hours: Numero ore da analizzare
+        
+    Returns:
+        Dict con analisi traffico o None se errore
+    """
+    try:
+        cmd = f"sudo firewall-manager --analyze {hours}"
+        exit_code, stdout, stderr = self.execute_command(cmd)
+
+        if exit_code == 0:
+            from core.firewall_output_parser import parse_firewall_analyze
+            analysis = parse_firewall_analyze(stdout)
+            
+            if analysis:
+                logger.info(f"Traffic analyzed: {analysis['total_packets']} packets in {hours}h")
+                return analysis
+            else:
+                logger.warning("Failed to parse analyze output")
+                return None
+
+        logger.error(f"Command failed: {stderr}")
+        return None
+
+    except Exception as e:
+        logger.error(f"Failed to analyze traffic: {e}")
+        return None
+
 
 
 @contextmanager

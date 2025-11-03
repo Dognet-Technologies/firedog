@@ -27,10 +27,12 @@ class StatisticsViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet per visualizzare statistics
     
     Endpoints:
-    - GET /api/targets/{target_id}/stats/ - Lista tutte le stats
-    - GET /api/targets/{target_id}/stats/latest/ - Ultima statistica
-    - GET /api/targets/{target_id}/stats/{id}/ - Statistica specifica
+ 
     """
+    GET /api/targets/{target_id}/stats/ 
+    GET /api/targets/{target_id}/stats/latest/
+    GET /api/targets/{target_id}/stats/{id}/
+
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['collected_at']
@@ -48,10 +50,11 @@ class StatisticsViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def latest(self, request, target_pk=None):
         """
-        GET /api/targets/{target_id}/stats/latest/
+        
         
         Restituisce l'ultima statistica registrata
         """
+        GET /api/targets/{target_id}/stats/latest/
         stats = self.get_queryset().first()
         
         if not stats:
@@ -66,10 +69,12 @@ class StatisticsViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def history(self, request, target_pk=None):
         """
-        GET /api/targets/{target_id}/stats/history/?hours=24
+        
         
         Restituisce lo storico stats nelle ultime N ore
         """
+        GET /api/targets/{target_id}/stats/history/?hours=24
+
         hours = int(request.query_params.get('hours', 24))
         since = timezone.now() - timedelta(hours=hours)
         
@@ -88,11 +93,13 @@ class ThreatLogViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet per visualizzare threats
     
     Endpoints:
-    - GET /api/targets/{target_id}/threats/ - Lista threats con filtri
-    - GET /api/targets/{target_id}/threats/{id}/ - Threat specifico
-    - POST /api/targets/{target_id}/threats/{id}/acknowledge/ - Acknowledge threat
-    - GET /api/targets/{target_id}/threats/summary/ - Riepilogo threats
+    - 
     """
+    GET /api/targets/{target_id}/threats/
+    GET /api/targets/{target_id}/threats/{id}/ 
+    POST /api/targets/{target_id}/threats/{id}/acknowledge/
+    GET /api/targets/{target_id}/threats/summary/ 
+
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['classification', 'threat_type', 'acknowledged', 'source_ip']
@@ -110,10 +117,12 @@ class ThreatLogViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['post'])
     def acknowledge(self, request, target_pk=None, pk=None):
         """
-        POST /api/targets/{target_id}/threats/{id}/acknowledge/
+        
         
         Marca una minaccia come acknowledged
         """
+        POST /api/targets/{target_id}/threats/{id}/acknowledge/
+
         threat = self.get_object()
         threat.acknowledged = True
         threat.save()
@@ -134,10 +143,12 @@ class ThreatLogViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def summary(self, request, target_pk=None):
         """
-        GET /api/targets/{target_id}/threats/summary/?hours=24
+        
         
         Restituisce riepilogo threats per severity
         """
+        GET /api/targets/{target_id}/threats/summary/?hours=24
+
         hours = int(request.query_params.get('hours', 24))
         since = timezone.now() - timedelta(hours=hours)
         
@@ -168,9 +179,11 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet per visualizzare audit logs
     
     Endpoints:
-    - GET /api/logs/audit/ - Lista audit logs
-    - GET /api/logs/audit/{id}/ - Log specifico
+    -  - Log specifico
     """
+    GET /api/logs/audit/
+    GET /api/logs/audit/{id}/
+    
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['username', 'action', 'target']
@@ -186,10 +199,12 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def recent(self, request):
         """
-        GET /api/logs/audit/recent/?hours=24&limit=100
+       
         
         Ultimi N audit logs
         """
+        GET /api/logs/audit/recent/?hours=24&limit=100
+   
         hours = int(request.query_params.get('hours', 24))
         limit = int(request.query_params.get('limit', 100))
         since = timezone.now() - timedelta(hours=hours)
@@ -208,18 +223,22 @@ class NetworkTrafficViewSet(viewsets.ViewSet):
     ViewSet per analisi traffico rete
     
     Endpoints:
-    - GET /api/targets/{target_id}/traffic/realtime/ - Dati real-time
-    - GET /api/targets/{target_id}/traffic/analyze/ - Analisi traffico
+    -  - Analisi traffico
     """
+    GET /api/targets/{target_id}/traffic/realtime/ 
+    GET /api/targets/{target_id}/traffic/analyze/
+    
     permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['get'])
     def realtime(self, request, target_pk=None):
         """
-        GET /api/targets/{target_id}/traffic/realtime/
+        
         
         Ottiene stats in tempo reale
         """
+        GET /api/targets/{target_id}/traffic/realtime/
+
         from targets.models import Target
         from api.models import Statistics
         
@@ -253,11 +272,13 @@ class NetworkTrafficViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def analyze(self, request, target_pk=None):
         """
-        POST /api/targets/{target_id}/traffic/analyze/
-        Body: {"hours": 24}
+        
         
         Triggera analisi traffico sul target
         """
+        POST /api/targets/{target_id}/traffic/analyze/
+        Body: {"hours": 24}
+
         from targets.models import Target
         from core.ssh_manager import SSHManager, SSHConnectionError
         
@@ -318,19 +339,24 @@ class PerformanceViewSet(viewsets.ViewSet):
     ViewSet per metriche performance sistema
     
     Endpoints:
-    - GET /api/targets/{target_id}/performance/ - Metriche sistema
+    -  - Metriche sistema
     """
+    GET /api/targets/{target_id}/performance/
+
     permission_classes = [IsAuthenticated]
     
     def list(self, request, target_pk=None):
         """
-        GET /api/targets/{target_id}/performance/
+        
         
         Ottiene metriche CPU, RAM, Disk (future implementation)
         """
         # TODO: Implementare quando saranno disponibili i comandi
         # per recuperare metriche sistema dal target
         
+        GET /api/targets/{target_id}/performance/
+
+
         return Response({
             'message': 'Performance monitoring not yet implemented',
             'planned_metrics': [

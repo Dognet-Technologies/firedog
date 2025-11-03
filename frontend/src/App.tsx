@@ -1,92 +1,268 @@
+/**
+ * Main App Component with Routing
+ */
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Targets from './pages/Targets';
+import Settings from './pages/Settings';
 import './App.css';
 
-const PrivateRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+// Protected Route Component
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+}
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const token = localStorage.getItem('access_token');
   
-  if (loading) {
-    return <div>Loading...</div>;
+  if (!token) {
+    return <Navigate to="/login" replace />;
   }
   
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  return <>{children}</>;
 };
 
-function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Navigate to="/dashboard" />} />
-      <Route
-        path="/dashboard"
-        element={
-          <PrivateRoute>
-            <Layout><Dashboard /></Layout>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/targets"
-        element={
-          <PrivateRoute>
-            <Layout><Targets /></Layout>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/rules"
-        element={
-          <PrivateRoute>
-            <Layout><div>Rules page - Coming soon</div></Layout>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/threats"
-        element={
-          <PrivateRoute>
-            <Layout><div>Threats page - Coming soon</div></Layout>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/discovery"
-        element={
-          <PrivateRoute>
-            <Layout><div>Discovery page - Coming soon</div></Layout>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/integrity"
-        element={
-          <PrivateRoute>
-            <Layout><div>Integrity page - Coming soon</div></Layout>
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/audit"
-        element={
-          <PrivateRoute>
-            <Layout><div>Audit page - Coming soon</div></Layout>
-          </PrivateRoute>
-        }
-      />
-    </Routes>
-  );
+// Public Route Component (redirect to dashboard if already logged in)
+interface PublicRouteProps {
+  children: React.ReactNode;
 }
+
+const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
+  const token = localStorage.getItem('access_token');
+  
+  if (token) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <>{children}</>;
+};
 
 function App() {
   return (
     <AuthProvider>
       <Router>
-        <AppRoutes />
+        <Routes>
+          {/* Public Routes */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            }
+          />
+
+          {/* Protected Routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Navigate to="/dashboard" replace />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Dashboard />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/targets"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Targets />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Firewall Routes */}
+          <Route
+            path="/firewall/rules"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>Regole Firewall</h1>
+                    <p>Pagina in costruzione - Gestione regole firewall</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/firewall/blocked"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>IP Bloccati</h1>
+                    <p>Pagina in costruzione - Lista IP bloccati</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/firewall/whitelist"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>Whitelist</h1>
+                    <p>Pagina in costruzione - Gestione whitelist</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Monitoring Routes */}
+          <Route
+            path="/threats"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>Threat Detection</h1>
+                    <p>Pagina in costruzione - Rilevamento minacce</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/monitoring/traffic"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>Traffico Rete</h1>
+                    <p>Pagina in costruzione - Monitoraggio traffico</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/monitoring/performance"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>Performance</h1>
+                    <p>Pagina in costruzione - Monitoraggio performance</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Discovery Route */}
+          <Route
+            path="/discovery"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>Network Discovery</h1>
+                    <p>Pagina in costruzione - Scansione rete</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Log Routes */}
+          <Route
+            path="/audit"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>Audit Logs</h1>
+                    <p>Pagina in costruzione - Log di audit</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/logs/system"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>System Logs</h1>
+                    <p>Pagina in costruzione - Log di sistema</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/logs/firewall"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>Firewall Logs</h1>
+                    <p>Pagina in costruzione - Log firewall</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Settings Routes */}
+          <Route
+            path="/settings/*"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Settings />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/integrity"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="page-placeholder">
+                    <h1>File Integrity</h1>
+                    <p>Pagina in costruzione - Monitoraggio integrità file</p>
+                  </div>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
       </Router>
     </AuthProvider>
   );

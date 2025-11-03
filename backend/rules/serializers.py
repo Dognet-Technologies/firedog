@@ -4,6 +4,10 @@ Serializers per l'app Rules
 from rest_framework import serializers
 from .models import FirewallRule
 from targets.models import Target
+from api.models import Statistics
+from threats.models import ThreatLog
+from audit.models import AuditLog
+from rules.models import FirewallRule
 
 
 class FirewallRuleSerializer(serializers.ModelSerializer):
@@ -102,3 +106,57 @@ class FirewallRuleListSerializer(serializers.ModelSerializer):
             'is_synced',
             'rule_description',
         ]
+
+
+class FirewallRuleSerializer(serializers.Serializer):
+    """Serializer per FirewallRule model"""
+    id = serializers.IntegerField(read_only=True)
+    target_id = serializers.IntegerField()
+    chain = serializers.CharField()
+    rule_number = serializers.IntegerField()
+    protocol = serializers.CharField()
+    port = serializers.IntegerField(allow_null=True)
+    source_ip = serializers.IPAddressField(allow_null=True)
+    dest_ip = serializers.IPAddressField(allow_null=True)
+    action = serializers.CharField()
+    comment = serializers.CharField(allow_blank=True)
+    packets = serializers.IntegerField()
+    bytes = serializers.IntegerField()
+    synced_at = serializers.DateTimeField()
+    
+    # Extra
+    target_hostname = serializers.SerializerMethodField()
+    formatted_rule = serializers.SerializerMethodField()
+    
+    def get_target_hostname(self, obj):
+        return obj.target.hostname if obj.target else None
+    
+    def get_formatted_rule(self, obj):
+        """Formatta regola per display"""
+        parts = [obj.action, obj.protocol.upper()]
+        
+        if obj.port:
+            parts.append(f"port {obj.port}")
+        
+        if obj.source_ip:
+            parts.append(f"from {obj.source_ip}")
+        
+        if obj.dest_ip:
+            parts.append(f"to {obj.dest_ip}")
+        
+        if obj.comment:
+            parts.append(f"# {obj.comment}")
+        
+        return " ".join(parts)
+
+
+class FirewallRuleListSerializer(serializers.Serializer):
+    """Serializer compatto per liste"""
+    id = serializers.IntegerField(read_only=True)
+    chain = serializers.CharField()
+    rule_number = serializers.IntegerField()
+    protocol = serializers.CharField()
+    port = serializers.IntegerField(allow_null=True)
+    action = serializers.CharField()
+    comment = serializers.CharField()
+    packets = serializers.IntegerField()
