@@ -125,6 +125,41 @@ class AuditLog(models.Model):
         status = "✓" if self.success else "✗"
         return f"{status} {user_info} - {self.action} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
 
+# class FirewallRule(models.Model):
+#     """Regola iptables snapshot"""
+
+#     CHAIN_CHOICES = [
+#         ("INPUT", "Input"),
+#         ("OUTPUT", "Output"),
+#         ("FORWARD", "Forward"),
+#     ]
+
+#     target = models.ForeignKey(Target, on_delete=models.CASCADE, related_name="rules")
+#     chain = models.CharField(max_length=10, choices=CHAIN_CHOICES)
+#     rule_number = models.IntegerField()
+
+#     protocol = models.CharField(max_length=10, blank=True)
+#     port = models.IntegerField(null=True, blank=True)
+#     source_ip = models.GenericIPAddressField(null=True, blank=True)
+#     dest_ip = models.GenericIPAddressField(null=True, blank=True)
+#     action = models.CharField(max_length=20)
+#     comment = models.TextField(blank=True)
+
+#     # Counters
+#     packets = models.BigIntegerField(default=0)
+#     bytes = models.BigIntegerField(default=0)
+
+#     synced_at = models.DateTimeField(auto_now=True)
+
+#     class Meta:
+#         db_table = "firewall_rules"
+#         ordering = ["target", "chain", "rule_number"]
+#         unique_together = ["target", "chain", "rule_number"]
+
+#     def __str__(self):
+#         return f"{self.target.hostname} - {self.chain} #{self.rule_number}"
+
+
     @classmethod
     def log_action(cls, action, description, user=None, content_object=None,
                    old_values=None, new_values=None, ip_address=None,

@@ -112,6 +112,59 @@ class Target(models.Model):
         self.error_message = error_message
         self.save(update_fields=['status', 'error_message', 'updated_at'])
 
+class Statistics(models.Model):
+    """Statistiche firewall periodiche"""
+
+    target = models.ForeignKey(
+        Target, on_delete=models.CASCADE, related_name="statistics"
+    )
+
+    input_packets = models.BigIntegerField(default=0)
+    output_packets = models.BigIntegerField(default=0)
+    input_dropped = models.BigIntegerField(default=0)
+    output_dropped = models.BigIntegerField(default=0)
+
+    pcap_input_size = models.BigIntegerField(default=0)
+    pcap_output_size = models.BigIntegerField(default=0)
+
+    collected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "statistics"
+        ordering = ["-collected_at"]
+        indexes = [
+            models.Index(fields=["target", "-collected_at"]),
+        ]
+
+
+class Alert(models.Model):
+    """Alert sistema"""
+
+    SEVERITY_CHOICES = [
+        ("critical", "Critical"),
+        ("high", "High"),
+        ("medium", "Medium"),
+        ("low", "Low"),
+        ("info", "Info"),
+    ]
+
+    target = models.ForeignKey(
+        Target, on_delete=models.CASCADE, related_name="alerts", null=True, blank=True
+    )
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    acknowledged = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "alerts"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"[{self.severity.upper()}] {self.title}"
+
+
     @property
     def is_active(self):
         """Verifica se il target è attivo"""
