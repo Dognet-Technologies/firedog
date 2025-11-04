@@ -5,11 +5,13 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/layout/Layout';
+import Discovery from './pages/Discovery';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Targets from './pages/Targets';
 import Settings from './pages/Settings';
 import './App.css';
+
 
 // Protected Route Component
 interface ProtectedRouteProps {
@@ -67,7 +69,15 @@ function App() {
               </ProtectedRoute>
             }
           />
-
+          <Route
+            path="/discovery"
+            element={
+              <ProtectedRoute>
+                <Layout><Discovery /></Layout>
+              </ProtectedRoute>
+            }
+          />
+          
           <Route
             path="/dashboard"
             element={

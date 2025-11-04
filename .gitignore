@@ -23,6 +23,7 @@ wheels/
 .installed.cfg
 *.egg
 
+
 # Django
 *.log
 local_settings.py
@@ -80,3 +81,4 @@ uploads/
 
 # OS
 Thumbs.db
+files/*

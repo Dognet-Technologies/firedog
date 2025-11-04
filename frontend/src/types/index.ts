@@ -185,6 +185,35 @@ export interface DiscoveredHost {
   notes: string;
   display_name: string;
   is_recently_discovered: boolean;
+  already_target: boolean;
+}
+
+export interface DiscoveryScanResult {
+  task_id: string;
+  message: string;
+  status: 'running' | 'completed' | 'failed';
+}
+
+export interface DiscoveryScanStatus {
+  task_id: string;
+  status: 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE';
+  result?: {
+    success: boolean;
+    networks_scanned: string[];
+    hosts_found: number;
+    hosts_new: number;
+    hosts_updated: number;
+  };
+}
+
+export interface BulkImportResult {
+  imported: number;
+  skipped: number;
+  errors: Array<{
+    line: number;
+    error: string;
+    content: string;
+  }>;
 }
 
 // ========== File Integrity Types ==========

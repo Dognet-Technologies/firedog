@@ -13,6 +13,9 @@ import type {
   Dashboard,
   Widget,
   DiscoveredHost,
+  DiscoveryScanResult,
+  DiscoveryScanStatus,
+  BulkImportResult,
   FileIntegrity,
   AuditLog,
   LoginCredentials,
@@ -241,7 +244,22 @@ class ApiService {
     await this.api.delete(`/widgets/${id}/`);
   }
 
-  // ========== Discovery ==========
+  // ========== Discovery (NEW) ==========
+
+  async startDiscoveryScan(): Promise<DiscoveryScanResult> {
+    const response = await this.api.post('/discovery/start_scan/');
+    return response.data;
+  }
+
+  async getDiscoveryScanStatus(taskId: string): Promise<DiscoveryScanStatus> {
+    const response = await this.api.get(`/discovery/scan_status/?task_id=${taskId}`);
+    return response.data;
+  }
+
+  async getDiscoveryResults(notImported: boolean = false): Promise<{ count: number; hosts: DiscoveredHost[] }> {
+    const response = await this.api.get(`/discovery/get_results/?not_imported=${notImported}`);
+    return response.data;
+  }
 
   async getDiscoveredHosts(): Promise<PaginatedResponse<DiscoveredHost>> {
     const response = await this.api.get('/discovery/');
@@ -250,6 +268,34 @@ class ApiService {
 
   async scanNetwork(): Promise<any> {
     const response = await this.api.post('/discovery/scan/');
+    return response.data;
+  }
+
+  async bulkImportFromFile(file: File): Promise<BulkImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await this.api.post('/discovery/bulk_import/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    
+    return response.data;
+  }
+
+  async importDiscoveredHost(
+    hostId: number,
+    data?: { hostname?: string; description?: string }
+  ): Promise<{ success: boolean; target_id: number; message: string }> {
+    const response = await this.api.post(`/discovery/${hostId}/import_to_target/`, data || {});
+    return response.data;
+  }
+
+  async bulkImportDiscoveredHosts(hostIds: number[]): Promise<BulkImportResult> {
+    const response = await this.api.post('/discovery/bulk_import_to_targets/', {
+      host_ids: hostIds
+    });
     return response.data;
   }
 

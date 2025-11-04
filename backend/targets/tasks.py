@@ -1,354 +1,392 @@
-""" 
-Celery Tasks per l'app Targets
+"""
+Celery Tasks per installazione e gestione Target
 """
 from celery import shared_task
-from django.utils import timezone
-from django.db import transaction
-from django.conf import settings
-from core.ssh_manager import SSHManager, SSHConnectionError
+from django.utils.timezone import now
 from datetime import timedelta
 import logging
 
+from targets.models import Target
+from core.ssh_manager import SSHManager, SSHConnectionError
+
 logger = logging.getLogger('firedog.tasks')
 
 
-logger = logging.getLogger('firedog.tasks')
-
-
-@shared_task
-def install_firedog_on_target(target_id, user_id):
-    """Installa pacchetto firedog su target"""
-    from targets.models import Target
-    from audit.models import AuditLog
-    from django.contrib.auth.models import User
-    
-    try:
-        target = Target.objects.get(id=target_id)
-        user = User.objects.get(id=user_id)
-        
-        ssh = SSHManager(host=target.ip_address, port=target.ssh_port, username=target.ssh_user)
-        ssh.connect()
-        
-        # Verifica utente
-        if not ssh.check_user_exists(target.ssh_user):
-            raise Exception(f"Utente {target.ssh_user} non esiste sul target")
-        
-        # Upload pacchetto
-        package_path = settings.FIREDOG_PACKAGE_PATH
-        remote_path = '/tmp/firedog-package'
-        ssh.upload_directory(package_path, remote_path)
-        
-        # Esegui installer
-        exit_code, stdout, stderr = ssh.execute_command(f'cd {remote_path} && sudo bash install.sh', sudo=False)
-        
-        if exit_code != 0:
-            raise Exception(f"Installazione fallita: {stderr}")
-        
-        # Installa cron
-        cron_cmd = f"*/10 * * * * /opt/firedog/traffic-analyzer.py"
-        ssh.execute_command(f'(crontab -l 2>/dev/null; echo "{cron_cmd}") | crontab -', sudo=False)
-        
-        ssh.disconnect()
-        
-        target.status = 'online'
-        target.firedog_version = '1.0.0'
-        target.save()
-        
-        AuditLog.log_action('install', f'Firedog installato su {target.ip_address}', user, target)
-        
-        logger.info(f"Firedog installato con successo su {target.ip_address}")
-        return {'success': True}
-        
-    except Exception as e:
-        logger.error(f"Errore installazione firedog: {e}")
-        target.mark_error(str(e))
-        AuditLog.log_action('install', f'Errore installazione su {target.ip_address}', user, target, success=False, error_message=str(e))
-        return {'success': False, 'error': str(e)}
-
-
-@shared_task
-def uninstall_firedog_from_target(target_id, user_id):
-    """Disinstalla pacchetto firedog da target"""
-    from targets.models import Target
-    from audit.models import AuditLog
-    from django.contrib.auth.models import User
-    
-    try:
-        target = Target.objects.get(id=target_id)
-        user = User.objects.get(id=user_id)
-        
-        ssh = SSHManager(host=target.ip_address, port=target.ssh_port, username=target.ssh_user)
-        ssh.connect()
-        
-        # Rimuovi cron
-        ssh.execute_command("crontab -l | grep -v 'traffic-analyzer' | crontab -", sudo=False)
-        
-        # Rimuovi directory
-        ssh.execute_command("sudo rm -rf /opt/firedog", sudo=True)
-        
-        ssh.disconnect()
-        
-        target.status = 'pending'
-        target.firedog_version = ''
-        target.save()
-        
-        AuditLog.log_action('uninstall', f'Firedog disinstallato da {target.ip_address}', user, target)
-        
-        return {'success': True}
-        
-    except Exception as e:
-        logger.error(f"Errore disinstallazione: {e}")
-        return {'success': False, 'error': str(e)}
-
-
-@shared_task
-def fetch_target_data(target_id):
+@shared_task(bind=True, max_retries=3)
+def install_firedog_on_target(self, target_id: int, user_id: int):
     """
-    Fetch dati completi da un target
+    Task Celery per installazione completa firedog sul target
+    
+    Operazioni:
+    1. Connessione SSH con chiave
+    2. Verifica utente microcyber
+    3. Hardening SSH (PasswordAuthentication no)
+    4. Configurazione sudoers per microcyber
+    5. Upload firedog-package
+    6. Esecuzione install.sh
+    7. Verifica installazione
+    8. Setup cron job
     
     Args:
-        target_id: ID del target da cui fetchare
-        
-    Returns:
-        dict con risultati:
-        {
-            'success': bool,
-            'threats_count': int,
-            'new_threats': int,
-            'stats': dict,
-            'error': str (se success=False)
-        }
+        target_id: ID del target
+        user_id: ID dell'utente che ha richiesto l'installazione
     """
-    from targets.models import Target, Statistics, Alert
-    from threats.models import ThreatLog
-    from rules.models import FirewallRule
-    
+    try:
+        # Load target
+        target = Target.objects.get(id=target_id)
+        target.status = 'installing'
+        target.installation_status = 'Starting installation...'
+        target.installation_error = ''
+        target.save()
+        
+        logger.info(f"Starting installation for target {target_id}: {target.hostname}")
+        
+        # ==================== STEP 1: Connessione SSH ====================
+        target.installation_status = 'Connecting via SSH...'
+        target.save()
+        
+        ssh = SSHManager(
+            host=target.ip_address,
+            port=target.ssh_port,
+            username=target.ssh_user
+        )
+        
+        try:
+            ssh.connect()
+            logger.info(f"SSH connection established to {target.ip_address}")
+        except SSHConnectionError as e:
+            error_msg = f"SSH connection failed: {str(e)}"
+            logger.error(f"Target {target_id}: {error_msg}")
+            target.status = 'error'
+            target.installation_status = 'Failed'
+            target.installation_error = error_msg
+            target.save()
+            
+            return {'success': False, 'error': error_msg}
+        
+        # ==================== STEP 2: Verifica utente microcyber ====================
+        target.installation_status = 'Checking prerequisites...'
+        target.save()
+        
+        if not ssh.check_user_exists(target.ssh_user):
+            error_msg = f"User '{target.ssh_user}' not found on target"
+            logger.error(f"Target {target_id}: {error_msg}")
+            
+            target.status = 'error'
+            target.installation_status = 'Failed'
+            target.installation_error = error_msg
+            target.save()
+            
+            ssh.disconnect()
+            
+            return {'success': False, 'error': error_msg}
+        
+        logger.info(f"User {target.ssh_user} exists on target {target_id}")
+        
+        # ==================== STEP 3: Hardening SSH ====================
+        target.installation_status = 'Hardening SSH configuration...'
+        target.save()
+        
+        logger.info(f"Starting SSH hardening for target {target_id}")
+        
+        # Backup del file sshd_config originale
+        exit_code, stdout, stderr = ssh.execute_command(
+            "sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak.$(date +%Y%m%d_%H%M%S)"
+        )
+        
+        if exit_code != 0:
+            logger.warning(f"Target {target_id}: Could not backup sshd_config: {stderr}")
+        
+        # Modifica sshd_config per disabilitare password authentication
+        ssh_hardening_commands = [
+            # Disabilita PasswordAuthentication
+            "sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config",
+            # Abilita PubkeyAuthentication (se non già presente)
+            "sudo sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config",
+            # Disabilita ChallengeResponseAuthentication
+            "sudo sed -i 's/^#*ChallengeResponseAuthentication.*/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config",
+            # Verifica configurazione
+            "sudo sshd -t"
+        ]
+        
+        for cmd in ssh_hardening_commands:
+            exit_code, stdout, stderr = ssh.execute_command(cmd)
+            if exit_code != 0 and 'sshd -t' in cmd:
+                error_msg = f"SSH config validation failed: {stderr}"
+                logger.error(f"Target {target_id}: {error_msg}")
+                
+                # Ripristina backup
+                ssh.execute_command("sudo mv /etc/ssh/sshd_config.bak.* /etc/ssh/sshd_config 2>/dev/null || true")
+                
+                target.status = 'error'
+                target.installation_status = 'Failed'
+                target.installation_error = error_msg
+                target.save()
+                ssh.disconnect()
+                
+                return {'success': False, 'error': error_msg}
+        
+        # Riavvia sshd
+        logger.info(f"Restarting SSH daemon on target {target_id}")
+        exit_code, stdout, stderr = ssh.execute_command("sudo systemctl restart sshd || sudo service ssh restart")
+        
+        if exit_code != 0:
+            logger.warning(f"Target {target_id}: SSH restart command returned {exit_code}: {stderr}")
+        
+        logger.info(f"SSH hardening completed for target {target_id}")
+        
+        # ==================== STEP 4: Configurazione sudoers ====================
+        target.installation_status = 'Configuring sudoers...'
+        target.save()
+        
+        logger.info(f"Configuring sudoers for target {target_id}")
+        
+        # Crea file sudoers per microcyber
+        sudoers_content = f"""# FireDog - Permessi per utente {target.ssh_user}
+{target.ssh_user} ALL=(ALL) NOPASSWD: /usr/sbin/iptables
+{target.ssh_user} ALL=(ALL) NOPASSWD: /usr/sbin/ip6tables
+{target.ssh_user} ALL=(ALL) NOPASSWD: /usr/sbin/iptables-save
+{target.ssh_user} ALL=(ALL) NOPASSWD: /usr/sbin/iptables-restore
+{target.ssh_user} ALL=(ALL) NOPASSWD: /usr/local/bin/firewall-manager
+{target.ssh_user} ALL=(ALL) NOPASSWD: /usr/local/bin/traffic-analyzer
+{target.ssh_user} ALL=(ALL) NOPASSWD: /bin/systemctl restart firedog
+{target.ssh_user} ALL=(ALL) NOPASSWD: /bin/systemctl status firedog
+{target.ssh_user} ALL=(ALL) NOPASSWD: /bin/cat /var/log/firedog/*
+"""
+        
+        temp_sudoers = f"/tmp/firedog_sudoers_{target.ssh_user}"
+        sudoers_escaped = sudoers_content.replace('\n', '\\n').replace('"', '\\"')
+        
+        sudoers_commands = [
+            f'echo -e "{sudoers_escaped}" > {temp_sudoers}',
+            f"sudo visudo -c -f {temp_sudoers}",
+            f"sudo mv {temp_sudoers} /etc/sudoers.d/{target.ssh_user}",
+            f"sudo chmod 440 /etc/sudoers.d/{target.ssh_user}",
+        ]
+        
+        for cmd in sudoers_commands:
+            exit_code, stdout, stderr = ssh.execute_command(cmd)
+            
+            if exit_code != 0 and 'visudo -c' in cmd:
+                error_msg = f"Sudoers validation failed: {stderr}"
+                logger.error(f"Target {target_id}: {error_msg}")
+                
+                target.status = 'error'
+                target.installation_status = 'Failed'
+                target.installation_error = error_msg
+                target.save()
+                ssh.disconnect()
+                
+                return {'success': False, 'error': error_msg}
+        
+        logger.info(f"Sudoers configuration completed for target {target_id}")
+        
+        # ==================== STEP 5: Upload firedog-package ====================
+        target.installation_status = 'Uploading firedog package...'
+        target.save()
+        
+        logger.info(f"Uploading firedog package to target {target_id}")
+        
+        package_local_path = '/opt/firedog/firedog-package'
+        package_remote_path = '/tmp/firedog-package'
+        
+        try:
+            success, message = ssh.upload_directory(package_local_path, package_remote_path)
+            
+            if not success:
+                error_msg = f"Package upload failed: {message}"
+                logger.error(f"Target {target_id}: {error_msg}")
+                
+                target.status = 'error'
+                target.installation_status = 'Failed'
+                target.installation_error = error_msg
+                target.save()
+                ssh.disconnect()
+                
+                return {'success': False, 'error': error_msg}
+            
+            logger.info(f"Package uploaded successfully to target {target_id}")
+            
+        except Exception as e:
+            error_msg = f"Upload exception: {str(e)}"
+            logger.error(f"Target {target_id}: {error_msg}")
+            
+            target.status = 'error'
+            target.installation_status = 'Failed'
+            target.installation_error = error_msg
+            target.save()
+            ssh.disconnect()
+            
+            return {'success': False, 'error': error_msg}
+        
+        # ==================== STEP 6: Esecuzione install.sh ====================
+        target.installation_status = 'Running installation script...'
+        target.save()
+        
+        logger.info(f"Executing install.sh on target {target_id}")
+        
+        exit_code, stdout, stderr = ssh.execute_command(
+            f"chmod +x {package_remote_path}/*.sh {package_remote_path}/*.py"
+        )
+        
+        exit_code, stdout, stderr = ssh.execute_command(
+            f"cd {package_remote_path} && sudo bash install.sh",
+            timeout=300
+        )
+        
+        if exit_code != 0:
+            error_msg = f"Installation script failed: {stderr}"
+            logger.error(f"Target {target_id}: {error_msg}")
+            
+            target.status = 'error'
+            target.installation_status = 'Failed'
+            target.installation_error = error_msg
+            target.save()
+            ssh.disconnect()
+            
+            return {'success': False, 'error': error_msg}
+        
+        logger.info(f"Installation script completed on target {target_id}")
+        
+        # ==================== STEP 7: Verifica installazione ====================
+        target.installation_status = 'Verifying installation...'
+        target.save()
+        
+        exit_code, stdout, stderr = ssh.execute_command(
+            "test -f /usr/local/bin/firewall-manager && echo 'INSTALLED'"
+        )
+        
+        if exit_code != 0 or 'INSTALLED' not in stdout:
+            error_msg = "firewall-manager not found after installation"
+            logger.error(f"Target {target_id}: {error_msg}")
+            
+            target.status = 'error'
+            target.installation_status = 'Failed'
+            target.installation_error = error_msg
+            target.save()
+            ssh.disconnect()
+            
+            return {'success': False, 'error': error_msg}
+        
+        exit_code, version_output, stderr = ssh.execute_command(
+            "/usr/local/bin/firewall-manager --version 2>&1 || echo '1.0.0'"
+        )
+        
+        firedog_version = version_output.strip() or '1.0.0'
+        logger.info(f"Target {target_id}: Firedog version {firedog_version} installed")
+        
+        # ==================== SUCCESS ====================
+        target.status = 'online'
+        target.installation_status = 'Completed'
+        target.installation_error = ''
+        target.firedog_version = firedog_version
+        target.last_seen = now()
+        target.save()
+        
+        ssh.disconnect()
+        
+        logger.info(f"Installation completed successfully for target {target_id}")
+        
+        return {
+            'success': True,
+            'message': 'Installation completed',
+            'firedog_version': firedog_version
+        }
+        
+    except Target.DoesNotExist:
+        error_msg = f"Target {target_id} not found"
+        logger.error(error_msg)
+        return {'success': False, 'error': error_msg}
+        
+    except Exception as e:
+        error_msg = f"Unexpected error: {str(e)}"
+        logger.exception(f"Target {target_id}: {error_msg}")
+        
+        try:
+            target = Target.objects.get(id=target_id)
+            target.status = 'error'
+            target.installation_status = 'Failed'
+            target.installation_error = error_msg
+            target.save()
+        except:
+            pass
+        
+        return {'success': False, 'error': error_msg}
+
+
+@shared_task
+def fetch_target_data(target_id: int):
+    """Task per recupero dati da target via SCP"""
     try:
         target = Target.objects.get(id=target_id)
-        logger.info(f"Starting fetch for target {target.hostname} ({target.ip_address})")
         
-        # Verifica che il target sia online
         if target.status != 'online':
-            logger.warning(f"Target {target.hostname} not online, skipping fetch")
-            return {
-                'success': False,
-                'reason': 'target not online'
-            }
+            return {'success': False, 'error': 'Target not online'}
         
-        # Connessione SSH
+        logger.info(f"Fetching data from target {target_id}")
+        
+        ssh = SSHManager(
+            host=target.ip_address,
+            port=target.ssh_port,
+            username=target.ssh_user
+        )
+        
+        ssh.connect()
+        
+        remote_file = '/tmp/firedog-analysis.json'
+        local_file = f'/tmp/firedog_data_{target_id}_{now().strftime("%Y%m%d_%H%M%S")}.json'
+        
+        success, message = ssh.download_file(remote_file, local_file)
+        ssh.disconnect()
+        
+        if success:
+            target.last_fetch = now()
+            target.last_seen = now()
+            target.save()
+            
+            return {'success': True, 'file': local_file}
+        else:
+            return {'success': False, 'error': message}
+            
+    except Exception as e:
+        logger.exception(f"Error fetching data from target {target_id}")
+        return {'success': False, 'error': str(e)}
+
+
+@shared_task
+def check_targets_health():
+    """Task periodico per check salute target"""
+    online_targets = Target.objects.filter(status='online')
+    
+    results = {
+        'checked': 0,
+        'online': 0,
+        'offline': 0
+    }
+    
+    for target in online_targets:
         try:
             ssh = SSHManager(
                 host=target.ip_address,
                 port=target.ssh_port,
                 username=target.ssh_user
             )
+            
             ssh.connect()
-        except SSHConnectionError as e:
-            logger.error(f"SSH connection failed: {e}")
-            target.mark_offline(str(e))
-            return {
-                'success': False,
-                'error': f'SSH connection failed: {e}'
-            }
-        
-        result = {
-            'success': True,
-            'threats_count': 0,
-            'new_threats': 0,
-            'stats': None,
-            'rules_synced': 0
-        }
-        
-        try:
-            # ============================================
-            # 1. FETCH STATISTICS
-            # ============================================
-            logger.debug("Fetching statistics...")
-            stats_data = ssh.get_statistics()
-            
-            if stats_data:
-                # Salva statistics nel DB
-                Statistics.objects.create(
-                    target=target,
-                    input_packets=stats_data.get('input_packets', 0),
-                    output_packets=stats_data.get('output_packets', 0),
-                    input_dropped=stats_data.get('input_dropped', 0),
-                    output_dropped=stats_data.get('output_dropped', 0),
-                    pcap_input_size=stats_data.get('pcap_input_size', 0),
-                    pcap_output_size=stats_data.get('pcap_output_size', 0),
-                    collected_at=timezone.now()
-                )
-                result['stats'] = stats_data
-                logger.info(f"Statistics saved: {stats_data['input_packets']} input packets")
-            else:
-                logger.warning("No statistics data received")
-            
-            # ============================================
-            # 2. FETCH THREATS
-            # ============================================
-            logger.debug("Fetching threats...")
-            threats_data = ssh.get_threats(min_score=30)  # Score minimo 30
-            
-            new_threats_count = 0
-            critical_threats_count = 0
-            
-            with transaction.atomic():
-                for threat_data in threats_data:
-                    # Verifica se minaccia già esiste (stesso IP nelle ultime 24h)
-                    existing = ThreatLog.objects.filter(
-                        target=target,
-                        source_ip=threat_data['source_ip'],
-                        detected_at__gte=timezone.now() - timedelta(hours=24)
-                    ).first()
-                    
-                    if not existing:
-                        # Nuova minaccia - crea record
-                        ThreatLog.objects.create(
-                            target=target,
-                            source_ip=threat_data['source_ip'],
-                            threat_score=threat_data['threat_score'],
-                            packets=threat_data.get('packets', 0),
-                            ports_count=threat_data.get('ports_count', 0),
-                            protocols=threat_data.get('protocols', 'tcp'),
-                            threat_type=threat_data.get('threat_type', 'Unknown'),
-                            classification=threat_data['classification'],
-                            detected_at=timezone.now(),
-                            acknowledged=False
-                        )
-                        new_threats_count += 1
-                        
-                        if threat_data['classification'] == 'CRITICAL':
-                            critical_threats_count += 1
-                    else:
-                        # Minaccia già registrata, aggiorna se score aumentato
-                        if threat_data['threat_score'] > existing.threat_score:
-                            existing.threat_score = threat_data['threat_score']
-                            existing.packets = threat_data.get('packets', existing.packets)
-                            existing.detected_at = timezone.now()
-                            existing.save()
-            
-            result['threats_count'] = len(threats_data)
-            result['new_threats'] = new_threats_count
-            
-            logger.info(f"Threats processed: {len(threats_data)} total, {new_threats_count} new")
-            
-            # ============================================
-            # 3. FETCH FIREWALL RULES
-            # ============================================
-            logger.debug("Fetching firewall rules...")
-            rules_data = ssh.get_firewall_rules()  # Tutte le chain
-            
-            with transaction.atomic():
-                # Rimuovi regole obsolete
-                FirewallRule.objects.filter(target=target).delete()
-                
-                # Inserisci regole aggiornate
-                for rule_data in rules_data:
-                    FirewallRule.objects.create(
-                        target=target,
-                        chain=rule_data['chain'],
-                        rule_number=rule_data['rule_number'],
-                        protocol=rule_data.get('protocol', 'all'),
-                        port=rule_data.get('port'),
-                        source_ip=rule_data.get('source'),
-                        dest_ip=rule_data.get('destination'),
-                        action=rule_data.get('target', 'ACCEPT'),
-                        comment=rule_data.get('comment', ''),
-                        packets=rule_data.get('packets', 0),
-                        bytes=rule_data.get('bytes', 0),
-                        synced_at=timezone.now()
-                    )
-            
-            result['rules_synced'] = len(rules_data)
-            logger.info(f"Firewall rules synced: {len(rules_data)}")
-            
-            # ============================================
-            # 4. AGGIORNA TARGET
-            # ============================================
-            target.last_fetch = timezone.now()
-            target.last_seen = timezone.now()
-            target.mark_online()
-            
-            # ============================================
-            # 5. CREA ALERT SE MINACCE CRITICHE
-            # ============================================
-            if critical_threats_count > 0:
-                # Verifica se alert già inviato nell'ultima ora
-                recent_alert = Alert.objects.filter(
-                    target=target,
-                    severity='critical',
-                    created_at__gte=timezone.now() - timedelta(hours=1)
-                ).exists()
-                
-                if not recent_alert:
-                    Alert.objects.create(
-                        target=target,
-                        severity='critical',
-                        title='Critical Threats Detected',
-                        message=f'{critical_threats_count} critical threats detected on {target.hostname}',
-                        acknowledged=False
-                    )
-                    logger.warning(f"Created critical alert for {target.hostname}")
-            
-            logger.info(f"Fetch completed for {target.hostname}")
-            return result
-            
-        finally:
+            exit_code, stdout, stderr = ssh.execute_command('echo "OK"')
             ssh.disconnect()
-    
-    except Target.DoesNotExist:
-        logger.error(f"Target {target_id} not found")
-        return {
-            'success': False,
-            'error': 'Target not found'
-        }
-    
-    except Exception as e:
-        logger.error(f"Unexpected error fetching target {target_id}: {e}", exc_info=True)
+            
+            if exit_code == 0:
+                target.mark_online()
+                results['online'] += 1
+            else:
+                target.mark_offline()
+                results['offline'] += 1
+                
+        except Exception:
+            target.mark_offline()
+            results['offline'] += 1
         
-        try:
-            target.mark_offline(str(e))
-        except:
-            pass
-        
-        return {
-            'success': False,
-            'error': str(e)
-        }
-
-@shared_task
-def fetch_all_targets_data():
-    """
-    Task schedulato per fetch dati da tutti i target online
+        results['checked'] += 1
     
-    Eseguito periodicamente da Celery Beat (default ogni 10 minuti)
-    """
-    from targets.models import Target
-    
-    logger.info("Starting scheduled fetch for all targets")
-    
-    # Ottieni tutti i target online
-    targets = Target.objects.filter(status='online')
-    
-    results = {
-        'total': 0,
-        'success': 0,
-        'failed': 0,
-        'skipped': 0
-    }
-    
-    for target in targets:
-        # Verifica se è tempo di fetchare (rispetta fetch_interval_minutes)
-        if target.last_fetch:
-            next_fetch = target.last_fetch + timedelta(minutes=target.fetch_interval_minutes)
-            if timezone.now() < next_fetch:
-                logger.debug(f"Skipping {target.hostname} - not yet time to fetch")
-                results['skipped'] += 1
-                continue
-        
-        # Esegui fetch async
-        fetch_target_data.delay(target.id)
-        results['total'] += 1
-    
-    logger.info(f"Scheduled fetch for {results['total']} targets")
     return results
