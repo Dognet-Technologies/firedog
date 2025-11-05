@@ -252,11 +252,28 @@ export interface AuditLog {
   description: string;
   old_values: any;
   new_values: any;
-  ip_address: string | null;
+  ip_address: string ;
   user_agent: string;
   success: boolean;
   error_message: string;
   created_at: string;
+  target_id: number | null;
+  target_hostname: string | null;
+  details: any;
+  timestamp: string;
+  action_description: string;
+}
+
+export interface AuditLog {
+  id: number;
+  username: string;
+  action: string;
+  target_id: number | null;
+  target_hostname: string | null;
+  details: any;
+  ip_address: string;
+  timestamp: string;
+  action_description: string;
 }
 
 // ========== Auth Types ==========

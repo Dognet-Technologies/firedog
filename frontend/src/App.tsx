@@ -21,6 +21,8 @@ import FirewallLogs from './pages/FirewallLogs';
 import MonitoringTraffic from './pages/MonitoringTraffic';
 import MonitoringPerformance from './pages/MonitoringPerformance';
 import SystemLogs from './pages/SystemLogs';
+import Whitelist from './pages/Whitelist';
+import BlockedIPs from './pages/BlockedIPs';
 
 // Nelle routes:
 
@@ -173,34 +175,27 @@ function App() {
               </ProtectedRoute>
             }
             />
+            <Route
+              path="/firewall/blocked"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <BlockedIPs />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
 
-          <Route
-            path="/firewall/blocked"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>IP Bloccati</h1>
-                    <p>Pagina in costruzione - Lista IP bloccati</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/firewall/whitelist"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>Whitelist</h1>
-                    <p>Pagina in costruzione - Gestione whitelist</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
+            <Route
+              path="/firewall/whitelist"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Whitelist />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
 
           {/* Monitoring Routes */}
 {/*          <Route

@@ -124,7 +124,7 @@ const FirewallLogs: React.FC = () => {
     }).format(date);
   };
 
-  const getThreatScore Color = (score: number) => {
+  const getThreatScoreColor = (score: number) => {
     if (score >= 80) return 'critical';
     if (score >= 60) return 'high';
     if (score >= 40) return 'medium';
