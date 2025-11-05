@@ -12,6 +12,13 @@ import Targets from './pages/Targets';
 import Settings from './pages/Settings';
 import './App.css';
 
+import Rules from './pages/Rules';
+import Threats from './pages/Threats';
+import Audit from './pages/Audit';
+import Integrity from './pages/Integrity';
+
+// Nelle routes:
+
 
 // Protected Route Component
 interface ProtectedRouteProps {
@@ -101,7 +108,7 @@ function App() {
           />
 
           {/* Firewall Routes */}
-          <Route
+{/*          <Route
             path="/firewall/rules"
             element={
               <ProtectedRoute>
@@ -113,7 +120,18 @@ function App() {
                 </Layout>
               </ProtectedRoute>
             }
-          />
+          />*/}
+          <Route 
+            path="/rules" 
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Rules />
+                </Layout>
+              </ProtectedRoute>
+            }
+            />
+
 
           <Route
             path="/firewall/blocked"
@@ -144,7 +162,7 @@ function App() {
           />
 
           {/* Monitoring Routes */}
-          <Route
+{/*          <Route
             path="/threats"
             element={
               <ProtectedRoute>
@@ -156,7 +174,18 @@ function App() {
                 </Layout>
               </ProtectedRoute>
             }
-          />
+          />*/}
+          <Route 
+            path="/threats" 
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Threats />
+                </Layout>
+              </ProtectedRoute>
+            }
+            />
+
 
           <Route
             path="/monitoring/traffic"
@@ -202,7 +231,7 @@ function App() {
           />
 
           {/* Log Routes */}
-          <Route
+{/*          <Route
             path="/audit"
             element={
               <ProtectedRoute>
@@ -214,7 +243,18 @@ function App() {
                 </Layout>
               </ProtectedRoute>
             }
-          />
+          />*/}
+          <Route 
+            path="/audit" 
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Audit />
+                </Layout>
+              </ProtectedRoute>
+            }
+            />
+
 
           <Route
             path="/logs/system"
@@ -256,7 +296,7 @@ function App() {
             }
           />
 
-          <Route
+{/*          <Route
             path="/integrity"
             element={
               <ProtectedRoute>
@@ -268,7 +308,18 @@ function App() {
                 </Layout>
               </ProtectedRoute>
             }
-          />
+          />*/}
+          <Route 
+            path="/integrity" 
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Integrity />
+                </Layout>
+              </ProtectedRoute>
+            }
+            />
+
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
