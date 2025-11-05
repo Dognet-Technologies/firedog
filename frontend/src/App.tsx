@@ -16,6 +16,11 @@ import Rules from './pages/Rules';
 import Threats from './pages/Threats';
 import Audit from './pages/Audit';
 import Integrity from './pages/Integrity';
+import AuditLogs from './pages/AuditLogs';
+import FirewallLogs from './pages/FirewallLogs';
+import MonitoringTraffic from './pages/MonitoringTraffic';
+import MonitoringPerformance from './pages/MonitoringPerformance';
+import SystemLogs from './pages/SystemLogs';
 
 // Nelle routes:
 
@@ -106,21 +111,58 @@ function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* Firewall Routes */}
-{/*          <Route
-            path="/firewall/rules"
+          <Route
+            path="/logs/audit"
             element={
               <ProtectedRoute>
                 <Layout>
-                  <div className="page-placeholder">
-                    <h1>Regole Firewall</h1>
-                    <p>Pagina in costruzione - Gestione regole firewall</p>
-                  </div>
+                  <AuditLogs />
                 </Layout>
               </ProtectedRoute>
             }
-          />*/}
+          />
+          <Route
+            path="/logs/firewall"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <AuditLogs />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoring/traffic"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <AuditLogs />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoring/performance"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <AuditLogs />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/logs/system"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <AuditLogs />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
           <Route 
             path="/rules" 
             element={
@@ -131,7 +173,6 @@ function App() {
               </ProtectedRoute>
             }
             />
-
 
           <Route
             path="/firewall/blocked"

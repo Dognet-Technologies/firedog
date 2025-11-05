@@ -313,10 +313,12 @@ class ApiService {
 
   // ========== Audit Logs ==========
 
-  async getAuditLogs(): Promise<PaginatedResponse<AuditLog>> {
-    const response = await this.api.get('/audit/');
+
+// Modifica getAuditLogs per accettare filtri
+  async getAuditLogs(filters?: any): Promise<PaginatedResponse<AuditLog>> {
+    const response = await this.api.get('/audit/', { params: filters });
     return response.data;
   }
-}
 
+// Il resto dei metodi dovrebbe già essere OK
 export default new ApiService();
