@@ -264,19 +264,30 @@ export interface AuditLog {
   action_description: string;
 }
 
-export interface AuditLog {
-  id: number;
-  username: string;
-  action: string;
-  target_id: number | null;
-  target_hostname: string | null;
-  details: any;
-  ip_address: string;
-  timestamp: string;
-  action_description: string;
-}
+// export interface AuditLog {
+//   id: number;
+//   username: string;
+//   action: string;
+//   target_id: number | null;
+//   target_hostname: string | null;
+//   details: any;
+//   ip_address: string;
+//   timestamp: string;
+//   action_description: string;
+// }
 
-// ========== Auth Types ==========
+// export interface AuditLog {
+//   id: number;
+//   username: string;
+//   action: string;
+//   target_id: number | null;
+//   target_hostname: string | null;
+//   details: any;
+//   ip_address: string;
+//   timestamp: string;
+//   action_description: string;
+// }
+// // ========== Auth Types ==========
 
 export interface LoginCredentials {
   username: string;

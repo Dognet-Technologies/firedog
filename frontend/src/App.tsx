@@ -12,7 +12,7 @@ import Targets from './pages/Targets';
 import Settings from './pages/Settings';
 import './App.css';
 
-import Rules from './pages/Rules';
+import Rules from './pages/FirewallRules';
 import Threats from './pages/Threats';
 import Audit from './pages/Audit';
 import Integrity from './pages/Integrity';
@@ -24,7 +24,6 @@ import SystemLogs from './pages/SystemLogs';
 import Whitelist from './pages/Whitelist';
 import BlockedIPs from './pages/BlockedIPs';
 
-// Nelle routes:
 
 
 // Protected Route Component
@@ -62,15 +61,6 @@ function App() {
     <AuthProvider>
       <Router>
         <Routes>
-          {/* Public Routes */}
-          <Route
-            path="/login"
-            element={
-              <PublicRoute>
-                <Login />
-              </PublicRoute>
-            }
-          />
 
           {/* Protected Routes */}
           <Route
@@ -83,15 +73,25 @@ function App() {
               </ProtectedRoute>
             }
           />
+          {/* Public Routes */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            }
+          />
           <Route
             path="/discovery"
             element={
               <ProtectedRoute>
-                <Layout><Discovery /></Layout>
+                <Layout>
+                  <Discovery />
+                </Layout>
               </ProtectedRoute>
             }
           />
-          
           <Route
             path="/dashboard"
             element={
@@ -102,7 +102,6 @@ function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/targets"
             element={
@@ -113,6 +112,16 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route 
+            path="firewall/rules" 
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Rules />
+                </Layout>
+              </ProtectedRoute>
+            }
+            />
           <Route
             path="/logs/audit"
             element={
@@ -125,6 +134,16 @@ function App() {
           />
           <Route
             path="/logs/firewall"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <AuditLogs />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/logs/system"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -153,28 +172,6 @@ function App() {
               </ProtectedRoute>
             }
           />
-
-          <Route
-            path="/logs/system"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <AuditLogs />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route 
-            path="/rules" 
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Rules />
-                </Layout>
-              </ProtectedRoute>
-            }
-            />
             <Route
               path="/firewall/blocked"
               element={
@@ -197,20 +194,6 @@ function App() {
               }
             />
 
-          {/* Monitoring Routes */}
-{/*          <Route
-            path="/threats"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>Threat Detection</h1>
-                    <p>Pagina in costruzione - Rilevamento minacce</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />*/}
           <Route 
             path="/threats" 
             element={
@@ -221,65 +204,6 @@ function App() {
               </ProtectedRoute>
             }
             />
-
-
-          <Route
-            path="/monitoring/traffic"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>Traffico Rete</h1>
-                    <p>Pagina in costruzione - Monitoraggio traffico</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/monitoring/performance"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>Performance</h1>
-                    <p>Pagina in costruzione - Monitoraggio performance</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Discovery Route */}
-          <Route
-            path="/discovery"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>Network Discovery</h1>
-                    <p>Pagina in costruzione - Scansione rete</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Log Routes */}
-{/*          <Route
-            path="/audit"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>Audit Logs</h1>
-                    <p>Pagina in costruzione - Log di audit</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />*/}
           <Route 
             path="/audit" 
             element={
@@ -290,36 +214,6 @@ function App() {
               </ProtectedRoute>
             }
             />
-
-
-          <Route
-            path="/logs/system"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>System Logs</h1>
-                    <p>Pagina in costruzione - Log di sistema</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/logs/firewall"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>Firewall Logs</h1>
-                    <p>Pagina in costruzione - Log firewall</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-
           {/* Settings Routes */}
           <Route
             path="/settings/*"
@@ -331,20 +225,6 @@ function App() {
               </ProtectedRoute>
             }
           />
-
-{/*          <Route
-            path="/integrity"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="page-placeholder">
-                    <h1>File Integrity</h1>
-                    <p>Pagina in costruzione - Monitoraggio integrità file</p>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />*/}
           <Route 
             path="/integrity" 
             element={
@@ -355,7 +235,6 @@ function App() {
               </ProtectedRoute>
             }
             />
-
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
