@@ -93,7 +93,67 @@ chmod 700 /var/lib/firewall
 
 echo -e "${GREEN}[8/8]${NC} Inizializzazione firewall..."
 echo ""
-echo -e "${YELLOW}Attenzione:${NC} Stai per attivare il firewall con policy DROP."
+
+REINSTALL=false
+if [[ -f /usr/local/bin/firewall-manager ]] && command -v firewall-manager &>/dev/null; then
+    echo -e "${YELLOW}[INFO]${NC} FireDog è già installato su questo sistema."
+    echo ""
+    echo "Versione corrente: $(firewall-manager --version 2>/dev/null || echo 'sconosciuta')"
+    echo ""
+    echo -e "${YELLOW}Attenzione:${NC} La reinstallazione rimuoverà TUTTE le regole firewall esistenti."
+    echo "Le seguenti operazioni verranno eseguite:"
+    echo "  1. Flush completo iptables (tutti i pacchetti, regole, chain)"
+    echo "  2. Rimozione installazione precedente"
+    echo "  3. Installazione pulita"
+    echo ""
+    read -p "Procedere con la REINSTALLAZIONE? (yes/no): " reinstall_confirm
+    
+    if [[ "$reinstall_confirm" == "yes" ]]; then
+        REINSTALL=true
+        echo ""
+        echo -e "${YELLOW}[REINSTALL]${NC} Rimozione installazione esistente..."
+        
+        # Stop servizio firewall
+        systemctl stop firewall.service 2>/dev/null || true
+        systemctl disable firewall.service 2>/dev/null || true
+        
+        # Flush completo iptables
+        echo "  → Flush iptables..."
+        iptables -F
+        iptables -X
+        iptables -t nat -F
+        iptables -t nat -X
+        iptables -t mangle -F
+        iptables -t mangle -X
+        iptables -t raw -F
+        iptables -t raw -X
+        iptables -Z
+        
+        # Reset policy a ACCEPT per evitare lockout
+        iptables -P INPUT ACCEPT
+        iptables -P FORWARD ACCEPT
+        iptables -P OUTPUT ACCEPT
+        
+        # Rimuovi file installazione precedente
+        echo "  → Rimozione file precedenti..."
+        rm -rf /etc/firewall/* 2>/dev/null || true
+        rm -f /var/lib/firewall/* 2>/dev/null || true
+        rm -f /usr/local/bin/firewall-manager 2>/dev/null || true
+        rm -f /usr/local/sbin/firewall-init.sh 2>/dev/null || true
+        rm -f /etc/systemd/system/firewall.service 2>/dev/null || true
+        
+        echo -e "${GREEN}[OK]${NC} Sistema pulito, pronto per reinstallazione"
+        echo ""
+    else
+        echo -e "${YELLOW}Reinstallazione annullata.${NC}"
+        exit 0
+    fi
+fi
+
+if [[ "$REINSTALL" == true ]]; then
+    echo -e "${YELLOW}Conferma finale:${NC} Stai per installare il firewall con policy DROP."
+else
+    echo -e "${YELLOW}Attenzione:${NC} Stai per attivare il firewall con policy DROP."
 echo "Assicurati di avere accesso fisico o console seriale in caso di problemi."
 echo ""
 read -p "Procedere con l'inizializzazione? (yes/no): " confirm
@@ -104,7 +164,13 @@ if [[ "$confirm" == "yes" ]]; then
     
     # Abilita servizio
     systemctl enable firewall.service
-    
+   
+if [[ "$REINSTALL" == true ]]; then
+    echo ""
+    echo -e "${GREEN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  Reinstallazione completata con successo!  ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════╝${NC}"
+else 
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║  Installazione completata con successo!    ║${NC}"

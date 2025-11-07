@@ -61,8 +61,25 @@ class TargetViewSet(viewsets.ModelViewSet):
         """Installa pacchetto firedog sul target"""
         target = self.get_object()
         
-        if target.status == 'online':
-            return Response({'error': 'Firedog già installato'}, status=status.HTTP_400_BAD_REQUEST)
+        # Permetti reinstall se richiesto esplicitamente
+        force_reinstall = request.data.get('force_reinstall', False)
+        
+        if target.status == 'online' and target.firedog_version and not force_reinstall:
+            return Response({
+                'error': 'Firedog già installato',
+                'hint': 'Use force_reinstall=true to reinstall'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Se è una reinstall, logga l'evento
+        if target.status == 'online' and target.firedog_version:
+            from audit.models import AuditLog
+            AuditLog.objects.create(
+                username=request.user.username,
+                action='target.reinstall',
+                target=target,
+                details={'previous_version': target.firedog_version},
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
         
         target.status = 'installing'
         target.save(update_fields=['status'])

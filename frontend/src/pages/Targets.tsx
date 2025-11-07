@@ -78,10 +78,14 @@ const Targets: React.FC = () => {
 
     // Sostituisci window.confirm() con showConfirm()
     const handleInstall = async (id: number) => {
+      const target = targets.find(t => t.id === id);
+      const isReinstall = target?.firedog_version != null;
       showConfirm({
-        title: 'Conferma Installazione',
-        message: 'Vuoi installare FireDog su questo target? L\'operazione potrebbe richiedere alcuni minuti.',
-        confirmText: 'Installa',
+        title: isReinstall ? 'Conferma Reinstallazione' : 'Conferma Installazione',
+        message: isReinstall 
+          ? 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse. L\'operazione potrebbe richiedere alcuni minuti.'
+          : 'Vuoi installare FireDog su questo target? L\'operazione potrebbe richiedere alcuni minuti.',
+        confirmText: isReinstall ? 'Reinstalla' : 'Installa',
         cancelText: 'Annulla',
         type: 'info',
         onConfirm: async () => {
@@ -178,16 +182,20 @@ const Targets: React.FC = () => {
                 </span>
               </div>
             </div>
-
             <div className="target-actions">
               <button onClick={() => handleTestConnection(target.id)} className="btn-small">
                 Test
               </button>
-              {target.status !== 'online' && (
-                <button onClick={() => handleInstall(target.id)} className="btn-small btn-success">
-                  Install
-                </button>
-              )}
+              {(target.status !== 'online' || !target.firedog_version) && (
+              <button 
+                onClick={() => handleInstall(target.id)} 
+                className="btn-small btn-success"
+                title={target.firedog_version ? 'Reinstall FireDog' : 'Install FireDog'}
+              >
+                {target.firedog_version ? 'Reinstall' : 'Install'}
+              </button>
+            )}
+
               <button onClick={() => handleDelete(target.id)} className="btn-small btn-danger">
                 Delete
               </button>

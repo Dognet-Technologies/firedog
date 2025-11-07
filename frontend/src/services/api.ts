@@ -131,7 +131,10 @@ class ApiService {
     const response = await this.api.post(`/targets/${id}/install/`);
     return response.data;
   }
-
+  async installTarget(targetId: number, forceReinstall: boolean = false): Promise<any> {
+  const response = await this.api.post(`/targets/${targetId}/install/`);
+  return response.data;
+}
   async uninstallFiredog(id: number): Promise<any> {
     const response = await this.api.post(`/targets/${id}/uninstall/`);
     return response.data;
