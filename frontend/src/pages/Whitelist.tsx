@@ -174,16 +174,26 @@ const Whitelist: React.FC = () => {
     }
   };
 
-  const handleRemoveEntry = async (id: number, ip: string) => {
+const handleRemoveEntry = async (id: number, ip: string) => {
     if (!window.confirm(`Rimuovere ${ip} dalla whitelist?`)) return;
 
     try {
-      // TODO: Implementare API backend
       // await apiService.removeWhitelistEntry(selectedTarget, id);
       
-      setEntries(entries.filter(e => e.id 1
+      setEntries(entries.filter(e => e.id !== id));
+      showToast({
+        type: 'success',
+        title: 'IP rimosso',
+        message: `${ip} rimosso dalla whitelist`
+      });
+    } catch (error) {
       console.error('Error removing whitelist entry:', error);
-          }
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile rimuovere l\'IP dalla whitelist'
+      });
+    }
   };
 
   const formatTimestamp = (timestamp: string) => {

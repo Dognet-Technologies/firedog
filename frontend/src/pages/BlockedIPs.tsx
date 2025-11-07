@@ -62,7 +62,6 @@ const BlockedIPs: React.FC = () => {
   };
 
   const loadBlockedIPs = async () => {
-    const { showToast, showConfirm } = useNotifications();
     if (!selectedTarget) return;
 
     try {
@@ -199,6 +198,7 @@ const BlockedIPs: React.FC = () => {
         message: 'Impossibile bloccare l\'IP'
       });
     }
+  };
 
     const handleUnblock = async (id: number, ip: string) => {
       showConfirm({

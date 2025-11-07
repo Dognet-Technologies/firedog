@@ -115,6 +115,7 @@ const FirewallLogs: React.FC = () => {
         }
       }
     });
+  };
 
   const handleBlock = async (threatId: number) => {
     showConfirm({
@@ -142,6 +143,7 @@ const FirewallLogs: React.FC = () => {
         }
       }
     });
+  };
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);

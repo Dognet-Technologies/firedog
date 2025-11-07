@@ -118,16 +118,37 @@ const AuditLogs: React.FC = () => {
     setCurrentPage(1);
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return new Intl.DateTimeFormat('it-IT', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }).format(date);
+  const formatTimestamp = (timestamp: string): string => {
+    // Gestione valori null/undefined
+    if (!timestamp) return 'N/A';
+    
+    try {
+      const date = new Date(timestamp);
+      
+      // Verifica che la data sia valida
+      if (isNaN(date.getTime())) {
+        return 'Data non valida';
+      }
+      
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) return 'Appena adesso';
+      if (diffMins < 60) return `${diffMins}m fa`;
+      if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h fa`;
+      
+      return date.toLocaleString('it-IT', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Errore parsing data:', timestamp, error);
+      return 'Errore data';
+    }
   };
 
   const getActionIcon = (action: string) => {
