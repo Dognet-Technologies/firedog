@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import apiService from '../services/api';
 import type { Target } from '../types';
 import './Whitelist.css';
+import { useNotifications } from '../contexts/NotificationContext';
 
 interface WhitelistEntry {
   id: number;
@@ -23,6 +24,7 @@ const Whitelist: React.FC = () => {
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const { showToast, showConfirm } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [newEntry, setNewEntry] = useState({
     ip_address: '',
@@ -123,7 +125,11 @@ const Whitelist: React.FC = () => {
 
   const handleAddEntry = async () => {
     if (!newEntry.ip_address.trim()) {
-      alert('Inserisci un indirizzo IP o subnet');
+      showToast({
+        type: 'warning',
+        title: 'Attenzione',
+        message: 'Inserisci un indirizzo IP o subnet'
+      });
       return;
     }
 

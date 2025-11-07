@@ -5,9 +5,12 @@ import React, { useEffect, useState } from 'react';
 import apiService from '../services/api';
 import type { Target, TargetCreate } from '../types';
 import './Targets.css';
+import { useNotifications } from '../contexts/NotificationContext';
+
 
 const Targets: React.FC = () => {
   const [targets, setTargets] = useState<Target[]>([]);
+  const { showToast, showConfirm } = useNotifications();
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<TargetCreate>({
@@ -43,36 +46,90 @@ const Targets: React.FC = () => {
     }
   };
 
-  const handleTestConnection = async (id: number) => {
-    try {
-      const result = await apiService.testConnection(id);
-      alert(result.success ? 'Connection successful!' : `Connection failed: ${result.error}`);
-      loadTargets();
-    } catch (error) {
-      alert('Connection test failed');
-    }
-  };
 
-  const handleInstall = async (id: number) => {
-    if (!window.confirm('Install FireDog on this target?')) return;
-    try {
-      await apiService.installFiredog(id);
-      alert('Installation started. Check logs for progress.');
-      loadTargets();
-    } catch (error) {
-      console.error('Error installing:', error);
-    }
-  };
+  // Sostituisci alert() con showToast()
+    const handleTestConnection = async (id: number) => {
+      try {
+        const result = await apiService.testConnection(id);
+        
+        if (result.success) {
+          showToast({
+            type: 'success',
+            title: 'Connessione riuscita!',
+            message: `SSH connection to target ${id} successful`
+          });
+        } else {
+          showToast({
+            type: 'error',
+            title: 'Connessione fallita',
+            message: result.error || 'Connection failed'
+          });
+        }
+        
+        loadTargets();
+      } catch (error) {
+        showToast({
+          type: 'error',
+          title: 'Errore',
+          message: 'Connection test failed'
+        });
+      }
+    };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Delete this target?')) return;
-    try {
-      await apiService.deleteTarget(id);
-      loadTargets();
-    } catch (error) {
-      console.error('Error deleting:', error);
-    }
-  };
+    // Sostituisci window.confirm() con showConfirm()
+    const handleInstall = async (id: number) => {
+      showConfirm({
+        title: 'Conferma Installazione',
+        message: 'Vuoi installare FireDog su questo target? L\'operazione potrebbe richiedere alcuni minuti.',
+        confirmText: 'Installa',
+        cancelText: 'Annulla',
+        type: 'info',
+        onConfirm: async () => {
+          try {
+            await apiService.installFiredog(id);
+            showToast({
+              type: 'success',
+              title: 'Installazione avviata',
+              message: 'Controlla i log per seguire il progresso'
+            });
+            loadTargets();
+          } catch (error) {
+            showToast({
+              type: 'error',
+              title: 'Errore',
+              message: 'Installation failed'
+            });
+          }
+        }
+      });
+    };
+
+    const handleDelete = async (id: number) => {
+      showConfirm({
+        title: 'Conferma Eliminazione',
+        message: 'Sei sicuro di voler eliminare questo target? L\'operazione è irreversibile.',
+        confirmText: 'Elimina',
+        cancelText: 'Annulla',
+        type: 'danger',
+        onConfirm: async () => {
+          try {
+            await apiService.deleteTarget(id);
+            showToast({
+              type: 'success',
+              title: 'Target eliminato',
+              message: 'Target removed successfully'
+            });
+            loadTargets();
+          } catch (error) {
+            showToast({
+              type: 'error',
+              title: 'Errore',
+              message: 'Failed to delete target'
+            });
+          }
+        }
+      });
+    };
 
   const getStatusColor = (status: string) => {
     switch (status) {

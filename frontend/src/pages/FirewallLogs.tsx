@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiService from '../services/api';
 import type { ThreatLog } from '../types';
+import { useNotifications } from '../contexts/NotificationContext';
 import './FirewallLogs.css';
 
 interface FilterState {
@@ -18,6 +19,7 @@ interface FilterState {
 
 const FirewallLogs: React.FC = () => {
   const navigate = useNavigate();
+  const { showToast, showConfirm } = useNotifications();
   const [threats, setThreats] = useState<ThreatLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({
@@ -89,28 +91,57 @@ const FirewallLogs: React.FC = () => {
   };
 
   const handleResolve = async (threatId: number) => {
-    if (!window.confirm('Marcare questa minaccia come risolta?')) return;
-
-    try {
-      await apiService.markThreatResolved(threatId);
-      loadThreats(); // Reload data
-    } catch (error) {
-      console.error('Error resolving threat:', error);
-      alert('Errore durante la risoluzione della minaccia');
-    }
-  };
+    showConfirm({
+      title: 'Conferma Risoluzione',
+      message: 'Vuoi marcare questa minaccia come risolta?',
+      confirmText: 'Risolvi',
+      cancelText: 'Annulla',
+      onConfirm: async () => {
+        try {
+          await apiService.markThreatResolved(threatId);
+          showToast({
+            type: 'success',
+            title: 'Minaccia risolta',
+            message: 'La minaccia è stata marcata come risolta'
+          });
+          loadThreats();
+        } catch (error) {
+          console.error('Error resolving threat:', error);
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: 'Impossibile risolvere la minaccia'
+          });
+        }
+      }
+    });
 
   const handleBlock = async (threatId: number) => {
-    if (!window.confirm('Bloccare permanentemente questo IP?')) return;
-
-    try {
-      await apiService.blockThreatIP(threatId);
-      loadThreats(); // Reload data
-    } catch (error) {
-      console.error('Error blocking IP:', error);
-      alert('Errore durante il blocco dell\'IP');
-    }
-  };
+    showConfirm({
+      title: 'Conferma Blocco IP',
+      message: 'Vuoi bloccare permanentemente questo IP? L\'operazione è irreversibile.',
+      confirmText: 'Blocca',
+      cancelText: 'Annulla',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          await apiService.blockThreatIP(threatId);
+          showToast({
+            type: 'success',
+            title: 'IP bloccato',
+            message: 'L\'IP è stato bloccato permanentemente'
+          });
+          loadThreats();
+        } catch (error) {
+          console.error('Error blocking IP:', error);
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: 'Impossibile bloccare l\'IP'
+          });
+        }
+      }
+    });
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);

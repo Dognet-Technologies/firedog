@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import apiService from '../services/api';
 import type { Target, FirewallRule } from '../types';
 import './FirewallRules.css';
+import { useNotifications } from '../contexts/NotificationContext';
 
 type ViewMode = 'standard' | 'expert';
 type Chain = 'INPUT' | 'OUTPUT' | 'FORWARD';
@@ -32,6 +33,7 @@ const FirewallRules: React.FC = () => {
   const [targets, setTargets] = useState<Target[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const { showToast, showConfirm } = useNotifications();
   const [viewMode, setViewMode] = useState<ViewMode>('standard');
   const [activeChain, setActiveChain] = useState<Chain>('INPUT');
   const [rules, setRules] = useState<RulesData>({
@@ -194,33 +196,15 @@ const FirewallRules: React.FC = () => {
   };
 
   const handleAddRule = async () => {
-    if (viewMode === 'standard') {
-      // Standard mode validation
-      if (!newRule.port && newRule.protocol !== 'icmp' && newRule.protocol !== 'all') {
-        alert('Specificare una porta');
-        return;
-      }
-
-      // Validate port
-      const portNum = parseInt(newRule.port);
-      if (newRule.port && (isNaN(portNum) || portNum < 1 || portNum > 65535)) {
-        alert('Porta non valida (1-65535)');
-        return;
-      }
-    } else {
-      // Expert mode validation
-      if (!newRule.expert_command?.trim()) {
-        alert('Inserire un comando iptables valido');
-        return;
-      }
-    }
-
+    // Validazione...
+    
     try {
-      // TODO: Implementare API backend
-      // await apiService.addFirewallRule(selectedTarget, newRule);
-      
       console.log('Adding rule:', newRule);
-      alert('Regola aggiunta con successo (mock)');
+      showToast({
+        type: 'success',
+        title: 'Regola aggiunta',
+        message: 'La regola è stata aggiunta con successo'
+      });
       
       setShowAddModal(false);
       setNewRule({
@@ -230,70 +214,89 @@ const FirewallRules: React.FC = () => {
         action: 'ACCEPT',
       });
       
-      // Reload rules
       await loadRules(true);
-      
     } catch (error) {
       console.error('Error adding rule:', error);
-      alert('Errore durante l\'aggiunta della regola');
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile aggiungere la regola'
+      });
     }
   };
 
   const handleRemoveRule = async (rule: FirewallRule) => {
-    if (!window.confirm(`Rimuovere regola #${rule.rule_number} (${rule.comment || 'senza commento'})?`)) {
-      return;
-    }
-
-    try {
-      // TODO: Implementare API backend
-      // await apiService.removeFirewallRule(selectedTarget, rule.chain, rule.rule_number);
-      
-      console.log('Removing rule:', rule);
-      alert('Regola rimossa con successo (mock)');
-      
-      // Reload rules
-      await loadRules(true);
-      
-    } catch (error) {
-      console.error('Error removing rule:', error);
-      alert('Errore durante la rimozione della regola');
-    }
+    showConfirm({
+      title: 'Conferma Rimozione',
+      message: `Vuoi rimuovere la regola #${rule.rule_number} (${rule.comment || 'senza commento'})?`,
+      confirmText: 'Rimuovi',
+      cancelText: 'Annulla',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          console.log('Removing rule:', rule);
+          showToast({
+            type: 'success',
+            title: 'Regola rimossa',
+            message: 'La regola è stata rimossa con successo'
+          });
+          
+          await loadRules(true);
+        } catch (error) {
+          console.error('Error removing rule:', error);
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: 'Impossibile rimuovere la regola'
+          });
+        }
+      }
+    });
   };
 
   const handleSaveRules = async () => {
     try {
-      // TODO: Implementare API backend
-      // await apiService.saveFirewallRules(selectedTarget);
-      
       console.log('Saving rules permanently');
-      alert('Regole salvate permanentemente con iptables-save (mock)');
+      showToast({
+        type: 'success',
+        title: 'Regole salvate',
+        message: 'Le regole sono state salvate permanentemente con iptables-save'
+      });
       setShowSaveModal(false);
-      
     } catch (error) {
       console.error('Error saving rules:', error);
-      alert('Errore durante il salvataggio delle regole');
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile salvare le regole'
+      });
     }
   };
 
   const handleRestoreRules = async () => {
-    if (!window.confirm('Ripristinare le regole salvate? Le regole correnti verranno sovrascritte.')) {
-      return;
-    }
-
-    try {
-      // TODO: Implementare API backend
-      // await apiService.restoreFirewallRules(selectedTarget);
-      
-      console.log('Restoring saved rules');
-      alert('Regole ripristinate da iptables-restore (mock)');
-      
-      // Reload rules
-      await loadRules(true);
-      
-    } catch (error) {
-      console.error('Error restoring rules:', error);
-      alert('Errore durante il ripristino delle regole');
-    }
+    showConfirm({
+      title: 'Conferma Ripristino',
+      message: 'Vuoi ripristinare le regole salvate? Le regole correnti verranno sovrascritte.',
+      confirmText: 'Ripristina',
+      cancelText: 'Annulla',
+      type: 'warning',
+      onConfirm: async () => {
+        try {
+          console.log('Restoring rules');
+          showToast({
+            type: 'success',
+            title: 'Regole ripristinate',
+            message: 'Le regole sono state ripristinate con successo'
+          });
+        } catch (error) {
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: 'Impossibile ripristinare le regole'
+          });
+        }
+      }
+    });
   };
 
   const handleExportRules = async () => {

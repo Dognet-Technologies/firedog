@@ -9,6 +9,7 @@
 import React, { useState, useEffect } from 'react';
 import apiService from '../services/api';
 import type { DiscoveredHost, Target } from '../types';
+import { useNotifications } from '../contexts/NotificationContext';
 import './Discovery.css';
 
 interface ScanStatus {
@@ -28,6 +29,7 @@ const Discovery: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'arp-scan' | 'file' | 'manual'>('arp-scan');
   const [discoveredHosts, setDiscoveredHosts] = useState<DiscoveredHost[]>([]);
   const [selectedHosts, setSelectedHosts] = useState<Set<number>>(new Set());
+  const { showToast, showConfirm } = useNotifications();
   const [scanStatus, setScanStatus] = useState<ScanStatus>({ status: 'idle' });
   const [loading, setLoading] = useState(false);
   
@@ -121,29 +123,45 @@ const Discovery: React.FC = () => {
 
   const handleImportSelected = async () => {
     if (selectedHosts.size === 0) {
-      alert('Please select at least one host');
+      showToast({
+        type: 'warning',
+        title: 'Attenzione',
+        message: 'Seleziona almeno un host da importare'
+      });
       return;
     }
 
-    if (!window.confirm(`Import ${selectedHosts.size} host(s) as targets?`)) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const hostIds = Array.from(selectedHosts);
-      const result = await apiService.bulkImportDiscoveredHosts(hostIds);
-      
-      alert(`Imported: ${result.imported}\nSkipped: ${result.skipped}`);
-      
-      setSelectedHosts(new Set());
-      loadDiscoveredHosts();
-    } catch (error) {
-      console.error('Error importing hosts:', error);
-      alert('Failed to import hosts');
-    } finally {
-      setLoading(false);
-    }
+    showConfirm({
+      title: 'Conferma Import',
+      message: `Vuoi importare ${selectedHosts.size} host come target?`,
+      confirmText: 'Importa',
+      cancelText: 'Annulla',
+      onConfirm: async () => {
+        try {
+          setLoading(true);
+          const hostIds = Array.from(selectedHosts);
+          const result = await apiService.bulkImportDiscoveredHosts(hostIds);
+          
+          showToast({
+            type: 'success',
+            title: 'Import completato',
+            message: `Importati: ${result.imported}, Saltati: ${result.skipped}`
+          });
+          
+          setSelectedHosts(new Set());
+          loadDiscoveredHosts();
+        } catch (error) {
+          console.error('Error importing hosts:', error);
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: 'Impossibile importare gli host'
+          });
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
   };
 
   // ==================== FILE IMPORT ====================
@@ -157,21 +175,43 @@ const Discovery: React.FC = () => {
 
   const handleFileImport = async () => {
     if (!importFile) {
-      alert('Please select a file');
+      showToast({
+        type: 'warning',
+        title: 'Attenzione',
+        message: 'Seleziona un file da importare'
+      });
       return;
     }
 
     try {
       setLoading(true);
       const result = await apiService.bulkImportFromFile(importFile);
+      
       setImportResult(result);
       
-      if (result.imported > 0) {
-        loadDiscoveredHosts();
+      if (result.errors.length === 0) {
+        showToast({
+          type: 'success',
+          title: 'Import completato',
+          message: `Importati: ${result.imported} host`
+        });
+      } else {
+        showToast({
+          type: 'warning',
+          title: 'Import con errori',
+          message: `Importati: ${result.imported}, Errori: ${result.errors.length}`
+        });
       }
+      
+      setImportFile(null);
+      loadDiscoveredHosts();
     } catch (error) {
       console.error('Error importing file:', error);
-      alert('Failed to import file');
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile importare il file'
+      });
     } finally {
       setLoading(false);
     }

@@ -4,6 +4,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
+import './contexts/NotificationContext.css';
 import Layout from './components/layout/Layout';
 import Discovery from './pages/Discovery';
 import Login from './pages/Login';
@@ -59,187 +61,189 @@ const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
+      <NotificationProvider>
+        <Router>
+          <Routes>
 
-          {/* Protected Routes */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Navigate to="/dashboard" replace />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          {/* Public Routes */}
-          <Route
-            path="/login"
-            element={
-              <PublicRoute>
-                <Login />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/discovery"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Discovery />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Dashboard />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/targets"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Targets />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route 
-            path="firewall/rules" 
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Rules />
-                </Layout>
-              </ProtectedRoute>
-            }
-            />
-          <Route
-            path="/logs/audit"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <AuditLogs />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/logs/firewall"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <AuditLogs />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/logs/system"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <AuditLogs />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/monitoring/traffic"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <AuditLogs />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/monitoring/performance"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <AuditLogs />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
+            {/* Protected Routes */}
             <Route
-              path="/firewall/blocked"
+              path="/"
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <BlockedIPs />
+                    <Navigate to="/dashboard" replace />
                   </Layout>
                 </ProtectedRoute>
               }
             />
-
+            {/* Public Routes */}
             <Route
-              path="/firewall/whitelist"
+              path="/login"
+              element={
+                <PublicRoute>
+                  <Login />
+                </PublicRoute>
+              }
+            />
+            <Route
+              path="/discovery"
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <Whitelist />
+                    <Discovery />
                   </Layout>
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Dashboard />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/targets"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Targets />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="firewall/rules" 
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Rules />
+                  </Layout>
+                </ProtectedRoute>
+              }
+              />
+            <Route
+              path="/logs/audit"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <AuditLogs />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/logs/firewall"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <AuditLogs />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/logs/system"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <AuditLogs />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/monitoring/traffic"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <AuditLogs />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/monitoring/performance"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <AuditLogs />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+              <Route
+                path="/firewall/blocked"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <BlockedIPs />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route 
-            path="/threats" 
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Threats />
-                </Layout>
-              </ProtectedRoute>
-            }
-            />
-          <Route 
-            path="/audit" 
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Audit />
-                </Layout>
-              </ProtectedRoute>
-            }
-            />
-          {/* Settings Routes */}
-          <Route
-            path="/settings/*"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Settings />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          <Route 
-            path="/integrity" 
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Integrity />
-                </Layout>
-              </ProtectedRoute>
-            }
-            />
+              <Route
+                path="/firewall/whitelist"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Whitelist />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Router>
+            <Route 
+              path="/threats" 
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Threats />
+                  </Layout>
+                </ProtectedRoute>
+              }
+              />
+            <Route 
+              path="/audit" 
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Audit />
+                  </Layout>
+                </ProtectedRoute>
+              }
+              />
+            {/* Settings Routes */}
+            <Route
+              path="/settings/*"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Settings />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route 
+              path="/integrity" 
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Integrity />
+                  </Layout>
+                </ProtectedRoute>
+              }
+              />
+
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </Router>
+      </NotificationProvider>
     </AuthProvider>
   );
 }
