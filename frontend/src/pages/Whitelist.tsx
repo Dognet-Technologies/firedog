@@ -136,7 +136,11 @@ const Whitelist: React.FC = () => {
     // Validazione base IP/CIDR
     const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
     if (!ipRegex.test(newEntry.ip_address)) {
-      alert('Formato IP non valido. Usa: 192.168.1.1 o 192.168.1.0/24');
+      showToast({
+        type: 'error',
+        title: 'Formato non valido',
+        message: 'Usa il formato: 192.168.1.1 o 192.168.1.0/24'
+      });
       return;
     }
 
@@ -155,6 +159,12 @@ const Whitelist: React.FC = () => {
       };
       
       setEntries([mockEntry, ...entries]);
+        showToast({
+          type: 'success',
+          title: 'IP aggiunto',
+          message: `${newEntry.ip_address} aggiunto alla whitelist`
+        });
+      setShowAddModal(false);
       setShowAddModal(false);
       setNewEntry({ ip_address: '', description: '' });
       
@@ -171,12 +181,9 @@ const Whitelist: React.FC = () => {
       // TODO: Implementare API backend
       // await apiService.removeWhitelistEntry(selectedTarget, id);
       
-      setEntries(entries.filter(e => e.id !== id));
-      
-    } catch (error) {
+      setEntries(entries.filter(e => e.id 1
       console.error('Error removing whitelist entry:', error);
-      alert('Errore durante la rimozione dell\'IP dalla whitelist');
-    }
+          }
   };
 
   const formatTimestamp = (timestamp: string) => {

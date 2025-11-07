@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import apiService from '../services/api';
 import type { Target } from '../types';
 import './BlockedIPs.css';
+import { useNotifications } from '../contexts/NotificationContext';
 
 interface BlockedIP {
   id: number;
@@ -28,6 +29,7 @@ const BlockedIPs: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const { showToast, showConfirm } = useNotifications();
   const [filterType, setFilterType] = useState<string>('all');
   const [newBlock, setNewBlock] = useState({
     ip_address: '',
@@ -60,6 +62,7 @@ const BlockedIPs: React.FC = () => {
   };
 
   const loadBlockedIPs = async () => {
+    const { showToast, showConfirm } = useNotifications();
     if (!selectedTarget) return;
 
     try {
@@ -156,7 +159,11 @@ const BlockedIPs: React.FC = () => {
     // Validazione IP
     const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
     if (!ipRegex.test(newBlock.ip_address)) {
-      alert('Formato IP non valido');
+      showToast({
+        type: 'error',
+        title: 'Formato non valido',
+        message: 'Inserisci un indirizzo IP valido (es: 192.168.1.100)'
+      });
       return;
     }
 
@@ -186,24 +193,43 @@ const BlockedIPs: React.FC = () => {
       
     } catch (error) {
       console.error('Error blocking IP:', error);
-      alert('Errore durante il blocco dell\'IP');
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile bloccare l\'IP'
+      });
     }
-  };
 
-  const handleUnblock = async (id: number, ip: string) => {
-    if (!window.confirm(`Sbloccare ${ip}?`)) return;
-
-    try {
-      // TODO: Implementare API backend
-      // await apiService.unblockIP(selectedTarget, id);
-      
-      setBlockedIPs(blockedIPs.filter(b => b.id !== id));
-      
-    } catch (error) {
-      console.error('Error unblocking IP:', error);
-      alert('Errore durante lo sblocco dell\'IP');
-    }
-  };
+    const handleUnblock = async (id: number, ip: string) => {
+      showConfirm({
+        title: 'Conferma Sblocco',
+        message: `Vuoi sbloccare ${ip} e permettere nuovamente il traffico?`,
+        confirmText: 'Sblocca',
+        cancelText: 'Annulla',
+        onConfirm: async () => {
+          try {
+            // TODO: Implementare API backend
+            // await apiService.unblockIP(selectedTarget, id);
+            
+            setBlockedIPs(blockedIPs.filter(b => b.id !== id));
+            
+            showToast({
+              type: 'success',
+              title: 'IP sbloccato',
+              message: `${ip} è stato rimosso dalla lista bloccati`
+            });
+            
+          } catch (error) {
+            console.error('Error unblocking IP:', error);
+            showToast({
+              type: 'error',
+              title: 'Errore',
+              message: 'Impossibile sbloccare l\'IP'
+            });
+          }
+        }
+      });
+    };
 
   const getThreatColor = (score: number) => {
     if (score >= 90) return 'critical';

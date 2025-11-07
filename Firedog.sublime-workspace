@@ -155,7 +155,6 @@
 			"settings":
 			{
 				"buffer_size": 12496,
-				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			},
 			"undo_stack":
@@ -168,7 +167,7 @@
 						"characters": "\n"
 					},
 					"AQAAAKEAAAAAAAAAogAAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAoQAAAAAAAAChAAAAAAAAAAAAAAAAAPC/"
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAChAAAAAAAAAKEAAAAAAAAAAAAAAAAA8L8"
 				],
 				[
 					5,
@@ -176,7 +175,7 @@
 					"",
 					null,
 					"AQAAAKIAAAAAAAAA5QAAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAogAAAAAAAACiAAAAAAAAAAAAAAAAAPC/"
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAACiAAAAAAAAAKIAAAAAAAAAAAAAAAAA8L8"
 				],
 				[
 					11,
@@ -184,7 +183,7 @@
 					"",
 					null,
 					"AQAAAOcCAAAAAAAAHwMAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAA5wIAAAAAAADnAgAAAAAAAAAAAAAAADBA"
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAADnAgAAAAAAAOcCAAAAAAAAAAAAAAAAMEA"
 				],
 				[
 					12,
@@ -194,7 +193,7 @@
 						"characters": "\n"
 					},
 					"AQAAAB8DAAAAAAAAJAMAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAHwMAAAAAAAAfAwAAAAAAAAAAAAAAAPC/"
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAAfAwAAAAAAAB8DAAAAAAAAAAAAAAAA8L8"
 				],
 				[
 					14,
@@ -202,15 +201,12 @@
 					"left_delete",
 					null,
 					"AgAAAOcCAAAAAAAA5wIAAAAAAAACAAAAICAeAwAAAAAAAB4DAAAAAAAABAAAACAgICA",
-					"AQAAAAAAAAABAAAA6QIAAAAAAADpAgAAAAAAAAAAAAAAAEBA"
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAADpAgAAAAAAAOkCAAAAAAAAAAAAAAAAQEA"
 				]
 			]
 		},
 		{
-			"contents": "/**\n * Whitelist Page\n * Gestione IP e subnet autorizzati permanentemente\n */\nimport React, { useEffect, useState } from 'react';\nimport apiService from '../services/api';\nimport type { Target } from '../types';\nimport './Whitelist.css';\nimport { useNotifications } from '../contexts/NotificationContext';\n\ninterface WhitelistEntry {\n  id: number;\n  ip_address: string;\n  description: string;\n  added_by: string;\n  added_at: string;\n  last_seen?: string;\n  hit_count: number;\n}\n\nconst Whitelist: React.FC = () => {\n  const [entries, setEntries] = useState<WhitelistEntry[]>([]);\n  const [targets, setTargets] = useState<Target[]>([]);\n  const [selectedTarget, setSelectedTarget] = useState<number | null>(null);\n  const [loading, setLoading] = useState(true);\n  const [showAddModal, setShowAddModal] = useState(false);\n  const { showToast, showConfirm } = useNotifications();\n  const [searchTerm, setSearchTerm] = useState('');\n  const [newEntry, setNewEntry] = useState({\n    ip_address: '',\n    description: '',\n  });\n\n  useEffect(() => {\n    loadTargets();\n  }, []);\n\n  useEffect(() => {\n    if (selectedTarget) {\n      loadWhitelist();\n    }\n  }, [selectedTarget]);\n\n  const loadTargets = async () => {\n    try {\n      const response = await apiService.getTargets();\n      setTargets(response.results.filter(t => t.status === 'online'));\n      if (response.results.length > 0) {\n        setSelectedTarget(response.results[0].id);\n      }\n    } catch (error) {\n      console.error('Error loading targets:', error);\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  const loadWhitelist = async () => {\n    if (!selectedTarget) return;\n\n    try {\n      setLoading(true);\n      \n      // TODO: Implementare API backend per whitelist\n      // Per ora uso dati mock\n      const mockEntries = generateMockWhitelist();\n      setEntries(mockEntries);\n      \n    } catch (error) {\n      console.error('Error loading whitelist:', error);\n    } finally {\n      setLoading(false);\n    }\n  };\n\n  const generateMockWhitelist = (): WhitelistEntry[] => {\n    return [\n      {\n        id: 1,\n        ip_address: '192.168.1.0/24',\n        description: 'Rete locale ufficio',\n        added_by: 'admin',\n        added_at: new Date(Date.now() - 86400000 * 30).toISOString(),\n        last_seen: new Date(Date.now() - 3600000).toISOString(),\n        hit_count: 15234,\n      },\n      {\n        id: 2,\n        ip_address: '10.0.0.50',\n        description: 'Server monitoring Nagios',\n        added_by: 'admin',\n        added_at: new Date(Date.now() - 86400000 * 15).toISOString(),\n        last_seen: new Date(Date.now() - 300000).toISOString(),\n        hit_count: 8921,\n      },\n      {\n        id: 3,\n        ip_address: '172.16.0.0/16',\n        description: 'VPN aziendale',\n        added_by: 'sysadmin',\n        added_at: new Date(Date.now() - 86400000 * 60).toISOString(),\n        last_seen: new Date(Date.now() - 7200000).toISOString(),\n        hit_count: 45678,\n      },\n      {\n        id: 4,\n        ip_address: '203.0.113.10',\n        description: 'API Gateway esterno',\n        added_by: 'devops',\n        added_at: new Date(Date.now() - 86400000 * 7).toISOString(),\n        last_seen: new Date(Date.now() - 1800000).toISOString(),\n        hit_count: 3421,\n      },\n      {\n        id: 5,\n        ip_address: '8.8.8.8',\n        description: 'DNS Google (testing)',\n        added_by: 'admin',\n        added_at: new Date(Date.now() - 86400000 * 5).toISOString(),\n        last_seen: new Date(Date.now() - 600000).toISOString(),\n        hit_count: 1234,\n      },\n    ];\n  };\n\n  const handleAddEntry = async () => {\n    if (!newEntry.ip_address.trim()) {\n      showToast({\n        type: 'warning',\n        title: 'Attenzione',\n        message: 'Inserisci un indirizzo IP o subnet'\n      });\n      return;\n    }\n\n    // Validazione base IP/CIDR\n    const ipRegex = /^(\\d{1,3}\\.){3}\\d{1,3}(\\/\\d{1,2})?$/;\n    if (!ipRegex.test(newEntry.ip_address)) {\n      showToast({\n        type: 'error',\n        title: 'Formato non valido',\n        message: 'Usa il formato: 192.168.1.1 o 192.168.1.0/24'\n      });\n      return;\n    }\n\n    try {\n      // TODO: Implementare API backend\n      // await apiService.addWhitelistEntry(selectedTarget, newEntry);\n      \n      // Mock: aggiungi localmente\n      const mockEntry: WhitelistEntry = {\n        id: Date.now(),\n        ip_address: newEntry.ip_address,\n        description: newEntry.description || 'Nessuna descrizione',\n        added_by: 'current_user',\n        added_at: new Date().toISOString(),\n        hit_count: 0,\n      };\n      \n      setEntries([mockEntry, ...entries]);\n        showToast({\n          type: 'success',\n          title: 'IP aggiunto',\n          message: `${newEntry.ip_address} aggiunto alla whitelist`\n        });\n      setShowAddModal(false);\n      setShowAddModal(false);\n      setNewEntry({ ip_address: '', description: '' });\n      \n    } catch (error) {\n      console.error('Error adding whitelist entry:', error);\n      alert('Errore durante l\\'aggiunta dell\\'IP alla whitelist');\n    }\n  };\n\n  const handleRemoveEntry = async (id: number, ip: string) => {\n    if (!window.confirm(`Rimuovere ${ip} dalla whitelist?`)) return;\n\n    try {\n      // TODO: Implementare API backend\n      // await apiService.removeWhitelistEntry(selectedTarget, id);\n      \n      setEntries(entries.filter(e => e.id 1\n      console.error('Error removing whitelist entry:', error);\n          }\n  };\n\n  const formatTimestamp = (timestamp: string) => {\n    const date = new Date(timestamp);\n    const now = Date.now();\n    const diff = now - date.getTime();\n    \n    const minutes = Math.floor(diff / 60000);\n    const hours = Math.floor(diff / 3600000);\n    const days = Math.floor(diff / 86400000);\n    \n    if (minutes < 60) return `${minutes}m fa`;\n    if (hours < 24) return `${hours}h fa`;\n    return `${days}g fa`;\n  };\n\n  const formatDate = (timestamp: string) => {\n    const date = new Date(timestamp);\n    return new Intl.DateTimeFormat('it-IT', {\n      year: 'numeric',\n      month: '2-digit',\n      day: '2-digit',\n      hour: '2-digit',\n      minute: '2-digit',\n    }).format(date);\n  };\n\n  const filteredEntries = entries.filter(entry => \n    entry.ip_address.toLowerCase().includes(searchTerm.toLowerCase()) ||\n    entry.description.toLowerCase().includes(searchTerm.toLowerCase())\n  );\n\n  return (\n    <div className=\"whitelist-page\">\n      <div className=\"page-header\">\n        <div className=\"header-content\">\n          <h1>\n            <svg className=\"page-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\">\n              <path d=\"M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z\"></path>\n            </svg>\n            Whitelist\n          </h1>\n          <p>Gestione IP e subnet autorizzati permanentemente</p>\n        </div>\n        <div className=\"header-actions\">\n          <button className=\"btn-primary\" onClick={() => setShowAddModal(true)}>\n            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\">\n              <path d=\"M12 4v16m8-8H4\"></path>\n            </svg>\n            Aggiungi IP\n          </button>\n        </div>\n      </div>\n\n      {/* Controls */}\n      <div className=\"controls-section\">\n        <div className=\"control-group\">\n          <label>Target</label>\n          <select\n            value={selectedTarget || ''}\n            onChange={(e) => setSelectedTarget(Number(e.target.value))}\n            disabled={loading}\n          >\n            <option value=\"\">Seleziona un target</option>\n            {targets.map((target) => (\n              <option key={target.id} value={target.id}>\n                {target.hostname} ({target.ip_address})\n              </option>\n            ))}\n          </select>\n        </div>\n\n        <div className=\"control-group search-group\">\n          <label>Cerca</label>\n          <input\n            type=\"text\"\n            placeholder=\"Filtra per IP o descrizione...\"\n            value={searchTerm}\n            onChange={(e) => setSearchTerm(e.target.value)}\n          />\n        </div>\n\n        <div className=\"stats-display\">\n          <span className=\"stat-item\">\n            <strong>{entries.length}</strong> entry totali\n          </span>\n          <span className=\"stat-item\">\n            <strong>{filteredEntries.length}</strong> visualizzate\n          </span>\n        </div>\n      </div>\n\n      {/* Whitelist Table */}\n      <div className=\"whitelist-container\">\n        {loading ? (\n          <div className=\"loading-state\">\n            <div className=\"spinner\"></div>\n            <p>Caricamento whitelist...</p>\n          </div>\n        ) : !selectedTarget ? (\n          <div className=\"empty-state\">\n            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\">\n              <path d=\"M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z\"></path>\n            </svg>\n            <h3>Seleziona un Target</h3>\n            <p>Scegli un target per visualizzare la sua whitelist</p>\n          </div>\n        ) : filteredEntries.length === 0 ? (\n          <div className=\"empty-state\">\n            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\">\n              <path d=\"M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z\"></path>\n            </svg>\n            <h3>Nessun IP in Whitelist</h3>\n            <p>Aggiungi IP o subnet autorizzati per bypassare il firewall</p>\n          </div>\n        ) : (\n          <div className=\"whitelist-table-wrapper\">\n            <table className=\"whitelist-table\">\n              <thead>\n                <tr>\n                  <th>IP / Subnet</th>\n                  <th>Descrizione</th>\n                  <th>Aggiunto Da</th>\n                  <th>Data Aggiunta</th>\n                  <th>Ultimo Accesso</th>\n                  <th>Hit Count</th>\n                  <th>Azioni</th>\n                </tr>\n              </thead>\n              <tbody>\n                {filteredEntries.map((entry) => (\n                  <tr key={entry.id} className=\"whitelist-row\">\n                    <td className=\"ip-cell\">\n                      <code className=\"ip-address\">{entry.ip_address}</code>\n                      {entry.ip_address.includes('/') && (\n                        <span className=\"subnet-badge\">SUBNET</span>\n                      )}\n                    </td>\n                    <td className=\"description-cell\">\n                      {entry.description}\n                    </td>\n                    <td className=\"user-cell\">\n                      <div className=\"user-avatar\">\n                        {entry.added_by.charAt(0).toUpperCase()}\n                      </div>\n                      <span>{entry.added_by}</span>\n                    </td>\n                    <td className=\"date-cell\">\n                      {formatDate(entry.added_at)}\n                    </td>\n                    <td className=\"last-seen-cell\">\n                      {entry.last_seen ? (\n                        <span className=\"last-seen active\">\n                          <span className=\"pulse-dot\"></span>\n                          {formatTimestamp(entry.last_seen)}\n                        </span>\n                      ) : (\n                        <span className=\"last-seen inactive\">Mai</span>\n                      )}\n                    </td>\n                    <td className=\"hits-cell\">\n                      <span className=\"hit-count\">\n                        {entry.hit_count.toLocaleString()}\n                      </span>\n                    </td>\n                    <td className=\"actions-cell\">\n                      <button\n                        className=\"btn-icon btn-danger\"\n                        onClick={() => handleRemoveEntry(entry.id, entry.ip_address)}\n                        title=\"Rimuovi dalla whitelist\"\n                      >\n                        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\">\n                          <path d=\"M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16\"></path>\n                        </svg>\n                      </button>\n                    </td>\n                  </tr>\n                ))}\n              </tbody>\n            </table>\n          </div>\n        )}\n      </div>\n\n      {/* Add Modal */}\n      {showAddModal && (\n        <div className=\"modal-overlay\" onClick={() => setShowAddModal(false)}>\n          <div className=\"modal-content\" onClick={(e) => e.stopPropagation()}>\n            <div className=\"modal-header\">\n              <h2>Aggiungi IP alla Whitelist</h2>\n              <button className=\"modal-close\" onClick={() => setShowAddModal(false)}>\n                <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\">\n                  <path d=\"M6 18L18 6M6 6l12 12\"></path>\n                </svg>\n              </button>\n            </div>\n            <div className=\"modal-body\">\n              <div className=\"form-group\">\n                <label>\n                  Indirizzo IP / Subnet <span className=\"required\">*</span>\n                </label>\n                <input\n                  type=\"text\"\n                  placeholder=\"es: 192.168.1.100 o 192.168.1.0/24\"\n                  value={newEntry.ip_address}\n                  onChange={(e) => setNewEntry({ ...newEntry, ip_address: e.target.value })}\n                  autoFocus\n                />\n                <span className=\"help-text\">\n                  Formato supportato: IP singolo (192.168.1.1) o CIDR (192.168.1.0/24)\n                </span>\n              </div>\n\n              <div className=\"form-group\">\n                <label>Descrizione</label>\n                <textarea\n                  placeholder=\"Descrizione opzionale...\"\n                  value={newEntry.description}\n                  onChange={(e) => setNewEntry({ ...newEntry, description: e.target.value })}\n                  rows={3}\n                />\n              </div>\n\n              <div className=\"info-box\">\n                <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\">\n                  <path d=\"M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z\"></path>\n                </svg>\n                <div>\n                  <strong>Nota:</strong> Gli IP in whitelist bypassano completamente le regole del firewall.\n                  Assicurati che siano indirizzi fidati.\n                </div>\n              </div>\n            </div>\n            <div className=\"modal-footer\">\n              <button className=\"btn-secondary\" onClick={() => setShowAddModal(false)}>\n                Annulla\n              </button>\n              <button className=\"btn-primary\" onClick={handleAddEntry}>\n                <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\">\n                  <path d=\"M12 4v16m8-8H4\"></path>\n                </svg>\n                Aggiungi\n              </button>\n            </div>\n          </div>\n        </div>\n      )}\n    </div>\n  );\n};\n\nexport default Whitelist;\n",
 			"file": "frontend/src/pages/Whitelist.tsx",
-			"file_size": 14732,
-			"file_write_time": 134069360127175929,
 			"settings":
 			{
 				"buffer_size": 14900,
@@ -220,150 +216,80 @@
 			"undo_stack":
 			[
 				[
-					3,
+					35,
 					1,
 					"insert",
 					{
-						"characters": "\n"
+						"characters": ")"
 					},
-					"AQAAAO0AAAAAAAAA7gAAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAA7QAAAAAAAADtAAAAAAAAAAAAAAAAAPC/"
+					"AQAAAOkUAAAAAAAA6hQAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAA6RQAAAAAAADpFAAAAAAAAAAAAAAAAPC/"
 				],
+				[
+					40,
+					1,
+					"insert",
+					{
+						"characters": ";"
+					},
+					"AQAAAOoUAAAAAAAA6xQAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAA6hQAAAAAAADqFAAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					43,
+					2,
+					"left_delete",
+					null,
+					"AgAAAOoUAAAAAAAA6hQAAAAAAAABAAAAO+kUAAAAAAAA6RQAAAAAAAABAAAAKQ",
+					"AQAAAAAAAAABAAAA6xQAAAAAAADrFAAAAAAAAAAAAAAAAPC/"
+				]
+			]
+		},
+		{
+			"file": "frontend/src/pages/BlockedIPs.tsx",
+			"settings":
+			{
+				"buffer_size": 20511,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			},
+			"undo_stack":
+			[
 				[
 					5,
 					1,
-					"",
-					null,
-					"AQAAAO4AAAAAAAAAMQEAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAA7gAAAAAAAADuAAAAAAAAAAAAAAAAAPC/"
+					"insert",
+					{
+						"characters": "\t"
+					},
+					"AQAAAARQAAAAAAAABlAAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAABFAAAAAAAAAEUAAAAAAAAAAAAAAAAAAA"
 				],
 				[
 					8,
 					1,
-					"insert",
-					{
-						"characters": "\n"
-					},
-					"AQAAADIDAAAAAAAANQMAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAMgMAAAAAAAAyAwAAAAAAAAAAAAAAAPC/"
+					"right_delete",
+					null,
+					"AQAAAAVQAAAAAAAABVAAAAAAAAABAAAAIA",
+					"AQAAAAAAAAABAAAABVAAAAAAAAAFUAAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					9,
+					2,
+					"left_delete",
+					null,
+					"AgAAAARQAAAAAAAABFAAAAAAAAABAAAAIANQAAAAAAAAA1AAAAAAAAABAAAACg",
+					"AQAAAAAAAAABAAAABVAAAAAAAAAFUAAAAAAAAAAAAAAAAPC/"
 				],
 				[
 					10,
 					1,
-					"",
-					null,
-					"AQAAADUDAAAAAAAAbQMAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAANQMAAAAAAAA1AwAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					13,
-					1,
-					"right_delete",
-					null,
-					"AQAAADMDAAAAAAAAMwMAAAAAAAACAAAAICA",
-					"AQAAAAAAAAABAAAAMwMAAAAAAAAzAwAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					16,
-					1,
-					"right_delete",
-					null,
-					"AQAAADsOAAAAAAAAOw4AAAAAAABGAAAAICAgICAgYWxlcnQoJ0luc2VyaXNjaSB1biBpbmRpcml6em8gSVAgbyBzdWJuZXQnKTsKICAgICAgcmV0dXJuOwogICAgfQ",
-					"AQAAAAAAAAABAAAAgQ4AAAAAAAA7DgAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					18,
-					1,
-					"",
-					null,
-					"AQAAADsOAAAAAAAAyA4AAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAOw4AAAAAAAA7DgAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					21,
-					1,
-					"indent",
-					null,
-					"BwAAADsOAAAAAAAAPQ4AAAAAAAAAAAAATQ4AAAAAAABPDgAAAAAAAAAAAABmDgAAAAAAAGgOAAAAAAAAAAAAAIMOAAAAAAAAhQ4AAAAAAAAAAAAAuQ4AAAAAAAC7DgAAAAAAAAAAAADDDgAAAAAAAMUOAAAAAAAAAAAAANEOAAAAAAAA0w4AAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAyA4AAAAAAAA7DgAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					26,
-					1,
-					"",
-					null,
-					"AQAAADMPAAAAAAAA/A8AAAAAAACKAAAAICAgIGlmICghaXBSZWdleC50ZXN0KG5ld0VudHJ5LmlwX2FkZHJlc3MpKSB7CiAgICAgIGFsZXJ0KCdGb3JtYXRvIElQIG5vbiB2YWxpZG8uIFVzYTogMTkyLjE2OC4xLjEgbyAxOTIuMTY4LjEuMC8yNCcpOwogICAgICByZXR1cm47CiAgICB9",
-					"AQAAAAAAAAABAAAAvQ8AAAAAAAAzDwAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					29,
-					1,
-					"indent",
-					null,
-					"CAAAADMPAAAAAAAANQ8AAAAAAAAAAAAAYQ8AAAAAAABjDwAAAAAAAAAAAABzDwAAAAAAAHUPAAAAAAAAAAAAAIoPAAAAAAAAjA8AAAAAAAAAAAAArw8AAAAAAACxDwAAAAAAAAAAAADvDwAAAAAAAPEPAAAAAAAAAAAAAPkPAAAAAAAA+w8AAAAAAAAAAAAABxAAAAAAAAAJEAAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAA/A8AAAAAAAAzDwAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					33,
-					1,
 					"insert",
 					{
 						"characters": "\n"
 					},
-					"AQAAAP4RAAAAAAAABRIAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAA/hEAAAAAAAD+EQAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					35,
-					1,
-					"",
-					null,
-					"AQAAAAUSAAAAAAAAnxIAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAABRIAAAAAAAAFEgAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					38,
-					3,
-					"indent",
-					null,
-					"DAAAABMSAAAAAAAAFRIAAAAAAAAAAAAAKhIAAAAAAAAsEgAAAAAAAAAAAABGEgAAAAAAAEgSAAAAAAAAAAAAAIYSAAAAAAAAiBIAAAAAAAAAAAAAExIAAAAAAAAVEgAAAAAAAAAAAAAsEgAAAAAAAC4SAAAAAAAAAAAAAEoSAAAAAAAATBIAAAAAAAAAAAAAjBIAAAAAAACOEgAAAAAAAAAAAAATEgAAAAAAABUSAAAAAAAAAAAAAC4SAAAAAAAAMBIAAAAAAAAAAAAAThIAAAAAAABQEgAAAAAAAAAAAACSEgAAAAAAAJQSAAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAhRIAAAAAAAATEgAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					46,
-					1,
-					"insert",
-					{
-						"characters": "\t\t"
-					},
-					"AgAAAKASAAAAAAAAohIAAAAAAAAAAAAAohIAAAAAAACkEgAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAoBIAAAAAAACgEgAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					57,
-					1,
-					"right_delete",
-					null,
-					"AQAAAFQVAAAAAAAAVBUAAAAAAAA+AAAAYWxlcnQoJ0Vycm9yZSBkdXJhbnRlIGxhIHJpbW96aW9uZSBkZWxsXCdJUCBkYWxsYSB3aGl0ZWxpc3QnKTs",
-					"AQAAAAAAAAABAAAAVBUAAAAAAACSFQAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					58,
-					1,
-					"right_delete",
-					null,
-					"AQAAAFQVAAAAAAAAVBUAAAAAAAABAAAACg",
-					"AQAAAAAAAAABAAAAVBUAAAAAAABUFQAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					63,
-					1,
-					"insert",
-					{
-						"characters": "1"
-					},
-					"AQAAAOgUAAAAAAAA6RQAAAAAAAAmAAAAIT09IGlkKSk7CiAgICAgIAogICAgfSBjYXRjaCAoZXJyb3IpIHs",
-					"AQAAAAAAAAABAAAADhUAAAAAAADoFAAAAAAAAAAAAAAAAPC/"
+					"AQAAAANQAAAAAAAABFAAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAA1AAAAAAAAADUAAAAAAAAAAAAAAAAPC/"
 				]
 			]
 		}
@@ -440,13 +366,15 @@
 	],
 	"file_history":
 	[
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Whitelist.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/BlockedIPs.tsx",
+		"/home/simone/Scaricati/firewall-rules-1-2025-11-06.rules",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/FirewallLogs.tsx",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/contexts/NotificationContext.tsx",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/contexts/NotificationContext.css",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/App.tsx",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/FirewallRules.tsx",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Discovery.tsx",
-		"/home/simone/Scaricati/firewall-rules-1-2025-11-06.rules",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Targets.tsx",
 		"/home/simone/Repos/Progetti/firedog/firewall-init.sh",
 		"/home/simone/Repos/Progetti/sentinelcore/README.md",
@@ -565,13 +493,11 @@
 		"/home/noyse/Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/Report/Consegnato/INFO.txt.txt",
 		"/home/noyse/Scrivania/Collegamento a Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/ListaIP.txt",
 		"/Magazzino/Musica/Ableton Live Suite 10.1.7 Multilingual [FileCR]/Crack/Instructions.txt",
-		"/home/noyse/BACK_13:22:49.txt",
-		"/home/noyse/Repos/NoyseSysStuff/upd-noyse/PluginUpdate.sh",
-		"/home/noyse/Repos/noyse_hack/noyse_hack.plugin.zsh"
+		"/home/noyse/BACK_13:22:49.txt"
 	],
 	"find":
 	{
-		"height": 38.0
+		"height": 26.0
 	},
 	"find_in_files":
 	{
@@ -686,7 +612,7 @@
 						"translation.y": 5902.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 1,
+					"stack_index": 2,
 					"stack_multiselect": false,
 					"type": "text"
 				},
@@ -715,10 +641,41 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 2040.0,
+						"translation.y": 2448.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 2,
+					"file": "frontend/src/pages/BlockedIPs.tsx",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 20511,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								5742,
+								5742
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/JavaScript/TSX.sublime-syntax",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 2809.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
 					"stack_multiselect": false,
 					"type": "text"
 				}
