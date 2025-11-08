@@ -1,0 +1,232 @@
+/**
+ * SSH Terminal Styles
+ */
+
+.ssh-terminal-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px 20px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #404040;
+  border-radius: 8px 8px 0 0;
+}
+
+.terminal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e5e5e5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.terminal-header svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+.terminal-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.status-connecting {
+  color: #e5e510;
+  background: rgba(229, 229, 16, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-connected {
+  color: #0dbc79;
+  background: rgba(13, 188, 121, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-disconnected {
+  color: #cd3131;
+  background: rgba(205, 49, 49, 0.1);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: #0dbc79;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+.spinner-small {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(229, 229, 16, 0.3);
+  border-top-color: #e5e510;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.terminal-close {
+  background: transparent;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.terminal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.terminal-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.terminal-container {
+  flex: 1;
+  background: #1e1e1e;
+  padding: 10px;
+  overflow: hidden;
+  border-radius: 0 0 8px 8px;
+  position: relative;
+}
+
+.terminal-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
+/* Override xterm.js defaults per migliore integrazione */
+.terminal-container .xterm {
+  height: 100% !important;
+  padding: 0;
+}
+
+.terminal-container .xterm-viewport {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #666 #1e1e1e;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #666;
+  border-radius: 4px;
+}
+
+.terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #888;
+}
+
+.terminal-footer {
+  padding: 12px 20px;
+  background: #2d2d2d;
+  border-top: 1px solid #404040;
+  border-radius: 0 0 8px 8px;
+  margin-top: -1px;
+}
+
+.terminal-hint {
+  font-size: 13px;
+  color: #999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .ssh-terminal-modal {
+    padding: 10px;
+  }
+
+  .terminal-header h3 {
+    font-size: 14px;
+  }
+
+  .terminal-status {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .terminal-hint {
+    font-size: 11px;
+  }
+}
+
+/* Accessibility */
+.terminal-close:focus {
+  outline: 2px solid #0078d4;
+  outline-offset: 2px;
+}
+
+/* Animation ingresso */
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ssh-terminal-modal {
+  animation: modalFadeIn 0.2s ease-out;
+}

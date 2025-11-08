@@ -20,6 +20,7 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(','
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -45,6 +46,7 @@ INSTALLED_APPS = [
     'integrity.apps.IntegrityConfig',
     'discovery.apps.DiscoveryConfig',
     'audit.apps.AuditConfig',
+    'channels',
 ]
 
 MIDDLEWARE = [
@@ -232,3 +234,20 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+# ==================== DJANGO CHANNELS CONFIGURATION ====================
+
+ASGI_APPLICATION = 'firedog.asgi.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}
+
+# WebSocket settings
+WEBSOCKET_ACCEPT_ALL = False  # Richiedi autenticazione
+WEBSOCKET_TIMEOUT = 3600  # 1 ora timeout

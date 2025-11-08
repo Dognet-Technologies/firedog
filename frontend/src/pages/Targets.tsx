@@ -6,6 +6,8 @@ import apiService from '../services/api';
 import type { Target, TargetCreate } from '../types';
 import './Targets.css';
 import { useNotifications } from '../contexts/NotificationContext';
+import SSHTerminal from '../components/SSHTerminal';
+
 
 
 const Targets: React.FC = () => {
@@ -13,6 +15,8 @@ const Targets: React.FC = () => {
   const { showToast, showConfirm } = useNotifications();
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [terminalTargetId, setTerminalTargetId] = useState<number | null>(null);
   const [formData, setFormData] = useState<TargetCreate>({
     ip_address: '',
     hostname: '',
@@ -80,30 +84,18 @@ const Targets: React.FC = () => {
     const handleInstall = async (id: number) => {
       const target = targets.find(t => t.id === id);
       const isReinstall = target?.firedog_version != null;
+      
       showConfirm({
         title: isReinstall ? 'Conferma Reinstallazione' : 'Conferma Installazione',
         message: isReinstall 
-          ? 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse. L\'operazione potrebbe richiedere alcuni minuti.'
-          : 'Vuoi installare FireDog su questo target? L\'operazione potrebbe richiedere alcuni minuti.',
-        confirmText: isReinstall ? 'Reinstalla' : 'Installa',
+          ? 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse. Verrà aperto un terminale SSH interattivo per completare l\'installazione.'
+          : 'Vuoi installare FireDog su questo target? Verrà aperto un terminale SSH interattivo per completare l\'installazione. Assicurati di avere la password sudo del target.',
+        confirmText: 'Apri Terminale',
         cancelText: 'Annulla',
-        type: 'info',
-        onConfirm: async () => {
-          try {
-            await apiService.installFiredog(id);
-            showToast({
-              type: 'success',
-              title: 'Installazione avviata',
-              message: 'Controlla i log per seguire il progresso'
-            });
-            loadTargets();
-          } catch (error) {
-            showToast({
-              type: 'error',
-              title: 'Errore',
-              message: 'Installation failed'
-            });
-          }
+        onConfirm: () => {
+          // Apri terminale SSH interattivo
+          setTerminalTargetId(id);
+          setShowTerminal(true);
         }
       });
     };
@@ -244,6 +236,27 @@ const Targets: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+            {/* SSH Terminal Modal */}
+      {showTerminal && terminalTargetId && (
+        <SSHTerminal
+          targetId={terminalTargetId}
+          onClose={() => {
+            setShowTerminal(false);
+            setTerminalTargetId(null);
+          }}
+          onInstallComplete={() => {
+            // Ricarica targets dopo installazione
+            loadTargets();
+            setShowTerminal(false);
+            setTerminalTargetId(null);
+            showToast({
+              type: 'success',
+              title: 'Installazione completata',
+              message: 'FireDog è stato installato con successo sul target'
+            });
+          }}
+        />
       )}
     </div>
   );
