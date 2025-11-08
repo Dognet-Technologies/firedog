@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import rulesService, { FirewallRule, AddRuleRequest } from '../services/rules.service';
 import './Rules.css';
+import { useNotifications } from '../contexts/NotificationContext';
 
 interface RulesProps {}
 
@@ -12,7 +13,8 @@ const Rules: React.FC<RulesProps> = () => {
   const [syncing, setSyncing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
+  const { showToast, showConfirm } = useNotifications();
+
   // Modal add rule
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [selectedChain, setSelectedChain] = useState<'INPUT' | 'OUTPUT'>('INPUT');
