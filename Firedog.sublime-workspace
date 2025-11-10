@@ -147,6 +147,123 @@
 	},
 	"buffers":
 	[
+		{
+			"file": "files/CONFIGURATION_SNIPPETS.md",
+			"redo_stack":
+			[
+				[
+					26,
+					1,
+					"",
+					null,
+					"AgAAALQDAAAAAAAAvwMAAAAAAAAAAAAAwQMAAAAAAADBAwAAAAAAAAsAAAAgICAgJ2RhcGhuZQ",
+					"AQAAAAAAAAABAAAAtgMAAAAAAADBAwAAAAAAAAAAAAAAAPC/"
+				]
+			],
+			"settings":
+			{
+				"buffer_size": 10766,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			},
+			"undo_stack":
+			[
+			]
+		},
+		{
+			"contents": "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc2MjUxMzcwOCwiaWF0IjoxNzYyNDI3MzA4LCJqdGkiOiJhNzAzMWNjNjk1ZjA0YTVjYWZmODQ0YjM0ZWU0MzEzMiIsInVzZXJfaWQiOjF9.dnA6ccrxoMcEG4E8QLi9PzAwZ2bZnw73j0oJoM-4_hI\",\"access\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzYyNDMwOTA4LCJpYXQiOjE3NjI0MjczMDgsImp0aSI6ImEzN2JhYTBlNGE5MzQ4NWNhMTE4ZjM5OTk0YTQxZmI0IiwidXNlcl9pZCI6MX0.31OGSbPiN7AtGUP-1bRabkASdwLw2fcszV-sXJ8q_FM\"",
+			"settings":
+			{
+				"buffer_size": 471,
+				"line_ending": "Unix",
+				"name": "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90"
+			},
+			"undo_stack":
+			[
+				[
+					4,
+					1,
+					"",
+					null,
+					"AQAAAAAAAAAAAAAA1wEAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/"
+				]
+			]
+		},
+		{
+			"file": "backend/firedog/settings.py",
+			"settings":
+			{
+				"buffer_size": 7434,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			},
+			"undo_stack":
+			[
+				[
+					5,
+					1,
+					"insert",
+					{
+						"characters": "\n"
+					},
+					"AQAAAHsCAAAAAAAAfAIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAewIAAAAAAAB7AgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					6,
+					1,
+					"paste",
+					null,
+					"AQAAAHwCAAAAAAAAiQIAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAfAIAAAAAAAB8AgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					9,
+					1,
+					"insert",
+					{
+						"characters": "\n"
+					},
+					"AQAAACcFAAAAAAAALAUAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAJwUAAAAAAAAnBQAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					10,
+					1,
+					"paste",
+					null,
+					"AQAAACwFAAAAAAAANwUAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAALAUAAAAAAAAsBQAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					18,
+					1,
+					"insert",
+					{
+						"characters": "\n"
+					},
+					"AQAAAGQbAAAAAAAAZRsAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAZBsAAAAAAABkGwAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					19,
+					1,
+					"paste",
+					null,
+					"AQAAAGUbAAAAAAAAFB0AAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAZRsAAAAAAABlGwAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					26,
+					1,
+					"right_delete",
+					null,
+					"AQAAAGUbAAAAAAAAZRsAAAAAAAAKAAAAYGBgcHl0aG9uCg",
+					"AQAAAAAAAAABAAAAZRsAAAAAAABvGwAAAAAAAAAAAAAAAPC/"
+				]
+			]
+		}
 	],
 	"build_system": "",
 	"build_system_choices":
@@ -213,23 +330,57 @@
 	"expanded_folders":
 	[
 		"/home/simone/Repos/Progetti/firedog",
-		"/home/simone/Repos/Progetti/firedog/backend",
-		"/home/simone/Repos/Progetti/firedog/frontend"
+		"/home/simone/Repos/Progetti/firedog/frontend",
+		"/home/simone/Repos/Progetti/firedog/frontend/src",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/components"
 	],
 	"file_history":
 	[
-		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Rules.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/components/SSHTerminal.tsx",
+		"/home/simone/Repos/Progetti/firedog/files/README.md",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/wsgi.py",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Targets.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/package.json",
+		"/home/simone/Repos/Progetti/firedog/README.md",
+		"/home/simone/Repos/Progetti/firedog/firewall.service",
+		"/home/simone/Repos/Progetti/firedog/files/ssh-terminal-implementation/INSTALL_SSH_TERMINAL.md",
+		"/home/simone/Repos/Progetti/firedog/files/BACKEND_COMPLETION_GUIDE.md",
+		"/home/simone/Repos/Progetti/firedog/firedog-package/install.sh",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/views.py",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/services/api.ts",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Whitelist.tsx",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/BlockedIPs.tsx",
-		"/home/simone/Repos/Progetti/firedog/backend/requirements.txt",
-		"/home/simone/Scaricati/firewall-rules-1-2025-11-06.rules",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/FirewallLogs.tsx",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/contexts/NotificationContext.tsx",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/contexts/NotificationContext.css",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/AuditLogs.tsx",
+		"/home/simone/Repos/Progetti/firedog/files/ip.txt",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/tasks.py",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/App.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/types/index.ts",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/FirewallRules.tsx",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Discovery.tsx",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Targets.tsx",
+		"/home/simone/Repos/Progetti/firedog/backend/discovery/tasks.py",
+		"/home/simone/Repos/Progetti/firedog/files/IMPLEMENTATION_GUIDE.md",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/settings.py",
+		"/home/simone/Repos/Progetti/firedog/backend/api/models.py_to_delete",
+		"/home/simone/Repos/Progetti/firedog/backend/audit/models.py",
+		"/home/simone/Repos/Progetti/firedog/backend/audit/serializers.py",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/models.py",
+		"/home/simone/Repos/Progetti/firedog/backend/api/__init__.py",
+		"/home/simone/Repos/Progetti/firedog/backend/api/apps.py",
+		"/home/simone/Repos/Progetti/firedog/backend/api/views.py",
+		"/home/simone/Repos/Progetti/firedog/backend/rules/serializers.py",
+		"/home/simone/Repos/Progetti/firedog/backend/threats/serializers.py",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/urls.py",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/celery.py",
+		"/home/simone/Repos/Progetti/firedog/backend/api/serializers.py",
+		"/home/simone/Repos/Progetti/firedog/files/backend_api_NEW_ENDPOINTS.py",
+		"/home/simone/Repos/Progetti/firedog/files/backend_core_ssh_manager_UPDATES.py",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Dashboard.tsx",
+		"/home/simone/Repos/Progetti/firedog/backend/core/ssh_manager.py",
+		"/home/simone/Repos/Progetti/firedog/custom_rules.conf.example",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/components/layout/Layout.tsx",
+		"/home/simone/Repos/Progetti/firedog/SETUP_GUIDE.md",
+		"/home/simone/.cache/.fr-ttPTpD/DASHBOARD_GUIDE.md",
+		"/home/simone/Lavoro/External/tplink.txt",
 		"/home/simone/Repos/Progetti/firedog/firewall-init.sh",
 		"/home/simone/Repos/Progetti/sentinelcore/README.md",
 		"/home/simone/Repos/Progetti/sentinelcore/Description_edited.md",
@@ -312,44 +463,11 @@
 		"/home/noyse/Lavoro/External/WiFi_Jle_txt",
 		"/home/noyse/Lavoro/DOGNET/Documentazione_Lavoro/Corso/CorsoBase/hacklab/Corso_1/corso_1.txt",
 		"/home/noyse/GIT/URLextractor-master/README.md",
-		"/home/noyse/Repos/noyse_net/noyse_net.plugin.zsh",
-		"/home/simone/.config/sublime-text/Packages/SideBarEnhancements/Side Bar.sublime-settings",
-		"/home/simone/.config/sublime-text/Packages/User/Side Bar.sublime-settings",
-		"/home/Coupon",
-		"/home/simone/Documenti/cheatsheet_privesc_win.txt",
-		"/home/noyse/Scaricati/cheatsheet-67(1).md",
-		"/home/noyse/Scrivania/Collegamento a Robe_Personal/HackTheBox/CheatSheet/cheatsheett_priv-esc.txt",
-		"/home/noyse/Documenti/Robe_Personal/HackTheBox/CheatSheet/cheatsheett_privesc_lin.txt",
-		"/home/noyse/Scaricati/cheatsheet-67.md",
-		"/Magazzino/EXTERNAL/WiFi.txt",
-		"/run/user/1000/gvfs/smb-share:domain=WORKGROUP,server=192.168.100.2,share=public,user=noyse/FILM/Harry Potter Saga Completa (2001-2011) 1080p H265 AC3 ITA.ENG sub ita.eng Sp33dy94-MIRCrew/INFO/Harry Potter 2.txt",
-		"/home/noyse/Lavoro/Sysdat/LavoroP.I/VAPT_2022/PrimoGiro/gsf20220525007.base64",
-		"/home/noyse/Documenti/Robe_Personal/HackTheBox/flag.txt",
-		"/home/noyse/Repos/Default/MasterPDF/Licenza",
-		"/home/noyse/.local/share/nemo/actions/shred.nemo_action",
-		"/Magazzino/3_List/The-Most-Common-Passwords-Pin-e-ScreenLocks-master/BIP39/bip-0039-wordlists.md",
-		"/home/noyse/Scaricati/gtkhash-master/README.md",
-		"/home/noyse/.local/share/nemo/actions/thunderbird.nemo_action",
-		"/home/noyse/.oh-my-zsh/plugins/noyse_sys/noyse_sys.plugin.zsh",
-		"/home/noyse/Scrivania/Collegamento a Repos/Default/Postman/API",
-		"/home/noyse/Repos/noyse_sys/noyse_sys.plugin.zsh",
-		"/home/noyse/Repos/NoyseSysStuff/upd-noyse/upd_noyse.sh",
-		"/home/noyse/Repos/NoyseSysStuff/upd-noyse/upd_noyse2.sh",
-		"/home/noyse/Scrivania/Collegamento a DocumentiLavoro/DogNet/AgenziaEntrate/CodiceSDI",
-		"/home/noyse/Documenti/VBoxCondivisa/sn.txt",
-		"/home/noyse/Lavoro/DOGNET/CTF/External/Result.txt",
-		"/home/noyse/VirtualBox VMs/MiddleManV2-Final/vmware.log",
-		"/home/noyse/VirtualBox VMs/MiddleManV2-Final/1.txt",
-		"/home/noyse/Scrivania/Collegamento a Lavoro/Sysdat/LavoroP.I/VAPT_2021/PrimoGiro/Vapt-Esterno_PrimoGruppoSaronno_15.03.3.2021/ListaIP.txt",
-		"/home/noyse/Lavoro/DOGNET/CSV/os\r",
-		"/home/noyse/Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/Report/Consegnato/INFO.txt",
-		"/home/noyse/Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/Report/Consegnato/Documento senza nome",
-		"/home/noyse/Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/Report/Consegnato/INFO.txt.txt",
-		"/home/noyse/Scrivania/Collegamento a Lavoro/Sysdat/LavoroP.I/VAPT_2021/SecondoGiro/Vapt-Esterno_PrimoGruppoSaronno_02.12.2021/ListaIP.txt"
+		"/home/noyse/Repos/noyse_net/noyse_net.plugin.zsh"
 	],
 	"find":
 	{
-		"height": 26.0
+		"height": 38.0
 	},
 	"find_in_files":
 	{
@@ -364,8 +482,17 @@
 		"case_sensitive": false,
 		"find_history":
 		[
-			"alert",
-			"export",
+			" installTarget(",
+			"          <Route\n            path=\"/logs/audit\"\n            element={\n              <ProtectedRoute>\n                <Layout>\n                  <AuditLogs />\n                </Layout>\n              </ProtectedRoute>\n            }\n          />",
+			"</PrivateRoute>} ",
+			"<PrivateRoute>",
+			"FIREDOG_FETCH_INTERVAL",
+			"settings.FIREDOG_FETCH_INTERVAL",
+			"get_statistics()",
+			"  className=\"btn-icon-sm\" ",
+			"Remove",
+			"remove",
+			"create mode 100644",
 			"container_tests",
 			"container_config",
 			"container_fingerprinting",
@@ -422,6 +549,9 @@
 		"regex": false,
 		"replace_history":
 		[
+			"</ProtectedRoute>",
+			"<ProtectedRoute>",
+			"create mode 100644",
 			"read -r"
 		],
 		"reverse": false,
@@ -437,12 +567,333 @@
 		{
 			"sheets":
 			[
+				{
+					"buffer": 0,
+					"file": "files/CONFIGURATION_SNIPPETS.md",
+					"selected": true,
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 10766,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								8098,
+								8135
+							]
+						],
+						"settings":
+						{
+							"bracket_highlighter.busy": false,
+							"bracket_highlighter.locations":
+							{
+								"close":
+								{
+								},
+								"icon":
+								{
+								},
+								"open":
+								{
+								},
+								"unmatched":
+								{
+								}
+							},
+							"bracket_highlighter.regions":
+							[
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_angle_content",
+								"bh_c_define",
+								"bh_c_define_center",
+								"bh_c_define_open",
+								"bh_c_define_close",
+								"bh_c_define_content",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_curly_content",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_default_content",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_double_quote_content",
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_regex_content",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_round_content",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close",
+								"bh_single_quote_content",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_square_content",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_tag_content",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_unmatched_content"
+							],
+							"syntax": "Packages/Markdown/Markdown.sublime-syntax",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 6516.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				}
+			]
+		},
+		{
+			"sheets":
+			[
+				{
+					"buffer": 1,
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 471,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								471,
+								471
+							]
+						],
+						"settings":
+						{
+							"auto_name": "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90",
+							"bracket_highlighter.busy": false,
+							"bracket_highlighter.locations":
+							{
+								"close":
+								{
+								},
+								"icon":
+								{
+								},
+								"open":
+								{
+								},
+								"unmatched":
+								{
+								}
+							},
+							"bracket_highlighter.regions":
+							[
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_angle_content",
+								"bh_c_define",
+								"bh_c_define_center",
+								"bh_c_define_open",
+								"bh_c_define_close",
+								"bh_c_define_content",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_curly_content",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_default_content",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_double_quote_content",
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_regex_content",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_round_content",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close",
+								"bh_single_quote_content",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_square_content",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_tag_content",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_unmatched_content"
+							],
+							"default_dir": "/home/simone/Repos/Progetti/application_traceroute/AppTraceroute",
+							"syntax": "Packages/Text/Plain text.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 2,
+					"file": "backend/firedog/settings.py",
+					"selected": true,
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 7434,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								7087,
+								7087
+							]
+						],
+						"settings":
+						{
+							"bracket_highlighter.busy": false,
+							"bracket_highlighter.locations":
+							{
+								"close":
+								{
+								},
+								"icon":
+								{
+								},
+								"open":
+								{
+								},
+								"unmatched":
+								{
+								}
+							},
+							"bracket_highlighter.regions":
+							[
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_angle_content",
+								"bh_c_define",
+								"bh_c_define_center",
+								"bh_c_define_open",
+								"bh_c_define_close",
+								"bh_c_define_content",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_curly_content",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_default_content",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_double_quote_content",
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_regex_content",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_round_content",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close",
+								"bh_single_quote_content",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_square_content",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_tag_content",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_unmatched_content"
+							],
+							"syntax": "Packages/Python/Python.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 3334.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				}
 			]
 		}
 	],
 	"incremental_find":
 	{
-		"height": 26.0
+		"height": 25.0
 	},
 	"input":
 	{
@@ -457,11 +908,18 @@
 				0,
 				1,
 				1
+			],
+			[
+				1,
+				0,
+				2,
+				1
 			]
 		],
 		"cols":
 		[
 			0.0,
+			0.449358795446,
 			1.0
 		],
 		"rows":
@@ -488,7 +946,10 @@
 	},
 	"output.mdpopups":
 	{
-		"height": 0.0
+		"height": 0.0,
+		"history":
+		[
+		]
 	},
 	"output.summary-panel":
 	{
@@ -502,7 +963,7 @@
 	"project": "Firedog.sublime-project",
 	"replace":
 	{
-		"height": 48.0
+		"height": 68.0
 	},
 	"save_all_on_build": true,
 	"select_file":
@@ -532,7 +993,7 @@
 		],
 		"width": 0.0
 	},
-	"selected_group": 0,
+	"selected_group": 1,
 	"settings":
 	{
 	},
@@ -540,7 +1001,7 @@
 	"show_open_files": true,
 	"show_tabs": true,
 	"side_bar_visible": true,
-	"side_bar_width": 296.0,
+	"side_bar_width": 317.0,
 	"status_bar_visible": true,
 	"template_settings":
 	{

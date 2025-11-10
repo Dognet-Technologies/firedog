@@ -113,13 +113,12 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
 
   // Connessione WebSocket
   useEffect(() => {
-    if (!terminal || isConnecting) return;
+    if (!terminal) return;
 
-    setIsConnecting(true);
-
-    // Determina URL WebSocket (dev vs prod)
+    // Connessione WebSocket al BACKEND (Django su porta 8000)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/terminal/`;
+    // CORREZIONE: usa localhost:8000 invece di window.location.host
+    const wsUrl = `${protocol}//localhost:8000/ws/terminal/`;
 
     const websocket = new WebSocket(wsUrl);
 
