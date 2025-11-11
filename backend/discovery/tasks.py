@@ -195,7 +195,7 @@ def scan_network_arp(network):
         # Execute arp-scan
         # Note: richiede sudo, assicurati che sia configurato in sudoers
         result = subprocess.run(
-            ['sudo', 'arp-scan', '--interface=wlp0s20f3', '--numeric', network],
+            ['sudo', 'arp-scan', '-l'],
             capture_output=True,
             text=True,
             check=True,
