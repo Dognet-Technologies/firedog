@@ -22,7 +22,9 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
     
     queryset = DiscoveredHost.objects.all()
     permission_classes = [IsAuthenticated]
-    
+    serializer_class = DiscoveredHostSerializer
+    pagination_class = None 
+
     def get_serializer_class(self):
         if self.action == 'list':
             return DiscoveredHostListSerializer
@@ -286,56 +288,94 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
                 host.save()
                 results['skipped'] += 1
         
-        # Audit log
-        AuditLog.objects.create(
+        # Audit log (VERSIONE CORRETTA)
+        AuditLog.log_action(
+            action='bulk_import',
+            description=f'Bulk import: {results["imported"]} imported, {results["skipped"]} skipped',
             user=request.user,
-            action='discovery_bulk_import',
-            details=f'Bulk import: {results["imported"]} imported, {results["skipped"]} skipped'
+            new_values={
+                'imported': results['imported'],
+                'skipped': results['skipped'],
+                'errors': len(results.get('errors', []))
+            },
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],
+            success=True
         )
-        
+
         logger.info(f"Bulk import completed: {results}")
+        return Response(results, status=status.HTTP_200_OK) 
+
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """
+        Elimina multipli discovered hosts
+        """
+        host_ids = request.data.get('host_ids', [])
         
-        return Response(results, status=status.HTTP_200_OK)
-    
+        if not host_ids:
+            return Response(
+                {'error': 'No host IDs provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            # Elimina gli host
+            deleted_count = DiscoveredHost.objects.filter(id__in=host_ids).delete()[0]
+            
+            # Audit log
+            AuditLog.log_action(
+                action='bulk_delete',
+                description=f'Deleted {deleted_count} discovered hosts',
+                user=request.user,
+                new_values={
+                    'deleted_count': deleted_count,
+                    'host_ids': host_ids
+                },
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],
+                success=True
+            )
+            
+            logger.info(f"Bulk delete completed: {deleted_count} hosts deleted")
+            
+            return Response({
+                'success': True,
+                'deleted': deleted_count,
+                'message': f'Successfully deleted {deleted_count} host(s)'
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"Bulk delete error: {str(e)}")
+            return Response(
+                {'error': f'Failed to delete hosts: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=True, methods=['post'])
     def import_to_target(self, request, pk=None):
         """
-        Importa discovered host come target
-        
-        POST /api/discovery/{id}/import_to_target/
-        
-        Body:
-            {
-                "hostname": "optional-override",
-                "description": "optional description"
-            }
-        
-        Returns:
-            {
-                "target_id": 123,
-                "message": "Host imported as target"
-            }
+        Importa discovered host come Target
         """
         discovered_host = self.get_object()
         
-        # Check if already imported
+        # Verifica se già importato
         if discovered_host.is_imported:
-            return Response({
-                'error': 'Host already imported as target'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'Host already imported'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        # Check if IP already exists as target
+        # Verifica se esiste già come target
         if Target.objects.filter(ip_address=discovered_host.ip_address).exists():
-            discovered_host.is_imported = True
-            discovered_host.save()
-            
-            return Response({
-                'error': 'IP address already exists as target'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'Target with this IP already exists'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        # Create target
-        hostname = request.data.get('hostname', discovered_host.hostname or f'host-{discovered_host.ip_address}')
-        description = request.data.get('description', f'Imported from discovery - Vendor: {discovered_host.vendor}')
+        # Crea nuovo target
+        hostname = request.data.get('hostname', discovered_host.hostname or '')
+        description = request.data.get('description', f'Imported from discovery: {discovered_host.vendor or "Unknown"}')
         
         target = Target.objects.create(
             ip_address=discovered_host.ip_address,
@@ -344,26 +384,31 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
             status='pending'
         )
         
-        # Mark as imported
+        # Marca come importato
         discovered_host.is_imported = True
         discovered_host.save()
         
-        # Audit log
-        AuditLog.objects.create(
+        # Audit log - ✅ VERSIONE CORRETTA
+        AuditLog.log_action(
+            action='import_host',
+            description=f'Imported discovered host {discovered_host.ip_address} to target',
             user=request.user,
-            action='discovery_import_target',
-            target=target,
-            details=f'Imported from discovery: {discovered_host.ip_address}'
+            content_object=target,  # ✅ Corretto
+            new_values={  # ✅ Corretto
+                'ip_address': discovered_host.ip_address,
+                'hostname': hostname,
+                'mac_address': discovered_host.mac_address,
+            },
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],  # ✅ Aggiunto
+            success=True
         )
-        
-        logger.info(f"Discovered host {discovered_host.id} imported as target {target.id}")
         
         return Response({
             'success': True,
             'target_id': target.id,
-            'message': 'Host imported as target'
-        }, status=status.HTTP_201_CREATED)
-    
+            'message': f'Host {discovered_host.ip_address} imported successfully'
+        })    
     @action(detail=False, methods=['post'])
     def bulk_import_to_targets(self, request):
         """

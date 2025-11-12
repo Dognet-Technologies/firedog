@@ -1,10 +1,11 @@
 /**
- * Discovery Page - Network Discovery e Import Target
+ * Discovery Page - Network Discovery e Import Target + Groups
  * 
- * 3 Modalità:
+ * 4 Modalità:
  * 1. ARP-Scan Network Discovery
  * 2. Bulk Import da File
  * 3. Aggiunta Manuale
+ * 4. Groups Management (NEW)
  */
 import React, { useState, useEffect } from 'react';
 import apiService from '../services/api';
@@ -24,9 +25,22 @@ interface BulkImportResult {
   errors: Array<{ line: number; error: string; content: string }>;
 }
 
+interface TargetGroup {
+  id: number;
+  name: string;
+  description: string;
+  color: string;
+  icon: string;
+  target_count: number;
+  online_count: number;
+  targets?: Target[];
+  created_at: string;
+  updated_at: string;
+}
+
 const Discovery: React.FC = () => {
   // State
-  const [activeTab, setActiveTab] = useState<'arp-scan' | 'file' | 'manual'>('arp-scan');
+  const [activeTab, setActiveTab] = useState<'arp-scan' | 'file' | 'manual' | 'groups'>('arp-scan');
   const [discoveredHosts, setDiscoveredHosts] = useState<DiscoveredHost[]>([]);
   const [selectedHosts, setSelectedHosts] = useState<Set<number>>(new Set());
   const { showToast, showConfirm } = useNotifications();
@@ -44,10 +58,31 @@ const Discovery: React.FC = () => {
     description: ''
   });
 
-  // Load discovered hosts on mount
+  // Groups state (NEW)
+  const [groups, setGroups] = useState<TargetGroup[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<TargetGroup | null>(null);
+  const [availableTargets, setAvailableTargets] = useState<Target[]>([]);
+  const [allTargets, setAllTargets] = useState<Target[]>([]);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [newGroupForm, setNewGroupForm] = useState({
+    name: '',
+    description: '',
+    color: '#3b82f6',
+    icon: 'server'
+  });
+
+  // Load data on mount
   useEffect(() => {
     loadDiscoveredHosts();
   }, []);
+
+  // Load groups when tab changes
+  useEffect(() => {
+    if (activeTab === 'groups') {
+      loadGroups();
+      loadAllTargets();
+    }
+  }, [activeTab]);
 
   // Poll scan status
   useEffect(() => {
@@ -73,51 +108,39 @@ const Discovery: React.FC = () => {
     }
   }, [scanStatus]);
 
+  // ==================== ARP SCAN FUNCTIONS ====================
+  
   const loadDiscoveredHosts = async () => {
     try {
-      setLoading(true);
-      setError(null);
-      
-      // Chiamata API reale
-      const response = await api.get<{
-        count: number;
-        results: DiscoveredHost[];
-      }>('/api/discovery/get_results/?not_imported=true');
-      
-      console.log('API Response:', response.data);
-      console.log('Found hosts:', response.data.count);
-      
-      // Usa i dati reali dall'API
-      setHosts(response.data.results);
-      
-    } catch (err) {
-      console.error('Error loading discovered hosts:', err);
-      setError('Failed to load discovered hosts');
-      addNotification({
-        type: 'error',
-        title: 'Error',
-        message: 'Failed to load discovered hosts'
-      });
-    } finally {
-      setLoading(false);
+      const response = await apiService.getDiscoveredHosts();
+      const hosts = Array.isArray(response) ? response : response.results || [];
+      setDiscoveredHosts(hosts);
+    } catch (error) {
+      console.error('Error loading discovered hosts:', error);
     }
   };
 
-  // ==================== ARP-SCAN ====================
-  
   const handleStartScan = async () => {
     try {
-      setScanStatus({ status: 'scanning', message: 'Starting network scan...' });
       const response = await apiService.startDiscoveryScan();
-      
       setScanStatus({
         status: 'scanning',
         taskId: response.task_id,
         message: 'Scanning network...'
       });
+      showToast({
+        type: 'info',
+        title: 'Scan started',
+        message: 'Network discovery in progress'
+      });
     } catch (error) {
       console.error('Error starting scan:', error);
       setScanStatus({ status: 'error', message: 'Failed to start scan' });
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to start network scan'
+      });
     }
   };
 
@@ -135,45 +158,85 @@ const Discovery: React.FC = () => {
     if (selectedHosts.size === discoveredHosts.length) {
       setSelectedHosts(new Set());
     } else {
-      setSelectedHosts(new Set(discoveredHosts.map(h => h.id)));
+      const allIds = discoveredHosts.map(h => h.id);  // ✅ Seleziona tutti
+      setSelectedHosts(new Set(allIds));
     }
   };
 
   const handleImportSelected = async () => {
-    if (selectedHosts.size === 0) {
+    if (selectedHosts.size === 0) return;
+
+    try {
+      setLoading(true);
+      
+      // ✅ Filtra solo gli host NON già importati
+      const hostIds = Array.from(selectedHosts);
+      const hostsToImport = discoveredHosts
+        .filter(h => hostIds.includes(h.id) && !h.already_target)
+        .map(h => h.id);
+      
+      if (hostsToImport.length === 0) {
+        showToast({
+          type: 'warning',
+          title: 'Nothing to Import',
+          message: 'All selected hosts are already imported as targets'
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // Importa solo quelli validi
+      for (const hostId of hostsToImport) {
+        await apiService.importDiscoveredHost(hostId);
+      }
+      
       showToast({
-        type: 'warning',
-        title: 'Attenzione',
-        message: 'Seleziona almeno un host da importare'
+        type: 'success',
+        title: 'Success',
+        message: `Imported ${hostsToImport.length} host(s)`
       });
-      return;
+      
+      setSelectedHosts(new Set());
+      loadDiscoveredHosts();
+    } catch (error) {
+      console.error('Error importing hosts:', error);
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to import hosts'
+      });
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedHosts.size === 0) return;
 
     showConfirm({
-      title: 'Conferma Import',
-      message: `Vuoi importare ${selectedHosts.size} host come target?`,
-      confirmText: 'Importa',
-      cancelText: 'Annulla',
+      title: 'Delete Selected Hosts',
+      message: `Are you sure you want to delete ${selectedHosts.size} host(s)? This action cannot be undone.`,
       onConfirm: async () => {
         try {
           setLoading(true);
+          
           const hostIds = Array.from(selectedHosts);
-          const result = await apiService.bulkImportDiscoveredHosts(hostIds);
+          const result = await apiService.bulkDeleteDiscoveredHosts(hostIds);
           
           showToast({
             type: 'success',
-            title: 'Import completato',
-            message: `Importati: ${result.imported}, Saltati: ${result.skipped}`
+            title: 'Success',
+            message: result.message || `Deleted ${result.deleted} host(s)`
           });
           
           setSelectedHosts(new Set());
           loadDiscoveredHosts();
-        } catch (error) {
-          console.error('Error importing hosts:', error);
+        } catch (error: any) {
+          console.error('Error deleting hosts:', error);
           showToast({
             type: 'error',
-            title: 'Errore',
-            message: 'Impossibile importare gli host'
+            title: 'Error',
+            message: error.response?.data?.error || 'Failed to delete hosts'
           });
         } finally {
           setLoading(false);
@@ -182,7 +245,8 @@ const Discovery: React.FC = () => {
     });
   };
 
-  // ==================== FILE IMPORT ====================
+
+  // ==================== FILE IMPORT FUNCTIONS ====================
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -194,9 +258,9 @@ const Discovery: React.FC = () => {
   const handleFileImport = async () => {
     if (!importFile) {
       showToast({
-        type: 'warning',
-        title: 'Attenzione',
-        message: 'Seleziona un file da importare'
+        type: 'error',
+        title: 'No file selected',
+        message: 'Please select a file to import'
       });
       return;
     }
@@ -235,13 +299,17 @@ const Discovery: React.FC = () => {
     }
   };
 
-  // ==================== MANUAL ADD ====================
+  // ==================== MANUAL ADD FUNCTIONS ====================
   
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!manualForm.ip_address) {
-      alert('IP address is required');
+      showToast({
+        type: 'error',
+        title: 'Validation Error',
+        message: 'IP address is required'
+      });
       return;
     }
 
@@ -249,7 +317,11 @@ const Discovery: React.FC = () => {
       setLoading(true);
       await apiService.createTarget(manualForm);
       
-      alert('Target added successfully');
+      showToast({
+        type: 'success',
+        title: 'Success',
+        message: 'Target added successfully'
+      });
       
       setManualForm({
         ip_address: '',
@@ -258,10 +330,172 @@ const Discovery: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Error adding target:', error);
-      alert(error.response?.data?.error || 'Failed to add target');
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: error.response?.data?.error || 'Failed to add target'
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  // ==================== GROUPS FUNCTIONS (NEW) ====================
+  
+  const loadGroups = async () => {
+    try {
+      const groups = await apiService.getGroups();
+      setGroups(Array.isArray(groups) ? groups : []);
+    } catch (error) {
+      console.error('Error loading groups:', error);
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to load groups'
+      });
+    }
+  };
+
+  const loadAllTargets = async () => {
+    try {
+      const response = await apiService.getTargets();
+      const targets = Array.isArray(response) ? response : response.results || [];
+      setAllTargets(targets);
+    } catch (error) {
+      console.error('Error loading targets:', error);
+    }
+  };
+
+  const handleCreateGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newGroupForm.name.trim()) {
+      showToast({
+        type: 'error',
+        title: 'Validation Error',
+        message: 'Group name is required'
+      });
+      return;
+    }
+
+    try {
+      await apiService.createGroup(newGroupForm);
+      
+      showToast({
+        type: 'success',
+        title: 'Success',
+        message: `Group '${newGroupForm.name}' created`
+      });
+      
+      setNewGroupForm({
+        name: '',
+        description: '',
+        color: '#3b82f6',
+        icon: 'server'
+      });
+      setShowCreateGroup(false);
+      loadGroups();
+    } catch (error: any) {
+      console.error('Error creating group:', error);
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: error.response?.data?.error || 'Failed to create group'
+      });
+    }
+  };
+
+  const handleSelectGroup = async (group: TargetGroup) => {
+    try {
+      const groupDetails = await apiService.getGroup(group.id);
+      setSelectedGroup(groupDetails);
+
+      const availResponse = await apiService.getAvailableTargetsForGroup(group.id);
+      setAvailableTargets(availResponse.targets || []);
+    } catch (error) {
+      console.error('Error loading group details:', error);
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to load group details'
+      });
+    }
+  };
+
+  const handleAddTargetToGroup = async (targetId: number) => {
+    if (!selectedGroup) return;
+
+    try {
+      await apiService.addTargetsToGroup(selectedGroup.id, [targetId]);
+      
+      showToast({
+        type: 'success',
+        title: 'Success',
+        message: 'Target added to group'
+      });
+      
+      handleSelectGroup(selectedGroup);
+      loadGroups();
+    } catch (error: any) {
+      console.error('Error adding target to group:', error);
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: error.response?.data?.error || 'Failed to add target'
+      });
+    }
+  };
+
+  const handleRemoveTargetFromGroup = async (targetId: number) => {
+    if (!selectedGroup) return;
+
+    try {
+      await apiService.removeTargetsFromGroup(selectedGroup.id, [targetId]);
+      
+      showToast({
+        type: 'success',
+        title: 'Success',
+        message: 'Target removed from group'
+      });
+      
+      handleSelectGroup(selectedGroup);
+      loadGroups();
+    } catch (error: any) {
+      console.error('Error removing target from group:', error);
+      showToast({
+        type: 'error',
+        title: 'Error',
+        message: error.response?.data?.error || 'Failed to remove target'
+      });
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: number) => {
+    showConfirm({
+      title: 'Delete Group',
+      message: 'Are you sure you want to delete this group?',
+      onConfirm: async () => {
+        try {
+          await apiService.deleteGroup(groupId);
+          
+          showToast({
+            type: 'success',
+            title: 'Success',
+            message: 'Group deleted successfully'
+          });
+          
+          setSelectedGroup(null);
+          loadGroups();
+        } catch (error: any) {
+          console.error('Error deleting group:', error);
+          showToast({
+            type: 'error',
+            title: 'Error',
+            message: error.response?.data?.error || 'Failed to delete group'
+          });
+        }
+      }
+    });
   };
 
   // ==================== RENDER ====================
@@ -311,6 +545,19 @@ const Discovery: React.FC = () => {
             <line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
           Manual Add
+        </button>
+
+        <button
+          className={`tab-button ${activeTab === 'groups' ? 'active' : ''}`}
+          onClick={() => setActiveTab('groups')}
+        >
+          <svg className="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Groups
         </button>
       </div>
 
@@ -368,6 +615,18 @@ const Discovery: React.FC = () => {
                   >
                     Import Selected ({selectedHosts.size})
                   </button>
+                 
+                  <button
+                    className="btn-delete"
+                    onClick={handleDeleteSelected}
+                    disabled={selectedHosts.size === 0 || loading}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    Delete Selected ({selectedHosts.size})
+                  </button>
                 </div>
 
                 <div className="hosts-table-container">
@@ -393,14 +652,16 @@ const Discovery: React.FC = () => {
                       {discoveredHosts.map((host) => (
                         <tr
                           key={host.id}
-                          className={selectedHosts.has(host.id) ? 'selected' : ''}
-                        >
+                              className={`
+                                ${selectedHosts.has(host.id) ? 'selected' : ''}
+                                ${host.already_target ? 'already-imported' : ''}
+                              `}
+                            >
                           <td className="col-checkbox">
                             <input
                               type="checkbox"
                               checked={selectedHosts.has(host.id)}
                               onChange={() => handleToggleHost(host.id)}
-                              disabled={host.already_target}
                             />
                           </td>
                           <td className="col-ip">{host.ip_address}</td>
@@ -502,13 +763,13 @@ const Discovery: React.FC = () => {
                   </div>
 
                   {importResult.errors.length > 0 && (
-                    <div className="import-errors">
+                    <div className="error-list">
                       <h4>Errors:</h4>
                       {importResult.errors.map((err, idx) => (
                         <div key={idx} className="error-item">
                           <span className="error-line">Line {err.line}:</span>
-                          <span className="error-message">{err.error}</span>
-                          <code>{err.content}</code>
+                          <span className="error-msg">{err.error}</span>
+                          <code className="error-content">{err.content}</code>
                         </div>
                       ))}
                     </div>
@@ -525,19 +786,18 @@ const Discovery: React.FC = () => {
             <div className="manual-card">
               <h2>Add Target Manually</h2>
               <p className="manual-description">
-                Add a single target by entering its details
+                Enter target details to add it to your managed systems
               </p>
 
               <form onSubmit={handleManualSubmit} className="manual-form">
                 <div className="form-group">
                   <label htmlFor="ip_address">IP Address *</label>
                   <input
-                    id="ip_address"
                     type="text"
-                    className="input"
-                    placeholder="192.168.1.100"
+                    id="ip_address"
                     value={manualForm.ip_address}
-                    onChange={(e) => setManualForm({ ...manualForm, ip_address: e.target.value })}
+                    onChange={(e) => setManualForm({...manualForm, ip_address: e.target.value})}
+                    placeholder="192.168.1.100"
                     required
                   />
                 </div>
@@ -545,12 +805,11 @@ const Discovery: React.FC = () => {
                 <div className="form-group">
                   <label htmlFor="hostname">Hostname</label>
                   <input
-                    id="hostname"
                     type="text"
-                    className="input"
-                    placeholder="server01"
+                    id="hostname"
                     value={manualForm.hostname}
-                    onChange={(e) => setManualForm({ ...manualForm, hostname: e.target.value })}
+                    onChange={(e) => setManualForm({...manualForm, hostname: e.target.value})}
+                    placeholder="server.local"
                   />
                 </div>
 
@@ -558,10 +817,9 @@ const Discovery: React.FC = () => {
                   <label htmlFor="description">Description</label>
                   <textarea
                     id="description"
-                    className="input textarea"
-                    placeholder="Optional description..."
                     value={manualForm.description}
-                    onChange={(e) => setManualForm({ ...manualForm, description: e.target.value })}
+                    onChange={(e) => setManualForm({...manualForm, description: e.target.value})}
+                    placeholder="Server description..."
                     rows={3}
                   />
                 </div>
@@ -569,7 +827,7 @@ const Discovery: React.FC = () => {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={loading}
+                  disabled={loading || !manualForm.ip_address}
                 >
                   {loading ? 'Adding...' : 'Add Target'}
                 </button>
@@ -577,7 +835,253 @@ const Discovery: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* ==================== GROUPS TAB (NEW) ==================== */}
+        {activeTab === 'groups' && (
+          <div className="groups-container">
+            <div className="groups-layout">
+              {/* Sidebar: Groups List */}
+              <div className="groups-sidebar">
+                <div className="sidebar-header">
+                  <h3>Groups</h3>
+                  <button
+                    className="btn-create-group"
+                    onClick={() => setShowCreateGroup(true)}
+                    title="Create new group"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="groups-list">
+                  {groups.length === 0 ? (
+                    <div className="empty-state-small">
+                      <p>No groups yet</p>
+                      <button
+                        className="btn-link"
+                        onClick={() => setShowCreateGroup(true)}
+                      >
+                        Create your first group
+                      </button>
+                    </div>
+                  ) : (
+                    groups.map((group) => (
+                      <div
+                        key={group.id}
+                        className={`group-item ${selectedGroup?.id === group.id ? 'active' : ''}`}
+                        onClick={() => handleSelectGroup(group)}
+                      >
+                        <div
+                          className="group-color"
+                          style={{ backgroundColor: group.color }}
+                        />
+                        <div className="group-info">
+                          <h4>{group.name}</h4>
+                          <span className="group-count">{group.target_count} targets</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Main Content: Group Details */}
+              <div className="groups-main">
+                {selectedGroup ? (
+                  <>
+                    {/* Group Header */}
+                    <div className="group-header">
+                      <div className="group-title">
+                        <div
+                          className="group-badge"
+                          style={{ backgroundColor: selectedGroup.color }}
+                        />
+                        <div>
+                          <h2>{selectedGroup.name}</h2>
+                          <p>{selectedGroup.description || 'No description'}</p>
+                        </div>
+                      </div>
+                      <button
+                        className="btn-delete"
+                        onClick={() => handleDeleteGroup(selectedGroup.id)}
+                        title="Delete group"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Target Assignment */}
+                    <div className="target-assignment">
+                      {/* Available Targets */}
+                      <div className="target-panel">
+                        <h3>Available Targets</h3>
+                        <div className="target-list">
+                          {availableTargets.length === 0 ? (
+                            <div className="empty-state-small">
+                              <p>All targets assigned</p>
+                            </div>
+                          ) : (
+                            availableTargets.map((target) => (
+                              <div key={target.id} className="target-card">
+                                <div className="target-info">
+                                  <span className={`status-dot status-${target.status}`}/>
+                                  <div>
+                                    <p className="target-ip">{target.ip_address}</p>
+                                    <p className="target-hostname">{target.hostname || 'No hostname'}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  className="btn-add-target"
+                                  onClick={() => handleAddTargetToGroup(target.id)}
+                                  title="Add to group"
+                                >
+                                  →
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Group Targets */}
+                      <div className="target-panel">
+                        <h3>Group Members</h3>
+                        <div className="target-list">
+                          {!selectedGroup.targets || selectedGroup.targets.length === 0 ? (
+                            <div className="empty-state-small">
+                              <p>No targets in group</p>
+                            </div>
+                          ) : (
+                            selectedGroup.targets.map((target) => (
+                              <div key={target.id} className="target-card target-in-group">
+                                <div className="target-info">
+                                  <span className={`status-dot status-${target.status}`}/>
+                                  <div>
+                                    <p className="target-ip">{target.ip_address}</p>
+                                    <p className="target-hostname">{target.hostname || 'No hostname'}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  className="btn-remove-target"
+                                  onClick={() => handleRemoveTargetFromGroup(target.id)}
+                                  title="Remove from group"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                      <circle cx="9" cy="7" r="4"/>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    <p>Select a Group</p>
+                    <p className="empty-subtitle">
+                      Choose a group from the sidebar to view and manage its targets
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Create Group Modal */}
+      {showCreateGroup && (
+        <div className="modal-overlay" onClick={() => setShowCreateGroup(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Create New Group</h2>
+              <button
+                className="modal-close"
+                onClick={() => setShowCreateGroup(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateGroup} className="modal-form">
+              <div className="form-group">
+                <label htmlFor="group_name">Group Name *</label>
+                <input
+                  type="text"
+                  id="group_name"
+                  value={newGroupForm.name}
+                  onChange={(e) => setNewGroupForm({...newGroupForm, name: e.target.value})}
+                  placeholder="Web Servers"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="group_description">Description</label>
+                <textarea
+                  id="group_description"
+                  value={newGroupForm.description}
+                  onChange={(e) => setNewGroupForm({...newGroupForm, description: e.target.value})}
+                  placeholder="Describe the purpose of this group..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="group_color">Color</label>
+                  <input
+                    type="color"
+                    id="group_color"
+                    value={newGroupForm.color}
+                    onChange={(e) => setNewGroupForm({...newGroupForm, color: e.target.value})}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="group_icon">Icon</label>
+                  <select
+                    id="group_icon"
+                    value={newGroupForm.icon}
+                    onChange={(e) => setNewGroupForm({...newGroupForm, icon: e.target.value})}
+                  >
+                    <option value="server">Server</option>
+                    <option value="database">Database</option>
+                    <option value="globe">Web/DNS</option>
+                    <option value="shield">Security</option>
+                    <option value="storage">Storage</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button type="submit" className="btn-primary">
+                  Create Group
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowCreateGroup(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

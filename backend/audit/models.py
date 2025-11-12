@@ -40,7 +40,7 @@ class AuditLog(models.Model):
 
     # Azione eseguita
     action = models.CharField(
-        max_length=20,
+        max_length=50,
         choices=ACTION_CHOICES,
         db_index=True,
         help_text="Tipo di azione eseguita"
@@ -87,6 +87,8 @@ class AuditLog(models.Model):
     user_agent = models.CharField(
         max_length=512,
         blank=True,
+        null=True,  # ← AGGIUNGI QUESTO
+        default='',  # ← AGGIUNGI QUESTO
         help_text="User agent del client"
     )
 

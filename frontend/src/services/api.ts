@@ -302,6 +302,14 @@ class ApiService {
     return response.data;
   }
 
+  async bulkDeleteDiscoveredHosts(hostIds: number[]): Promise<any> {
+    const response = await this.api.post('/discovery/bulk_delete/', {
+      host_ids: hostIds
+    });
+    return response.data;
+  }
+
+
   // ========== File Integrity ==========
 
   async getFileIntegrity(): Promise<PaginatedResponse<FileIntegrity>> {
@@ -319,7 +327,51 @@ class ApiService {
     const response = await this.api.get('/audit/', { params: filters });
     return response.data;
   }
-}
 
+  // ============================================================================
+    // GROUPS API (VERSIONE CORRETTA)
+    // ============================================================================
+
+    async getGroups() {
+      const response = await this.api.get('/groups/');
+      return response.data;
+    }
+
+    async getGroup(groupId: number) {
+      const response = await this.api.get(`/groups/${groupId}/`);
+      return response.data;
+    }
+
+    async createGroup(data: { name: string; description?: string; color?: string; icon?: string }) {
+      const response = await this.api.post('/groups/', data);
+      return response.data;
+    }
+
+    async deleteGroup(groupId: number) {
+      await this.api.delete(`/groups/${groupId}/`);
+    }
+
+    async addTargetsToGroup(groupId: number, targetIds: number[]) {
+      const response = await this.api.post(
+        `/groups/${groupId}/add_targets/`,
+        { target_ids: targetIds }
+      );
+      return response.data;
+    }
+
+    async removeTargetsFromGroup(groupId: number, targetIds: number[]) {
+      await this.api.post(
+        `/groups/${groupId}/remove_targets/`,
+        { target_ids: targetIds }
+      );
+    }
+
+    async getAvailableTargetsForGroup(groupId: number) {
+      const response = await this.api.get(
+        `/groups/${groupId}/available_targets/`
+      );
+      return response.data;
+    }
+  }
 export default new ApiService();
 

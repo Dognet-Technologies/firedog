@@ -174,3 +174,196 @@ class Alert(models.Model):
     def connection_string(self):
         """Restituisce la stringa di connessione SSH"""
         return f"{self.ssh_user}@{self.ip_address}:{self.ssh_port}"
+
+
+# ============================================================================
+# AGGIUNGI QUESTI MODELLI AL FILE: backend/targets/models.py
+# Inserisci questo codice DOPO il modello Alert
+# ============================================================================
+
+class TargetGroup(models.Model):
+    """
+    Gruppo di target per gestione centralizzata delle regole
+    Esempi: Web Servers, DNS Servers, Database Servers, Storage
+    """
+    ICON_CHOICES = [
+        ('server', 'Server'),
+        ('database', 'Database'),
+        ('globe', 'Web/DNS'),
+        ('shield', 'Security'),
+        ('hard-drive', 'Storage'),
+        ('cloud', 'Cloud'),
+        ('layers', 'Application'),
+        ('box', 'Generic'),
+    ]
+
+    # Identificazione
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Nome del gruppo (es. 'Web Servers', 'DNS')"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Descrizione del gruppo e del suo scopo"
+    )
+
+    # UI customization
+    color = models.CharField(
+        max_length=7,
+        default='#3b82f6',
+        help_text="Colore esadecimale per UI (es. #3b82f6)"
+    )
+    icon = models.CharField(
+        max_length=20,
+        choices=ICON_CHOICES,
+        default='server',
+        help_text="Icona per rappresentare il gruppo"
+    )
+
+    # Relazione Many-to-Many con Target
+    targets = models.ManyToManyField(
+        Target,
+        related_name='groups',
+        blank=True,
+        help_text="Target appartenenti a questo gruppo"
+    )
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Target Group'
+        verbose_name_plural = 'Target Groups'
+
+    def __str__(self):
+        return f"{self.name} ({self.targets.count()} targets)"
+
+    @property
+    def target_count(self):
+        """Numero di target nel gruppo"""
+        return self.targets.count()
+
+    @property
+    def online_count(self):
+        """Numero di target online nel gruppo"""
+        return self.targets.filter(status='online').count()
+
+    def add_target(self, target):
+        """Aggiunge un target al gruppo"""
+        self.targets.add(target)
+
+    def remove_target(self, target):
+        """Rimuove un target dal gruppo"""
+        self.targets.remove(target)
+
+    def get_targets_list(self):
+        """Restituisce lista dei target come dizionario"""
+        return [
+            {
+                'id': t.id,
+                'ip_address': t.ip_address,
+                'hostname': t.hostname,
+                'status': t.status,
+            }
+            for t in self.targets.all()
+        ]
+
+
+class GroupRuleTemplate(models.Model):
+    """
+    Template di regole firewall per un gruppo
+    Quando un target viene aggiunto al gruppo, queste regole vengono applicate
+    """
+    ACTION_CHOICES = [
+        ('ACCEPT', 'Accept'),
+        ('DROP', 'Drop'),
+        ('REJECT', 'Reject'),
+    ]
+
+    PROTOCOL_CHOICES = [
+        ('tcp', 'TCP'),
+        ('udp', 'UDP'),
+        ('icmp', 'ICMP'),
+        ('all', 'All'),
+    ]
+
+    # Gruppo di appartenenza
+    group = models.ForeignKey(
+        TargetGroup,
+        on_delete=models.CASCADE,
+        related_name='rule_templates',
+        help_text="Gruppo a cui appartiene questo template"
+    )
+
+    # Regola
+    name = models.CharField(
+        max_length=255,
+        help_text="Nome descrittivo della regola"
+    )
+    protocol = models.CharField(
+        max_length=10,
+        choices=PROTOCOL_CHOICES,
+        default='tcp'
+    )
+    port = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Porta (opzionale per ICMP)"
+    )
+    source_ip = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text="IP sorgente (opzionale, any se vuoto)"
+    )
+    action = models.CharField(
+        max_length=10,
+        choices=ACTION_CHOICES,
+        default='ACCEPT'
+    )
+    comment = models.TextField(
+        blank=True,
+        help_text="Commento sulla regola"
+    )
+
+    # Priority per ordinamento
+    priority = models.PositiveIntegerField(
+        default=100,
+        help_text="Priorità di applicazione (più basso = più importante)"
+    )
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['group', 'priority', 'port']
+        verbose_name = 'Group Rule Template'
+        verbose_name_plural = 'Group Rule Templates'
+
+    def __str__(self):
+        port_str = f":{self.port}" if self.port else ""
+        return f"{self.group.name} - {self.protocol}{port_str} {self.action}"
+
+    def to_iptables_command(self, target_ip):
+        """
+        Converte il template in comando iptables
+        """
+        cmd_parts = ['iptables', '-A', 'INPUT']
+        
+        if self.protocol != 'all':
+            cmd_parts.extend(['-p', self.protocol])
+        
+        if self.port:
+            cmd_parts.extend(['--dport', str(self.port)])
+        
+        if self.source_ip:
+            cmd_parts.extend(['-s', self.source_ip])
+        
+        cmd_parts.extend(['-j', self.action])
+        
+        if self.comment:
+            cmd_parts.extend(['-m', 'comment', '--comment', f'"{self.comment}"'])
+        
+        return ' '.join(cmd_parts)

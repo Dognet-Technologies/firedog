@@ -49,6 +49,7 @@
   },
   "devDependencies": {
     "@types/recharts": "^1.8.29",
-    "@types/xterm": "^3.0.0"
+    "@types/xterm": "^3.0.0",
+    "lucide-react": "^0.553.0"
   }
 }
