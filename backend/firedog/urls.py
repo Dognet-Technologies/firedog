@@ -15,6 +15,27 @@ from integrity.views import FileIntegrityViewSet
 from discovery.views import DiscoveredHostViewSet
 from audit.views import AuditLogViewSet
 
+# from rest_framework_nested import routers
+# from api.views import (
+#     StatisticsViewSet,
+#     ThreatLogViewSet,
+#     AuditLogViewSet,
+#     NetworkTrafficViewSet,
+#     PerformanceViewSet
+# )
+
+# # Nested router per target-specific endpoints
+# targets_router = routers.NestedSimpleRouter(router, r'targets', lookup='target')
+# targets_router.register(r'stats', StatisticsViewSet, basename='target-stats')
+# targets_router.register(r'threats', ThreatLogViewSet, basename='target-threats')
+# targets_router.register(r'traffic', NetworkTrafficViewSet, basename='target-traffic')
+# targets_router.register(r'performance', PerformanceViewSet, basename='target-performance')
+
+# # Logs endpoints (non nested)
+# router.register(r'logs/audit', AuditLogViewSet, basename='audit-logs')
+
+# urlpatterns += targets_router.urls
+
 # Router per API REST
 router = DefaultRouter()
 router.register(r'targets', TargetViewSet, basename='target')

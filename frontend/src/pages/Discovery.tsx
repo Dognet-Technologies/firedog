@@ -76,10 +76,28 @@ const Discovery: React.FC = () => {
   const loadDiscoveredHosts = async () => {
     try {
       setLoading(true);
-      const data = await apiService.getDiscoveryResults(true); // not_imported=true
-      setDiscoveredHosts(data.hosts || []);
-    } catch (error) {
-      console.error('Error loading discovered hosts:', error);
+      setError(null);
+      
+      // Chiamata API reale
+      const response = await api.get<{
+        count: number;
+        results: DiscoveredHost[];
+      }>('/api/discovery/get_results/?not_imported=true');
+      
+      console.log('API Response:', response.data);
+      console.log('Found hosts:', response.data.count);
+      
+      // Usa i dati reali dall'API
+      setHosts(response.data.results);
+      
+    } catch (err) {
+      console.error('Error loading discovered hosts:', err);
+      setError('Failed to load discovered hosts');
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to load discovered hosts'
+      });
     } finally {
       setLoading(false);
     }

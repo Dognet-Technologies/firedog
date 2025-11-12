@@ -6,8 +6,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
+from django.utils import timezone 
 import logging
-
 from .models import DiscoveredHost
 from .serializers import DiscoveredHostSerializer, DiscoveredHostListSerializer
 from .tasks import discover_network_task
@@ -56,48 +56,63 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
             )
         
         return queryset
-    
+
     @action(detail=False, methods=['post'])
     def start_scan(self, request):
-        """
-        Avvia network discovery con arp-scan
-        
-        POST /api/discovery/start_scan/
-        
-        Returns:
-            {
-                "task_id": "abc123...",
-                "message": "Network scan started",
-                "status": "running"
-            }
-        """
+        """Avvia scan di rete (con Celery)"""
         try:
-            # Start Celery task
+            logger.info(f"Network discovery started by user {request.user.id}")
+            
+            # Launch Celery task
+            from discovery.tasks import discover_network_task
             task = discover_network_task.delay()
             
-            logger.info(f"Network discovery started by user {request.user.id}, task_id={task.id}")
-            
-            # Audit log
-            AuditLog.objects.create(
-                user=request.user,
-                action='discovery_scan_start',
-                details='Network discovery scan started'
-            )
+            # Audit log con helper method (OWASP compliance)
+            try:
+                AuditLog.log_action(
+                    action='scan',
+                    description='Network discovery scan started (ARP scan)',
+                    user=request.user,
+                    new_values={
+                        'task_id': str(task.id),
+                        'scan_type': 'arp',
+                        'initiated_at': timezone.now().isoformat()
+                    },
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],  # Truncate
+                    success=True
+                )
+            except Exception as audit_error:
+                logger.warning(f"Failed to create audit log: {audit_error}")
             
             return Response({
-                'success': True,
-                'task_id': task.id,
-                'message': 'Network scan started',
-                'status': 'running'
-            }, status=status.HTTP_202_ACCEPTED)
+                'status': 'started',
+                'task_id': str(task.id),
+                'message': 'Network discovery scan avviata'
+            })
             
         except Exception as e:
-            logger.error(f"Failed to start network scan: {e}")
-            return Response({
-                'success': False,
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+            error_msg = f"Failed to start network scan: {e}"
+            logger.error(error_msg)
+            
+            # Audit log per errore (NIST compliance)
+            try:
+                AuditLog.log_action(
+                    action='scan',
+                    description='Network discovery scan failed to start',
+                    user=request.user,
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    success=False,
+                    error_message=str(e)
+                )
+            except Exception as audit_error:
+                logger.warning(f"Failed to create error audit log: {audit_error}")
+            
+            return Response(
+                {'error': error_msg},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=False, methods=['get'])
     def scan_status(self, request):
         """

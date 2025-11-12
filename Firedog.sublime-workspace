@@ -148,26 +148,23 @@
 	"buffers":
 	[
 		{
-			"file": "files/CONFIGURATION_SNIPPETS.md",
-			"redo_stack":
-			[
-				[
-					26,
-					1,
-					"",
-					null,
-					"AgAAALQDAAAAAAAAvwMAAAAAAAAAAAAAwQMAAAAAAADBAwAAAAAAAAsAAAAgICAgJ2RhcGhuZQ",
-					"AQAAAAAAAAABAAAAtgMAAAAAAADBAwAAAAAAAAAAAAAAAPC/"
-				]
-			],
+			"contents": "useEffect(() => {\n  if (!terminal) return;\n\n  // Connessione WebSocket al BACKEND (Django su porta 8000)\n  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';\n  // CORREZIONE: usa localhost:8000 invece di window.location.host\n  const wsUrl = `${protocol}//localhost:8000/ws/terminal/`;\n\n  const websocket = new WebSocket(wsUrl);\n  // ... resto del codice",
 			"settings":
 			{
-				"buffer_size": 10766,
-				"encoding": "UTF-8",
-				"line_ending": "Unix"
+				"buffer_size": 375,
+				"line_ending": "Unix",
+				"name": "useEffect(() => {"
 			},
 			"undo_stack":
 			[
+				[
+					4,
+					1,
+					"",
+					null,
+					"AQAAAAAAAAAAAAAAdwEAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/"
+				]
 			]
 		},
 		{
@@ -186,15 +183,27 @@
 					"",
 					null,
 					"AQAAAAAAAAAAAAAA1wEAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/"
+					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8L8"
 				]
 			]
 		},
 		{
-			"file": "backend/firedog/settings.py",
+			"file": "backend/audit/models.py",
 			"settings":
 			{
-				"buffer_size": 7434,
+				"buffer_size": 5700,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			},
+			"undo_stack":
+			[
+			]
+		},
+		{
+			"file": "backend/firedog/urls.py",
+			"settings":
+			{
+				"buffer_size": 2337,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			},
@@ -205,62 +214,71 @@
 					1,
 					"insert",
 					{
-						"characters": "\n"
+						"characters": "\n\n"
 					},
-					"AQAAAHsCAAAAAAAAfAIAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAewIAAAAAAAB7AgAAAAAAAAAAAAAAAPC/"
+					"AgAAAEgCAAAAAAAASQIAAAAAAAAAAAAASQIAAAAAAABKAgAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAASAIAAAAAAABIAgAAAAAAAAAAAAAAAPC/"
 				],
 				[
 					6,
 					1,
 					"paste",
 					null,
-					"AQAAAHwCAAAAAAAAiQIAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAfAIAAAAAAAB8AgAAAAAAAAAAAAAAAPC/"
+					"AQAAAEoCAAAAAAAAgAUAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAASgIAAAAAAABKAgAAAAAAAAAAAAAAAPC/"
 				],
 				[
-					9,
+					11,
+					1,
+					"toggle_comment",
+					{
+						"block": true
+					},
+					"FAAAAFwFAAAAAAAAXAUAAAAAAAACAAAAIyBaBQAAAAAAAFoFAAAAAAAAAQAAACMRBQAAAAAAABEFAAAAAAAAAgAAACMg8QQAAAAAAADxBAAAAAAAAAIAAAAjIO8EAAAAAAAA7wQAAAAAAAABAAAAI5IEAAAAAAAAkgQAAAAAAAACAAAAIyA6BAAAAAAAADoEAAAAAAAAAgAAACMg5wMAAAAAAADnAwAAAAAAAAIAAAAjIJcDAAAAAAAAlwMAAAAAAAACAAAAIyBEAwAAAAAAAEQDAAAAAAAAAgAAACMgFAMAAAAAAAAUAwAAAAAAAAIAAAAjIBIDAAAAAAAAEgMAAAAAAAABAAAAIw4DAAAAAAAADgMAAAAAAAACAAAAIyD1AgAAAAAAAPUCAAAAAAAAAgAAACMg2AIAAAAAAADYAgAAAAAAAAIAAAAjIMECAAAAAAAAwQIAAAAAAAACAAAAIyCpAgAAAAAAAKkCAAAAAAAAAgAAACMgkAIAAAAAAACQAgAAAAAAAAIAAAAjIHYCAAAAAAAAdgIAAAAAAAACAAAAIyBKAgAAAAAAAEoCAAAAAAAAAgAAACMg",
+					"AQAAAAAAAAABAAAAgQUAAAAAAABKAgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					17,
+					1,
+					"toggle_comment",
+					{
+						"block": false
+					},
+					"EQAAADkFAAAAAAAAOwUAAAAAAAAAAAAA8QQAAAAAAADzBAAAAAAAAAAAAADTBAAAAAAAANUEAAAAAAAAAAAAAHcEAAAAAAAAeQQAAAAAAAAAAAAAIQQAAAAAAAAjBAAAAAAAAAAAAADQAwAAAAAAANIDAAAAAAAAAAAAAIIDAAAAAAAAhAMAAAAAAAAAAAAAMQMAAAAAAAAzAwAAAAAAAAAAAAADAwAAAAAAAAUDAAAAAAAAAAAAAAADAAAAAAAAAgMAAAAAAAAAAAAA6QIAAAAAAADrAgAAAAAAAAAAAADOAgAAAAAAANACAAAAAAAAAAAAALkCAAAAAAAAuwIAAAAAAAAAAAAAowIAAAAAAAClAgAAAAAAAAAAAACMAgAAAAAAAI4CAAAAAAAAAAAAAHQCAAAAAAAAdgIAAAAAAAAAAAAASgIAAAAAAABMAgAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAWwUAAAAAAABKAgAAAAAAAAAAAAAAAPC/"
+				]
+			]
+		},
+		{
+			"file": "firedog-package/Struttura.md",
+			"settings":
+			{
+				"buffer_size": 2792,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"contents": "\"\"\"\nNuovi API Endpoints per Frontend\nFile: backend/api/views.py (NUOVE VIEWS DA AGGIUNGERE)\n\nQuesti endpoint forniscono i dati necessari per le pagine frontend:\n- Statistics per un target\n- Threats con filtri\n- Traffic analysis\n- Logs (audit, system, firewall)\n\"\"\"\n\nfrom rest_framework import viewsets, status\nfrom rest_framework.decorators import action\nfrom rest_framework.response import Response\nfrom rest_framework.permissions import IsAuthenticated\nfrom django_filters.rest_framework import DjangoFilterBackend\nfrom django.utils import timezone\nfrom datetime import timedelta\nfrom django.db.models import Count, Q\nimport logging\n\nlogger = logging.getLogger('firedog.api')\n\n\nclass StatisticsViewSet(viewsets.ReadOnlyModelViewSet):\n    \"\"\"\n    ViewSet per visualizzare statistics\n    \n    Endpoints:\n \n    \"\"\"\n    GET /api/targets/{target_id}/stats/ \n    GET /api/targets/{target_id}/stats/latest/\n    GET /api/targets/{target_id}/stats/{id}/\n\n    permission_classes = [IsAuthenticated]\n    filter_backends = [DjangoFilterBackend]\n    filterset_fields = ['collected_at']\n    \n    def get_queryset(self):\n        \"\"\"Filtra stats per target\"\"\"\n        from targets.models import Statistics\n        target_id = self.kwargs.get('target_pk')\n        return Statistics.objects.filter(target_id=target_id).order_by('-collected_at')\n    \n    def get_serializer_class(self):\n        from api.serializers import StatisticsSerializer\n        return StatisticsSerializer\n    \n    @action(detail=False, methods=['get'])\n    def latest(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Restituisce l'ultima statistica registrata\n        \"\"\"\n        GET /api/targets/{target_id}/stats/latest/\n        stats = self.get_queryset().first()\n        \n        if not stats:\n            return Response(\n                {'error': 'No statistics available'},\n                status=status.HTTP_404_NOT_FOUND\n            )\n        \n        serializer = self.get_serializer(stats)\n        return Response(serializer.data)\n    \n    @action(detail=False, methods=['get'])\n    def history(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Restituisce lo storico stats nelle ultime N ore\n        \"\"\"\n        GET /api/targets/{target_id}/stats/history/?hours=24\n\n        hours = int(request.query_params.get('hours', 24))\n        since = timezone.now() - timedelta(hours=hours)\n        \n        stats = self.get_queryset().filter(collected_at__gte=since)\n        serializer = self.get_serializer(stats, many=True)\n        \n        return Response({\n            'hours': hours,\n            'count': stats.count(),\n            'results': serializer.data\n        })\n\n\nclass ThreatLogViewSet(viewsets.ReadOnlyModelViewSet):\n    \"\"\"\n    ViewSet per visualizzare threats\n    \n    Endpoints:\n    - \n    \"\"\"\n    GET /api/targets/{target_id}/threats/\n    GET /api/targets/{target_id}/threats/{id}/ \n    POST /api/targets/{target_id}/threats/{id}/acknowledge/\n    GET /api/targets/{target_id}/threats/summary/ \n\n    permission_classes = [IsAuthenticated]\n    filter_backends = [DjangoFilterBackend]\n    filterset_fields = ['classification', 'threat_type', 'acknowledged', 'source_ip']\n    \n    def get_queryset(self):\n        \"\"\"Filtra threats per target\"\"\"\n        from threats.models import ThreatLog\n        target_id = self.kwargs.get('target_pk')\n        return ThreatLog.objects.filter(target_id=target_id).order_by('-detected_at')\n    \n    def get_serializer_class(self):\n        from threats.serializers import ThreatLogSerializer\n        return ThreatLogSerializer\n    \n    @action(detail=True, methods=['post'])\n    def acknowledge(self, request, target_pk=None, pk=None):\n        \"\"\"\n        \n        \n        Marca una minaccia come acknowledged\n        \"\"\"\n        POST /api/targets/{target_id}/threats/{id}/acknowledge/\n\n        threat = self.get_object()\n        threat.acknowledged = True\n        threat.save()\n        \n        # Log audit\n        from audit.models import AuditLog\n        AuditLog.log_action(\n            username=request.user.username,\n            action='threat.acknowledge',\n            target_id=target_pk,\n            details={'threat_id': pk, 'source_ip': str(threat.source_ip)},\n            ip_address=request.META.get('REMOTE_ADDR')\n        )\n        \n        serializer = self.get_serializer(threat)\n        return Response(serializer.data)\n    \n    @action(detail=False, methods=['get'])\n    def summary(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Restituisce riepilogo threats per severity\n        \"\"\"\n        GET /api/targets/{target_id}/threats/summary/?hours=24\n\n        hours = int(request.query_params.get('hours', 24))\n        since = timezone.now() - timedelta(hours=hours)\n        \n        threats = self.get_queryset().filter(detected_at__gte=since)\n        \n        summary = {\n            'total': threats.count(),\n            'by_classification': {\n                'critical': threats.filter(classification='CRITICAL').count(),\n                'high': threats.filter(classification='HIGH').count(),\n                'medium': threats.filter(classification='MEDIUM').count(),\n                'low': threats.filter(classification='LOW').count(),\n            },\n            'acknowledged': threats.filter(acknowledged=True).count(),\n            'unacknowledged': threats.filter(acknowledged=False).count(),\n            'top_attackers': list(\n                threats.values('source_ip')\n                .annotate(count=Count('id'))\n                .order_by('-count')[:10]\n            )\n        }\n        \n        return Response(summary)\n\n\nclass AuditLogViewSet(viewsets.ReadOnlyModelViewSet):\n    \"\"\"\n    ViewSet per visualizzare audit logs\n    \n    Endpoints:\n    -  - Log specifico\n    \"\"\"\n    GET /api/logs/audit/\n    GET /api/logs/audit/{id}/\n    \n    permission_classes = [IsAuthenticated]\n    filter_backends = [DjangoFilterBackend]\n    filterset_fields = ['username', 'action', 'target']\n    \n    def get_queryset(self):\n        from audit.models import AuditLog\n        return AuditLog.objects.all().order_by('-timestamp')\n    \n    def get_serializer_class(self):\n        from audit.serializers import AuditLogSerializer\n        return AuditLogSerializer\n    \n    @action(detail=False, methods=['get'])\n    def recent(self, request):\n        \"\"\"\n       \n        \n        Ultimi N audit logs\n        \"\"\"\n        GET /api/logs/audit/recent/?hours=24&limit=100\n   \n        hours = int(request.query_params.get('hours', 24))\n        limit = int(request.query_params.get('limit', 100))\n        since = timezone.now() - timedelta(hours=hours)\n        \n        logs = self.get_queryset().filter(timestamp__gte=since)[:limit]\n        serializer = self.get_serializer(logs, many=True)\n        \n        return Response({\n            'count': logs.count(),\n            'results': serializer.data\n        })\n\n\nclass NetworkTrafficViewSet(viewsets.ViewSet):\n    \"\"\"\n    ViewSet per analisi traffico rete\n    \n    Endpoints:\n    -  - Analisi traffico\n    \"\"\"\n    GET /api/targets/{target_id}/traffic/realtime/ \n    GET /api/targets/{target_id}/traffic/analyze/\n    \n    permission_classes = [IsAuthenticated]\n    \n    @action(detail=False, methods=['get'])\n    def realtime(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Ottiene stats in tempo reale\n        \"\"\"\n        GET /api/targets/{target_id}/traffic/realtime/\n\n        from targets.models import Target, Statistics\n        \n        try:\n            target = Target.objects.get(id=target_pk)\n            \n            # Ultime 10 statistics per grafico\n            recent_stats = Statistics.objects.filter(\n                target=target\n            ).order_by('-collected_at')[:10]\n            \n            from api.serializers import StatisticsSerializer\n            serializer = StatisticsSerializer(recent_stats, many=True)\n            \n            return Response({\n                'target': {\n                    'id': target.id,\n                    'hostname': target.hostname,\n                    'ip_address': str(target.ip_address),\n                    'status': target.status\n                },\n                'statistics': serializer.data\n            })\n            \n        except Target.DoesNotExist:\n            return Response(\n                {'error': 'Target not found'},\n                status=status.HTTP_404_NOT_FOUND\n            )\n    \n    @action(detail=False, methods=['post'])\n    def analyze(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Triggera analisi traffico sul target\n        \"\"\"\n        POST /api/targets/{target_id}/traffic/analyze/\n        Body: {\"hours\": 24}\n\n        from targets.models import Target\n        from core.ssh_manager import SSHManager, SSHConnectionError\n        \n        hours = request.data.get('hours', 1)\n        \n        try:\n            target = Target.objects.get(id=target_pk)\n            \n            if target.status != 'online':\n                return Response(\n                    {'error': 'Target is not online'},\n                    status=status.HTTP_503_SERVICE_UNAVAILABLE\n                )\n            \n            # Connessione SSH e analisi\n            ssh = SSHManager(\n                host=target.ip_address,\n                port=target.ssh_port,\n                username=target.ssh_user\n            )\n            ssh.connect()\n            \n            analysis = ssh.analyze_traffic(hours=hours)\n            ssh.disconnect()\n            \n            if not analysis:\n                return Response(\n                    {'error': 'Analysis failed'},\n                    status=status.HTTP_500_INTERNAL_SERVER_ERROR\n                )\n            \n            # Log audit\n            from audit.models import AuditLog\n            AuditLog.log_action(\n                username=request.user.username,\n                action='traffic.analyze',\n                target=target,\n                details={'hours': hours},\n                ip_address=request.META.get('REMOTE_ADDR')\n            )\n            \n            return Response(analysis)\n            \n        except Target.DoesNotExist:\n            return Response(\n                {'error': 'Target not found'},\n                status=status.HTTP_404_NOT_FOUND\n            )\n        except SSHConnectionError as e:\n            return Response(\n                {'error': f'SSH connection failed: {str(e)}'},\n                status=status.HTTP_503_SERVICE_UNAVAILABLE\n            )\n\n\nclass PerformanceViewSet(viewsets.ViewSet):\n    \"\"\"\n    ViewSet per metriche performance sistema\n    \n    Endpoints:\n    -  - Metriche sistema\n    \"\"\"\n    GET /api/targets/{target_id}/performance/\n\n    permission_classes = [IsAuthenticated]\n    \n    def list(self, request, target_pk=None):\n        \"\"\"\n        \n         \n        Ottiene metriche CPU, RAM, Disk (future implementation)\n        \"\"\"\n        # TODO: Implementare quando saranno disponibili i comandi\n        # per recuperare metriche sistema dal target\n        \n        GET /api/targets/{target_id}/performance/\n\n\n        return Response({\n            'message': 'Performance monitoring not yet implemented',\n            'planned_metrics': [\n                'cpu_usage_percent',\n                'memory_usage_percent',\n                'disk_usage_percent',\n                'network_io_bytes'\n            ]\n        })\n\n\n# ============================================\n# URL ROUTING\n# ============================================\n# Aggiungi in backend/firedog/urls.py:\n#\n# from rest_framework_nested import routers\n# from api.views import (\n#     StatisticsViewSet,\n#     ThreatLogViewSet,\n#     AuditLogViewSet,\n#     NetworkTrafficViewSet,\n#     PerformanceViewSet\n# )\n#\n# # Nested router per target-specific endpoints\n# targets_router = routers.NestedSimpleRouter(router, r'targets', lookup='target')\n# targets_router.register(r'stats', StatisticsViewSet, basename='target-stats')\n# targets_router.register(r'threats', ThreatLogViewSet, basename='target-threats')\n# targets_router.register(r'traffic', NetworkTrafficViewSet, basename='target-traffic')\n# targets_router.register(r'performance', PerformanceViewSet, basename='target-performance')\n#\n# # Logs endpoints (non nested)\n# router.register(r'logs/audit', AuditLogViewSet, basename='audit-logs')\n#\n# urlpatterns += targets_router.urls\n",
+			"file": "backend/api/views.py",
+			"file_size": 12342,
+			"file_write_time": 134066498030463406,
+			"settings":
+			{
+				"buffer_size": 12343,
+				"line_ending": "Unix"
+			},
+			"undo_stack":
+			[
+				[
+					3,
 					1,
 					"insert",
 					{
-						"characters": "\n"
+						"characters": " "
 					},
-					"AQAAACcFAAAAAAAALAUAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAJwUAAAAAAAAnBQAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					10,
-					1,
-					"paste",
-					null,
-					"AQAAACwFAAAAAAAANwUAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAALAUAAAAAAAAsBQAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					18,
-					1,
-					"insert",
-					{
-						"characters": "\n"
-					},
-					"AQAAAGQbAAAAAAAAZRsAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAZBsAAAAAAABkGwAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					19,
-					1,
-					"paste",
-					null,
-					"AQAAAGUbAAAAAAAAFB0AAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAZRsAAAAAAABlGwAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					26,
-					1,
-					"right_delete",
-					null,
-					"AQAAAGUbAAAAAAAAZRsAAAAAAAAKAAAAYGBgcHl0aG9uCg",
-					"AQAAAAAAAAABAAAAZRsAAAAAAABvGwAAAAAAAAAAAAAAAPC/"
+					"AQAAADgqAAAAAAAAOSoAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAOCoAAAAAAAA4KgAAAAAAAAAAAAAAAPC/"
 				]
 			]
 		}
@@ -330,13 +348,23 @@
 	"expanded_folders":
 	[
 		"/home/simone/Repos/Progetti/firedog",
-		"/home/simone/Repos/Progetti/firedog/frontend",
-		"/home/simone/Repos/Progetti/firedog/frontend/src",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/components"
+		"/home/simone/Repos/Progetti/firedog/backend",
+		"/home/simone/Repos/Progetti/firedog/backend/discovery",
+		"/home/simone/Repos/Progetti/firedog/backend/integrity",
+		"/home/simone/Repos/Progetti/firedog/firedog-package",
+		"/home/simone/Repos/Progetti/firedog/scripts",
+		"/home/simone/Repos/Progetti/firedog/tests"
 	],
 	"file_history":
 	[
+		"/home/simone/Repos/Progetti/firedog/backend/discovery/tasks.py",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/asgi.py",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/components/SSHTerminal.tsx",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/routing.py",
+		"/home/simone/Repos/Progetti/firedog/files/files/README.md",
+		"/home/simone/Repos/Progetti/firedog/files/CONFIGURATION_SNIPPETS.md",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/settings.py",
+		"/home/simone/Repos/Progetti/firedog/files/files/QUICK_START.md",
 		"/home/simone/Repos/Progetti/firedog/files/README.md",
 		"/home/simone/Repos/Progetti/firedog/backend/firedog/wsgi.py",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Targets.tsx",
@@ -357,9 +385,7 @@
 		"/home/simone/Repos/Progetti/firedog/frontend/src/App.tsx",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/types/index.ts",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/FirewallRules.tsx",
-		"/home/simone/Repos/Progetti/firedog/backend/discovery/tasks.py",
 		"/home/simone/Repos/Progetti/firedog/files/IMPLEMENTATION_GUIDE.md",
-		"/home/simone/Repos/Progetti/firedog/backend/firedog/settings.py",
 		"/home/simone/Repos/Progetti/firedog/backend/api/models.py_to_delete",
 		"/home/simone/Repos/Progetti/firedog/backend/audit/models.py",
 		"/home/simone/Repos/Progetti/firedog/backend/audit/serializers.py",
@@ -458,16 +484,11 @@
 		"/home/noyse/Scrivania/tplink.txt",
 		"/home/noyse/Lavoro/External/CTF-icsc/IP.txt",
 		"/home/noyse/Lavoro/External/Arp.txt",
-		"/home/noyse/Lavoro/External/CTF-icsc/seq_1.txt",
-		"/home/noyse/Lavoro/CLIENTI/Lutech/C-Management/Doc/prov.txt",
-		"/home/noyse/Lavoro/External/WiFi_Jle_txt",
-		"/home/noyse/Lavoro/DOGNET/Documentazione_Lavoro/Corso/CorsoBase/hacklab/Corso_1/corso_1.txt",
-		"/home/noyse/GIT/URLextractor-master/README.md",
-		"/home/noyse/Repos/noyse_net/noyse_net.plugin.zsh"
+		"/home/noyse/Lavoro/External/CTF-icsc/seq_1.txt"
 	],
 	"find":
 	{
-		"height": 38.0
+		"height": 25.0
 	},
 	"find_in_files":
 	{
@@ -569,104 +590,32 @@
 			[
 				{
 					"buffer": 0,
-					"file": "files/CONFIGURATION_SNIPPETS.md",
 					"selected": true,
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 10766,
+						"buffer_size": 375,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								8098,
-								8135
+								349,
+								0
 							]
 						],
 						"settings":
 						{
+							"auto_name": "useEffect(() => {",
 							"bracket_highlighter.busy": false,
-							"bracket_highlighter.locations":
-							{
-								"close":
-								{
-								},
-								"icon":
-								{
-								},
-								"open":
-								{
-								},
-								"unmatched":
-								{
-								}
-							},
-							"bracket_highlighter.regions":
-							[
-								"bh_angle",
-								"bh_angle_center",
-								"bh_angle_open",
-								"bh_angle_close",
-								"bh_angle_content",
-								"bh_c_define",
-								"bh_c_define_center",
-								"bh_c_define_open",
-								"bh_c_define_close",
-								"bh_c_define_content",
-								"bh_curly",
-								"bh_curly_center",
-								"bh_curly_open",
-								"bh_curly_close",
-								"bh_curly_content",
-								"bh_default",
-								"bh_default_center",
-								"bh_default_open",
-								"bh_default_close",
-								"bh_default_content",
-								"bh_double_quote",
-								"bh_double_quote_center",
-								"bh_double_quote_open",
-								"bh_double_quote_close",
-								"bh_double_quote_content",
-								"bh_regex",
-								"bh_regex_center",
-								"bh_regex_open",
-								"bh_regex_close",
-								"bh_regex_content",
-								"bh_round",
-								"bh_round_center",
-								"bh_round_open",
-								"bh_round_close",
-								"bh_round_content",
-								"bh_single_quote",
-								"bh_single_quote_center",
-								"bh_single_quote_open",
-								"bh_single_quote_close",
-								"bh_single_quote_content",
-								"bh_square",
-								"bh_square_center",
-								"bh_square_open",
-								"bh_square_close",
-								"bh_square_content",
-								"bh_tag",
-								"bh_tag_center",
-								"bh_tag_open",
-								"bh_tag_close",
-								"bh_tag_content",
-								"bh_unmatched",
-								"bh_unmatched_center",
-								"bh_unmatched_open",
-								"bh_unmatched_close",
-								"bh_unmatched_content"
-							],
-							"syntax": "Packages/Markdown/Markdown.sublime-syntax",
+							"default_dir": "/home/simone/Repos/Progetti/firedog/backend/firedog",
+							"syntax": "Packages/Text/Plain text.tmLanguage",
 							"tab_size": 2,
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 6516.0,
+						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,
@@ -778,26 +727,25 @@
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 1,
+					"stack_index": 4,
 					"stack_multiselect": false,
 					"type": "text"
 				},
 				{
 					"buffer": 2,
-					"file": "backend/firedog/settings.py",
-					"selected": true,
+					"file": "backend/audit/models.py",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 7434,
+						"buffer_size": 5700,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								7087,
-								7087
+								283,
+								283
 							]
 						],
 						"settings":
@@ -881,10 +829,326 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 3334.0,
+						"translation.y": 2501.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 3,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 3,
+					"file": "backend/firedog/urls.py",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 2337,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								1405,
+								588
+							]
+						],
+						"settings":
+						{
+							"bracket_highlighter.busy": false,
+							"bracket_highlighter.locations":
+							{
+								"close":
+								{
+								},
+								"icon":
+								{
+								},
+								"open":
+								{
+								},
+								"unmatched":
+								{
+								}
+							},
+							"bracket_highlighter.regions":
+							[
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_angle_content",
+								"bh_c_define",
+								"bh_c_define_center",
+								"bh_c_define_open",
+								"bh_c_define_close",
+								"bh_c_define_content",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_curly_content",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_default_content",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_double_quote_content",
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_regex_content",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_round_content",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close",
+								"bh_single_quote_content",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_square_content",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_tag_content",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_unmatched_content"
+							],
+							"syntax": "Packages/Python/Python.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 4,
+					"file": "firedog-package/Struttura.md",
+					"selected": true,
+					"semi_transient": true,
+					"settings":
+					{
+						"buffer_size": 2792,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								0,
+								0
+							]
+						],
+						"settings":
+						{
+							"bracket_highlighter.busy": false,
+							"bracket_highlighter.locations":
+							{
+								"close":
+								{
+								},
+								"icon":
+								{
+								},
+								"open":
+								{
+								},
+								"unmatched":
+								{
+								}
+							},
+							"bracket_highlighter.regions":
+							[
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_angle_content",
+								"bh_c_define",
+								"bh_c_define_center",
+								"bh_c_define_open",
+								"bh_c_define_close",
+								"bh_c_define_content",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_curly_content",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_default_content",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_double_quote_content",
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_regex_content",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_round_content",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close",
+								"bh_single_quote_content",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_square_content",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_tag_content",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_unmatched_content"
+							],
+							"syntax": "Packages/Markdown/Markdown.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 5,
+					"file": "backend/api/views.py",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 12343,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								12342,
+								11520
+							]
+						],
+						"settings":
+						{
+							"bracket_highlighter.busy": false,
+							"bracket_highlighter.locations":
+							{
+								"close":
+								{
+								},
+								"icon":
+								{
+								},
+								"open":
+								{
+								},
+								"unmatched":
+								{
+								}
+							},
+							"bracket_highlighter.regions":
+							[
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_angle_content",
+								"bh_c_define",
+								"bh_c_define_center",
+								"bh_c_define_open",
+								"bh_c_define_close",
+								"bh_c_define_content",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_curly_content",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_default_content",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_double_quote_content",
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_regex_content",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_round_content",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close",
+								"bh_single_quote_content",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_square_content",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_tag_content",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_unmatched_content"
+							],
+							"syntax": "Packages/Python/Python.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 5547.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 2,
 					"stack_multiselect": false,
 					"type": "text"
 				}
@@ -963,7 +1227,7 @@
 	"project": "Firedog.sublime-project",
 	"replace":
 	{
-		"height": 68.0
+		"height": 46.0
 	},
 	"save_all_on_build": true,
 	"select_file":
