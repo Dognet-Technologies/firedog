@@ -6,6 +6,7 @@ Sistema di Gestione Centralizzata Firewall Multi-Target
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -37,7 +38,6 @@ INSTALLED_APPS = [
     'django_celery_results',
     
     # FireDog apps
-#    'api',
     'api.apps.ApiConfig',
     'targets.apps.TargetsConfig',
     'rules.apps.RulesConfig',
@@ -184,40 +184,104 @@ FIREDOG_PACKAGE_PATH = config('FIREDOG_PACKAGE_PATH', default=str(BASE_DIR.paren
 FIREDOG_ANALYSIS_RESULTS_PATH = config('ANALYSIS_RESULTS_PATH', default='/tmp/firedog-analysis.json')
 FIREDOG_FETCH_INTERVAL = config('FETCH_INTERVAL', default=10, cast=int)
 
-# Logging Configuration
+# ==================== LOGGING CONFIGURATION ====================
+# Crea directory logs se non esiste
+LOGS_DIR = BASE_DIR / 'logs'
+os.makedirs(LOGS_DIR, exist_ok=True)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {asctime} {message}',
             'style': '{',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'django_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'django.log',
+            'maxBytes': 10485760,  # 10MB
+            'backupCount': 5,
             'formatter': 'verbose',
         },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'django.log',
+        'celery_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'celery.log',
+            'maxBytes': 10485760,  # 10MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+        },
+        'application_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'application.log',
+            'maxBytes': 10485760,  # 10MB
+            'backupCount': 5,
             'formatter': 'verbose',
         },
     },
     'root': {
-        'handlers': ['console', 'file'],
+        'handlers': ['console', 'application_file'],
         'level': 'INFO',
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console', 'django_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console', 'django_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'daphne': {
+            'handlers': ['console', 'django_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'celery': {
+            'handlers': ['console', 'celery_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'celery.worker': {
+            'handlers': ['console', 'celery_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'celery.beat': {
+            'handlers': ['console', 'celery_file'],
             'level': 'INFO',
             'propagate': False,
         },
         'firedog': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console', 'application_file'],
             'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+        'targets': {
+            'handlers': ['console', 'application_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'rules': {
+            'handlers': ['console', 'application_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'threats': {
+            'handlers': ['console', 'application_file'],
+            'level': 'INFO',
             'propagate': False,
         },
     },

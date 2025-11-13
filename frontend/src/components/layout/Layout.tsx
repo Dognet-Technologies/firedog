@@ -49,8 +49,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       icon: 'activity',
       subItems: [
         { id: 'monitoring-threats', label: 'Threat Detection', icon: 'alert', path: '/threats' },
-        { id: 'monitoring-traffic', label: 'Traffico Rete', icon: 'network', path: '/monitoring/traffic' },
-        { id: 'monitoring-performance', label: 'Performance', icon: 'cpu', path: '/monitoring/performance' },
       ],
     },
     {
@@ -65,8 +63,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       icon: 'file-text',
       subItems: [
         { id: 'logs-audit', label: 'Audit Logs', icon: 'book', path: '/audit' },
-        { id: 'logs-system', label: 'System Logs', icon: 'terminal', path: '/logs/system' },
-        { id: 'logs-firewall', label: 'Firewall Logs', icon: 'shield', path: '/logs/firewall' },
+        { id: 'logs-firedog', label: 'System Logs', icon: 'terminal', path: '/logs' },
       ],
     },
     {

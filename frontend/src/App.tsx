@@ -1,5 +1,6 @@
 /**
  * Main App Component with Routing
+import Whitelist from './pages/Whitelist';
  */
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
@@ -13,18 +14,15 @@ import Dashboard from './pages/Dashboard';
 import Targets from './pages/Targets';
 import Settings from './pages/Settings';
 import './App.css';
-
 import Rules from './pages/FirewallRules';
 import Threats from './pages/Threats';
 import Audit from './pages/Audit';
 import Integrity from './pages/Integrity';
-import AuditLogs from './pages/AuditLogs';
-import FirewallLogs from './pages/FirewallLogs';
 import MonitoringTraffic from './pages/MonitoringTraffic';
 import MonitoringPerformance from './pages/MonitoringPerformance';
 import SystemLogs from './pages/SystemLogs';
-import Whitelist from './pages/Whitelist';
 import BlockedIPs from './pages/BlockedIPs';
+import LogsPage from './pages/LogsPage';
 
 
 
@@ -125,57 +123,29 @@ function App() {
                 </ProtectedRoute>
               }
               />
-            <Route
-              path="/logs/audit"
+            <Route 
+              path="/logs" 
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <AuditLogs />
+                    <LogsPage />
                   </Layout>
                 </ProtectedRoute>
-              }
+              } 
             />
-            <Route
-              path="/logs/firewall"
+
+            {/* Audit Logs */}
+            <Route 
+              path="/audit" 
               element={
                 <ProtectedRoute>
                   <Layout>
-                    <AuditLogs />
+                    <Audit />
                   </Layout>
                 </ProtectedRoute>
-              }
+              } 
             />
             <Route
-              path="/logs/system"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <AuditLogs />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/monitoring/traffic"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <AuditLogs />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/monitoring/performance"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <AuditLogs />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-              <Route
                 path="/firewall/blocked"
                 element={
                   <ProtectedRoute>
@@ -185,18 +155,6 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-
-              <Route
-                path="/firewall/whitelist"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Whitelist />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-
             <Route 
               path="/threats" 
               element={

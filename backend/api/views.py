@@ -28,10 +28,11 @@ class StatisticsViewSet(viewsets.ReadOnlyModelViewSet):
     
     Endpoints:
  
-    """
+    
     GET /api/targets/{target_id}/stats/ 
     GET /api/targets/{target_id}/stats/latest/
     GET /api/targets/{target_id}/stats/{id}/
+    """
 
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -53,8 +54,9 @@ class StatisticsViewSet(viewsets.ReadOnlyModelViewSet):
         
         
         Restituisce l'ultima statistica registrata
-        """
         GET /api/targets/{target_id}/stats/latest/
+        """
+        
         stats = self.get_queryset().first()
         
         if not stats:
@@ -72,8 +74,8 @@ class StatisticsViewSet(viewsets.ReadOnlyModelViewSet):
         
         
         Restituisce lo storico stats nelle ultime N ore
-        """
         GET /api/targets/{target_id}/stats/history/?hours=24
+        """
 
         hours = int(request.query_params.get('hours', 24))
         since = timezone.now() - timedelta(hours=hours)
@@ -94,11 +96,11 @@ class ThreatLogViewSet(viewsets.ReadOnlyModelViewSet):
     
     Endpoints:
     - 
-    """
     GET /api/targets/{target_id}/threats/
     GET /api/targets/{target_id}/threats/{id}/ 
     POST /api/targets/{target_id}/threats/{id}/acknowledge/
     GET /api/targets/{target_id}/threats/summary/ 
+    """
 
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -120,8 +122,8 @@ class ThreatLogViewSet(viewsets.ReadOnlyModelViewSet):
         
         
         Marca una minaccia come acknowledged
-        """
         POST /api/targets/{target_id}/threats/{id}/acknowledge/
+        """
 
         threat = self.get_object()
         threat.acknowledged = True
@@ -146,8 +148,8 @@ class ThreatLogViewSet(viewsets.ReadOnlyModelViewSet):
         
         
         Restituisce riepilogo threats per severity
-        """
         GET /api/targets/{target_id}/threats/summary/?hours=24
+        """
 
         hours = int(request.query_params.get('hours', 24))
         since = timezone.now() - timedelta(hours=hours)
@@ -180,9 +182,9 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     
     Endpoints:
     -  - Log specifico
-    """
     GET /api/logs/audit/
     GET /api/logs/audit/{id}/
+    """
     
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -202,8 +204,8 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
        
         
         Ultimi N audit logs
-        """
         GET /api/logs/audit/recent/?hours=24&limit=100
+        """
    
         hours = int(request.query_params.get('hours', 24))
         limit = int(request.query_params.get('limit', 100))
@@ -224,9 +226,9 @@ class NetworkTrafficViewSet(viewsets.ViewSet):
     
     Endpoints:
     -  - Analisi traffico
-    """
     GET /api/targets/{target_id}/traffic/realtime/ 
     GET /api/targets/{target_id}/traffic/analyze/
+    """
     
     permission_classes = [IsAuthenticated]
     
@@ -236,8 +238,8 @@ class NetworkTrafficViewSet(viewsets.ViewSet):
         
         
         Ottiene stats in tempo reale
-        """
         GET /api/targets/{target_id}/traffic/realtime/
+        """
 
         from targets.models import Target, Statistics
         
@@ -274,8 +276,8 @@ class NetworkTrafficViewSet(viewsets.ViewSet):
         
         
         Triggera analisi traffico sul target
-        """
         POST /api/targets/{target_id}/traffic/analyze/
+        """
         Body: {"hours": 24}
 
         from targets.models import Target
@@ -339,8 +341,8 @@ class PerformanceViewSet(viewsets.ViewSet):
     
     Endpoints:
     -  - Metriche sistema
-    """
     GET /api/targets/{target_id}/performance/
+    """
 
     permission_classes = [IsAuthenticated]
     
@@ -349,11 +351,11 @@ class PerformanceViewSet(viewsets.ViewSet):
         
         
         Ottiene metriche CPU, RAM, Disk (future implementation)
-        """
         # TODO: Implementare quando saranno disponibili i comandi
         # per recuperare metriche sistema dal target
         
         GET /api/targets/{target_id}/performance/
+        """
 
 
         return Response({
@@ -366,29 +368,92 @@ class PerformanceViewSet(viewsets.ViewSet):
             ]
         })
 
+# ==================== LOG VIEWS ====================
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.conf import settings
+import os
 
-# ============================================
-# URL ROUTING
-# ============================================
-# Aggiungi in backend/firedog/urls.py:
-#
-# from rest_framework_nested import routers
-# from api.views import (
-#     StatisticsViewSet,
-#     ThreatLogViewSet,
-#     AuditLogViewSet,
-#     NetworkTrafficViewSet,
-#     PerformanceViewSet
-# )
-#
-# # Nested router per target-specific endpoints
-# targets_router = routers.NestedSimpleRouter(router, r'targets', lookup='target')
-# targets_router.register(r'stats', StatisticsViewSet, basename='target-stats')
-# targets_router.register(r'threats', ThreatLogViewSet, basename='target-threats')
-# targets_router.register(r'traffic', NetworkTrafficViewSet, basename='target-traffic')
-# targets_router.register(r'performance', PerformanceViewSet, basename='target-performance')
-#
-# # Logs endpoints (non nested)
-# router.register(r'logs/audit', AuditLogViewSet, basename='audit-logs')
-#
-# urlpatterns += targets_router.urls
+
+class LogAPIView(APIView):
+    """
+    API per recuperare log
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """
+        GET /api/logs/?source=django&lines=100
+        """
+        source = request.query_params.get('source', 'django')
+        lines = int(request.query_params.get('lines', 100))
+        
+        logs_dir = settings.LOGS_DIR
+        
+        log_files = {
+            'django': logs_dir / 'django.log',
+            'celery': logs_dir / 'celery.log',
+            'application': logs_dir / 'application.log',
+        }
+        
+        file_path = log_files.get(source)
+        
+        if not file_path or not os.path.exists(file_path):
+            return Response({
+                'source': source,
+                'logs': [],
+                'message': 'Log file not found'
+            })
+        
+        try:
+            with open(file_path, 'r') as f:
+                all_lines = f.readlines()
+                last_lines = [line.strip() for line in all_lines[-lines:] if line.strip()]
+            
+            return Response({
+                'source': source,
+                'logs': last_lines,
+                'total_lines': len(last_lines)
+            })
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=500)
+
+
+class LogSourcesAPIView(APIView):
+    """
+    API per elencare sorgenti log disponibili
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """
+        GET /api/logs/sources/
+        """
+        logs_dir = settings.LOGS_DIR
+        
+        sources = []
+        log_files = {
+            'django': {
+                'name': 'Django/Daphne',
+                'path': logs_dir / 'django.log',
+                'description': 'Log del server web Django e Daphne'
+            },
+            'celery': {
+                'name': 'Celery',
+                'path': logs_dir / 'celery.log',
+                'description': 'Log dei task Celery Worker e Beat'
+            },
+            'application': {
+                'name': 'Application',
+                'path': logs_dir / 'application.log',
+                'description': 'Log generale dell\'applicazione FireDog'
+            },
+        }
+        
+        for key, info in log_files.items():
+            file_path = info['path']
+            exists = os.path.exists(file_path)
+            size
