@@ -6,7 +6,6 @@ from django.db import models
 from django.core.validators import validate_ipv46_address
 from django.utils import timezone
 
-
 class Target(models.Model):
     """
     Sistema target remoto su cui viene gestito il firewall
@@ -367,3 +366,223 @@ class GroupRuleTemplate(models.Model):
             cmd_parts.extend(['-m', 'comment', '--comment', f'"{self.comment}"'])
         
         return ' '.join(cmd_parts)
+
+class WhitelistEntry(models.Model):
+    """
+    Entry nella whitelist - IP o subnet autorizzati permanentemente
+    Questi IP bypassano completamente le regole del firewall
+    """
+    # Relazione con target
+    target = models.ForeignKey(
+        Target,
+        on_delete=models.CASCADE,
+        related_name='whitelist_entries',
+        help_text="Target su cui applicare la whitelist"
+    )
+
+    # IP o subnet
+    ip_address = models.CharField(
+        max_length=50,
+        help_text="Indirizzo IP o subnet CIDR (es. 192.168.1.0/24)"
+    )
+
+    description = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="Descrizione dell'IP o subnet"
+    )
+
+    # Metadata
+    added_by = models.CharField(
+        max_length=100,
+        help_text="Utente che ha aggiunto l'entry"
+    )
+
+    added_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text="Quando è stata aggiunta"
+    )
+
+    last_seen = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Ultimo accesso rilevato da questo IP"
+    )
+
+    hit_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Numero di connessioni da questo IP"
+    )
+
+    # Stato
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Se disabilitato, l'IP non è più in whitelist"
+    )
+
+    class Meta:
+        ordering = ['-added_at']
+        indexes = [
+            models.Index(fields=['target', 'is_active']),
+            models.Index(fields=['ip_address']),
+            models.Index(fields=['-added_at']),
+        ]
+        unique_together = ['target', 'ip_address']
+        verbose_name = 'Whitelist Entry'
+        verbose_name_plural = 'Whitelist Entries'
+
+    def __str__(self):
+        return f"{self.ip_address} on {self.target.hostname}"
+
+    @property
+    def is_subnet(self):
+        """Verifica se è una subnet CIDR"""
+        return '/' in self.ip_address
+
+    def increment_hit_count(self):
+        """Incrementa contatore accessi e aggiorna last_seen"""
+        self.hit_count += 1
+        self.last_seen = timezone.now()
+        self.save(update_fields=['hit_count', 'last_seen'])
+
+
+class BlockedIP(models.Model):
+    """
+    IP bloccato manualmente o automaticamente dal sistema
+    """
+    BLOCK_REASON_CHOICES = [
+        ('manual', 'Manual Block'),
+        ('threat_detected', 'Threat Detected'),
+        ('port_scan', 'Port Scanning'),
+        ('brute_force', 'Brute Force Attack'),
+        ('syn_flood', 'SYN Flood'),
+        ('ddos', 'DDoS Attack'),
+        ('malware', 'Malware Activity'),
+        ('other', 'Other'),
+    ]
+
+    # Relazione con target
+    target = models.ForeignKey(
+        Target,
+        on_delete=models.CASCADE,
+        related_name='blocked_ips',
+        help_text="Target su cui bloccare l'IP"
+    )
+
+    # IP bloccato
+    ip_address = models.GenericIPAddressField(
+        validators=[validate_ipv46_address],
+        db_index=True,
+        help_text="Indirizzo IP bloccato"
+    )
+
+    # Motivo blocco
+    block_reason = models.CharField(
+        max_length=20,
+        choices=BLOCK_REASON_CHOICES,
+        default='manual',
+        help_text="Motivo del blocco"
+    )
+
+    description = models.TextField(
+        blank=True,
+        help_text="Descrizione dettagliata del blocco"
+    )
+
+    # Metadata
+    blocked_by = models.CharField(
+        max_length=100,
+        help_text="Utente o sistema che ha bloccato l'IP"
+    )
+
+    blocked_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text="Quando è stato bloccato"
+    )
+
+    # Statistiche minaccia
+    threat_score = models.PositiveIntegerField(
+        default=0,
+        help_text="Score della minaccia (0-100)"
+    )
+
+    packet_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Numero di pacchetti bloccati da questo IP"
+    )
+
+    last_attempt = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Ultimo tentativo di connessione"
+    )
+
+    # Blocco temporaneo
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Scadenza blocco (null = permanente)"
+    )
+
+    # Stato
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Se falso, il blocco è stato rimosso"
+    )
+
+    unblocked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Quando è stato sbloccato"
+    )
+
+    unblocked_by = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Utente che ha rimosso il blocco"
+    )
+
+    class Meta:
+        ordering = ['-blocked_at']
+        indexes = [
+            models.Index(fields=['target', 'is_active']),
+            models.Index(fields=['ip_address', 'is_active']),
+            models.Index(fields=['block_reason']),
+            models.Index(fields=['-blocked_at']),
+            models.Index(fields=['expires_at']),
+        ]
+        unique_together = ['target', 'ip_address']
+        verbose_name = 'Blocked IP'
+        verbose_name_plural = 'Blocked IPs'
+
+    def __str__(self):
+        return f"{self.ip_address} blocked on {self.target.hostname}"
+
+    @property
+    def is_expired(self):
+        """Verifica se il blocco è scaduto"""
+        if not self.expires_at:
+            return False
+        return timezone.now() > self.expires_at
+
+    @property
+    def is_permanent(self):
+        """Verifica se il blocco è permanente"""
+        return self.expires_at is None
+
+    def unblock(self, unblocked_by: str):
+        """Sblocca l'IP"""
+        self.is_active = False
+        self.unblocked_at = timezone.now()
+        self.unblocked_by = unblocked_by
+        self.save(update_fields=['is_active', 'unblocked_at', 'unblocked_by'])
+
+    def increment_packet_count(self, count: int = 1):
+        """Incrementa contatore pacchetti bloccati"""
+        self.packet_count += count
+        self.last_attempt = timezone.now()
+        self.save(update_fields=['packet_count', 'last_attempt'])

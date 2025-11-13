@@ -1,45 +1,43 @@
 /**
- * Blocked IPs Page
- * Gestione IP bloccati dal firewall
+ * Blocked IPs Page 
+ * Gestione IP bloccati manualmente o automaticamente
  */
 import React, { useEffect, useState } from 'react';
 import apiService from '../services/api';
-import type { Target } from '../types';
 import './BlockedIPs.css';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useTarget } from '../contexts/TargetContext';
 
 interface BlockedIP {
   id: number;
   ip_address: string;
-  reason: string;
-  threat_score: number;
-  block_type: 'manual' | 'automatic';
+  block_reason: string;
+  block_reason_display: string;
+  description: string;
   blocked_by: string;
   blocked_at: string;
+  threat_score: number;
   packet_count: number;
   last_attempt?: string;
-  country_code?: string;
-  expires_at?: string | null;
+  expires_at?: string;
+  is_active: boolean;
+  is_permanent: boolean;
 }
 
 const BlockedIPs: React.FC = () => {
+  const { selectedTarget } = useTarget();
   const [blockedIPs, setBlockedIPs] = useState<BlockedIP[]>([]);
-  const [targets, setTargets] = useState<Target[]>([]);
-  const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const { showToast, showConfirm } = useNotifications();
-  const [filterType, setFilterType] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterReason, setFilterReason] = useState<string>('all');
   const [newBlock, setNewBlock] = useState({
     ip_address: '',
-    reason: '',
-    duration: 'permanent',
+    block_reason: 'manual',
+    description: '',
+    threat_score: 50,
   });
-
-  useEffect(() => {
-    loadTargets();
-  }, []);
 
   useEffect(() => {
     if (selectedTarget) {
@@ -47,111 +45,37 @@ const BlockedIPs: React.FC = () => {
     }
   }, [selectedTarget]);
 
-  const loadTargets = async () => {
-    try {
-      const response = await apiService.getTargets();
-      setTargets(response.results.filter(t => t.status === 'online'));
-      if (response.results.length > 0) {
-        setSelectedTarget(response.results[0].id);
-      }
-    } catch (error) {
-      console.error('Error loading targets:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const loadBlockedIPs = async () => {
     if (!selectedTarget) return;
 
     try {
       setLoading(true);
       
-      // TODO: Implementare API backend per blocked IPs
-      // Per ora uso dati mock
-      const mockBlocked = generateMockBlockedIPs();
-      setBlockedIPs(mockBlocked);
+      //const response = await apiService.api.get(`/blocked-ips/by_target/?target_id=${selectedTarget.id}`);
+      const response = await apiService.getBlockedIPsByTarget(selectedTarget.id);
+      setBlockedIPs(response.data.results || []);
       
     } catch (error) {
       console.error('Error loading blocked IPs:', error);
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile caricare gli IP bloccati'
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const generateMockBlockedIPs = (): BlockedIP[] => {
-    return [
-      {
-        id: 1,
-        ip_address: '45.142.120.10',
-        reason: 'SSH Brute Force Attack',
-        threat_score: 95,
-        block_type: 'automatic',
-        blocked_by: 'firewall-system',
-        blocked_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-        packet_count: 15234,
-        last_attempt: new Date(Date.now() - 300000).toISOString(),
-        country_code: 'RU',
-        expires_at: null,
-      },
-      {
-        id: 2,
-        ip_address: '103.251.167.20',
-        reason: 'Port Scanning Detected',
-        threat_score: 88,
-        block_type: 'automatic',
-        blocked_by: 'firewall-system',
-        blocked_at: new Date(Date.now() - 7200000).toISOString(),
-        packet_count: 8921,
-        last_attempt: new Date(Date.now() - 1800000).toISOString(),
-        country_code: 'CN',
-        expires_at: null,
-      },
-      {
-        id: 3,
-        ip_address: '185.220.101.50',
-        reason: 'Manual Block - Suspicious Activity',
-        threat_score: 75,
-        block_type: 'manual',
-        blocked_by: 'admin',
-        blocked_at: new Date(Date.now() - 86400000).toISOString(),
-        packet_count: 234,
-        last_attempt: new Date(Date.now() - 3600000).toISOString(),
-        country_code: 'DE',
-        expires_at: new Date(Date.now() + 86400000 * 7).toISOString(),
-      },
-      {
-        id: 4,
-        ip_address: '192.99.142.250',
-        reason: 'DDoS Attempt',
-        threat_score: 100,
-        block_type: 'automatic',
-        blocked_by: 'firewall-system',
-        blocked_at: new Date(Date.now() - 1800000).toISOString(),
-        packet_count: 45678,
-        last_attempt: new Date(Date.now() - 120000).toISOString(),
-        country_code: 'US',
-        expires_at: null,
-      },
-      {
-        id: 5,
-        ip_address: '91.134.203.10',
-        reason: 'SQL Injection Attempts',
-        threat_score: 82,
-        block_type: 'automatic',
-        blocked_by: 'firewall-system',
-        blocked_at: new Date(Date.now() - 14400000).toISOString(),
-        packet_count: 3421,
-        last_attempt: new Date(Date.now() - 7200000).toISOString(),
-        country_code: 'FR',
-        expires_at: null,
-      },
-    ];
-  };
-
   const handleAddBlock = async () => {
+    if (!selectedTarget) return;
+
     if (!newBlock.ip_address.trim()) {
-      alert('Inserisci un indirizzo IP');
+      showToast({
+        type: 'warning',
+        title: 'Attenzione',
+        message: 'Inserisci un indirizzo IP'
+      });
       return;
     }
 
@@ -161,81 +85,73 @@ const BlockedIPs: React.FC = () => {
       showToast({
         type: 'error',
         title: 'Formato non valido',
-        message: 'Inserisci un indirizzo IP valido (es: 192.168.1.100)'
+        message: 'Usa il formato: 192.168.1.1'
       });
       return;
     }
 
     try {
-      // TODO: Implementare API backend
-      // await apiService.blockIP(selectedTarget, newBlock);
-      
-      const expiresAt = newBlock.duration === 'permanent' 
-        ? null 
-        : new Date(Date.now() + parseInt(newBlock.duration) * 3600000).toISOString();
-      
-      const mockEntry: BlockedIP = {
-        id: Date.now(),
+      await apiService.createBlockedIP({
+        target: selectedTarget.id,
         ip_address: newBlock.ip_address,
-        reason: newBlock.reason || 'Manual Block',
-        threat_score: 0,
-        block_type: 'manual',
+        block_reason: newBlock.block_reason,
+        description: newBlock.description,
+        threat_score: newBlock.threat_score,
         blocked_by: 'current_user',
-        blocked_at: new Date().toISOString(),
-        packet_count: 0,
-        expires_at: expiresAt,
-      };
+      });
       
-      setBlockedIPs([mockEntry, ...blockedIPs]);
+      showToast({
+        type: 'success',
+        title: 'IP bloccato',
+        message: `${newBlock.ip_address} aggiunto alla blacklist`
+      });
+      
       setShowAddModal(false);
-      setNewBlock({ ip_address: '', reason: '', duration: 'permanent' });
+      setNewBlock({
+        ip_address: '',
+        block_reason: 'manual',
+        description: '',
+        threat_score: 50,
+      });
+      loadBlockedIPs();
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error blocking IP:', error);
       showToast({
         type: 'error',
         title: 'Errore',
-        message: 'Impossibile bloccare l\'IP'
+        message: error.response?.data?.error || 'Impossibile bloccare IP'
       });
     }
   };
 
-    const handleUnblock = async (id: number, ip: string) => {
-      showConfirm({
-        title: 'Conferma Sblocco',
-        message: `Vuoi sbloccare ${ip} e permettere nuovamente il traffico?`,
-        confirmText: 'Sblocca',
-        cancelText: 'Annulla',
-        onConfirm: async () => {
-          try {
-            // TODO: Implementare API backend
-            // await apiService.unblockIP(selectedTarget, id);
-            
-            setBlockedIPs(blockedIPs.filter(b => b.id !== id));
-            
-            showToast({
-              type: 'success',
-              title: 'IP sbloccato',
-              message: `${ip} è stato rimosso dalla lista bloccati`
-            });
-            
-          } catch (error) {
-            console.error('Error unblocking IP:', error);
-            showToast({
-              type: 'error',
-              title: 'Errore',
-              message: 'Impossibile sbloccare l\'IP'
-            });
-          }
+  const handleUnblock = async (id: number, ip: string) => {
+    showConfirm({
+      title: 'Conferma Sblocco',
+      message: `Sbloccare ${ip}?`,
+      confirmText: 'Sblocca',
+      cancelText: 'Annulla',
+      onConfirm: async () => {
+        try {
+          await apiService.unblockIP(id);
+          
+          showToast({
+            type: 'success',
+            title: 'IP sbloccato',
+            message: `${ip} rimosso dalla blacklist`
+          });
+          
+          loadBlockedIPs();
+        } catch (error) {
+          console.error('Error unblocking IP:', error);
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: 'Impossibile sbloccare IP'
+          });
         }
-      });
-    };
-
-  const getThreatColor = (score: number) => {
-    if (score >= 90) return 'critical';
-    if (score >= 70) return 'high';
-    if (score >= 50) return 'medium';
-    return 'low';
+      }
+    });
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -263,20 +179,34 @@ const BlockedIPs: React.FC = () => {
     }).format(date);
   };
 
-  const filteredIPs = blockedIPs.filter(ip => {
-    const matchesSearch = ip.ip_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ip.reason.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === 'all' || ip.block_type === filterType;
-    return matchesSearch && matchesType;
+  const getThreatColor = (score: number) => {
+    if (score >= 80) return '#f44336'; // Critical
+    if (score >= 60) return '#ff9800'; // High
+    if (score >= 40) return '#ffc107'; // Medium
+    return '#4caf50'; // Low
+  };
+
+  const filteredIPs = blockedIPs.filter(block => {
+    const matchSearch = block.ip_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                       block.description.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchReason = filterReason === 'all' || block.block_reason === filterReason;
+    return matchSearch && matchReason;
   });
 
-  const stats = {
-    total: blockedIPs.length,
-    automatic: blockedIPs.filter(ip => ip.block_type === 'automatic').length,
-    manual: blockedIPs.filter(ip => ip.block_type === 'manual').length,
-    permanent: blockedIPs.filter(ip => !ip.expires_at).length,
-    temporary: blockedIPs.filter(ip => ip.expires_at).length,
-  };
+  if (!selectedTarget) {
+    return (
+      <div className="blocked-ips-page">
+        <div className="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+          </svg>
+          <h3>Nessun Target Selezionato</h3>
+          <p>Seleziona un target dal menu in alto per gestire gli IP bloccati</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="blocked-ips-page">
@@ -284,223 +214,165 @@ const BlockedIPs: React.FC = () => {
         <div className="header-content">
           <h1>
             <svg className="page-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M4.93 4.93l14.14 14.14"></path>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
             </svg>
-            IP Bloccati
+            Blocked IPs
           </h1>
-          <p>Gestione IP bannati dal firewall</p>
+          <p>
+            Target: <strong>{selectedTarget.hostname || selectedTarget.ip_address}</strong>
+          </p>
         </div>
         <div className="header-actions">
           <button className="btn-primary" onClick={() => setShowAddModal(true)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M4.93 4.93l14.14 14.14"></path>
+              <path d="M12 4v16m8-8H4"></path>
             </svg>
             Blocca IP
           </button>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon danger">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M4.93 4.93l14.14 14.14"></path>
-            </svg>
-          </div>
-          <div className="stat-content">
-            <span className="stat-label">Totale Bloccati</span>
-            <span className="stat-value">{stats.total}</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon warning">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-            </svg>
-          </div>
-          <div className="stat-content">
-            <span className="stat-label">Automatici</span>
-            <span className="stat-value">{stats.automatic}</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon info">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-            </svg>
-          </div>
-          <div className="stat-content">
-            <span className="stat-label">Manuali</span>
-            <span className="stat-value">{stats.manual}</span>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-icon success">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-          </div>
-          <div className="stat-content">
-            <span className="stat-label">Temporanei</span>
-            <span className="stat-value">{stats.temporary}</span>
-          </div>
-        </div>
-      </div>
-
       {/* Controls */}
       <div className="controls-section">
-        <div className="control-group">
-          <label>Target</label>
-          <select
-            value={selectedTarget || ''}
-            onChange={(e) => setSelectedTarget(Number(e.target.value))}
-            disabled={loading}
-          >
-            <option value="">Seleziona un target</option>
-            {targets.map((target) => (
-              <option key={target.id} value={target.id}>
-                {target.hostname} ({target.ip_address})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="control-group">
-          <label>Tipo</label>
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-          >
-            <option value="all">Tutti</option>
-            <option value="automatic">Automatici</option>
-            <option value="manual">Manuali</option>
-          </select>
-        </div>
-
         <div className="control-group search-group">
           <label>Cerca</label>
           <input
             type="text"
-            placeholder="Filtra per IP o motivo..."
+            placeholder="Filtra per IP o descrizione..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
-        <button className="btn-refresh" onClick={loadBlockedIPs} disabled={loading}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2"></path>
-          </svg>
-          Aggiorna
-        </button>
+        <div className="control-group">
+          <label>Motivo Blocco</label>
+          <select value={filterReason} onChange={(e) => setFilterReason(e.target.value)}>
+            <option value="all">Tutti</option>
+            <option value="manual">Manuale</option>
+            <option value="threat_detected">Minaccia Rilevata</option>
+            <option value="port_scan">Port Scan</option>
+            <option value="brute_force">Brute Force</option>
+            <option value="syn_flood">SYN Flood</option>
+            <option value="ddos">DDoS</option>
+          </select>
+        </div>
+
+        <div className="stats-display">
+          <span className="stat-item">
+            <strong>{blockedIPs.filter(b => b.is_active).length}</strong> bloccati
+          </span>
+          <span className="stat-item">
+            <strong>{filteredIPs.length}</strong> visualizzati
+          </span>
+        </div>
       </div>
 
-      {/* Blocked IPs List */}
-      <div className="blocked-container">
+      {/* Blocked IPs Table */}
+      <div className="blocked-ips-container">
         {loading ? (
           <div className="loading-state">
             <div className="spinner"></div>
             <p>Caricamento IP bloccati...</p>
           </div>
-        ) : !selectedTarget ? (
-          <div className="empty-state">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M4.93 4.93l14.14 14.14"></path>
-            </svg>
-            <h3>Seleziona un Target</h3>
-            <p>Scegli un target per visualizzare gli IP bloccati</p>
-          </div>
         ) : filteredIPs.length === 0 ? (
           <div className="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <h3>Nessun IP Bloccato</h3>
-            <p>Non ci sono IP attualmente bloccati con questi filtri</p>
+            <p>Gli IP bloccati appariranno qui</p>
           </div>
         ) : (
-          <div className="blocked-list">
-            {filteredIPs.map((blocked) => (
-              <div key={blocked.id} className={`blocked-card threat-${getThreatColor(blocked.threat_score)}`}>
-                <div className="blocked-header">
-                  <div className="ip-info">
-                    <code className="ip-address">{blocked.ip_address}</code>
-                    {blocked.country_code && (
-                      <span className="country-badge">{blocked.country_code}</span>
-                    )}
-                    <span className={`block-type-badge ${blocked.block_type}`}>
-                      {blocked.block_type === 'automatic' ? '🤖 Auto' : '👤 Manual'}
-                    </span>
-                  </div>
-                  <div className="threat-score-badge">
-                    Score: <strong>{blocked.threat_score}</strong>/100
-                  </div>
-                </div>
-
-                <div className="blocked-body">
-                  <div className="info-row">
-                    <span className="info-label">Motivo:</span>
-                    <span className="info-value">{blocked.reason}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">Bloccato da:</span>
-                    <span className="info-value">{blocked.blocked_by}</span>
-                  </div>
-                  <div className="info-grid">
-                    <div className="info-item">
-                      <span className="info-label">Data Blocco</span>
-                      <span className="info-value">{formatDate(blocked.blocked_at)}</span>
-                    </div>
-                    <div className="info-item">
-                      <span className="info-label">Ultimo Tentativo</span>
-                      <span className="info-value">
-                        {blocked.last_attempt ? formatTimestamp(blocked.last_attempt) : 'N/A'}
+          <div className="blocked-ips-table-wrapper">
+            <table className="blocked-ips-table">
+              <thead>
+                <tr>
+                  <th>IP Address</th>
+                  <th>Motivo</th>
+                  <th>Threat Score</th>
+                  <th>Packets Blocked</th>
+                  <th>Bloccato Da</th>
+                  <th>Data Blocco</th>
+                  <th>Ultimo Tentativo</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredIPs.map((block) => (
+                  <tr key={block.id} className="blocked-ip-row">
+                    <td className="ip-cell">
+                      <code className="ip-address">{block.ip_address}</code>
+                      {block.is_permanent && (
+                        <span className="permanent-badge">PERMANENTE</span>
+                      )}
+                    </td>
+                    <td className="reason-cell">
+                      <span className={`reason-badge reason-${block.block_reason}`}>
+                        {block.block_reason_display}
                       </span>
-                    </div>
-                    <div className="info-item">
-                      <span className="info-label">Pacchetti</span>
-                      <span className="info-value">{blocked.packet_count.toLocaleString()}</span>
-                    </div>
-                    <div className="info-item">
-                      <span className="info-label">Scadenza</span>
-                      <span className="info-value">
-                        {blocked.expires_at ? formatDate(blocked.expires_at) : '∞ Permanente'}
+                    </td>
+                    <td className="score-cell">
+                      <div className="threat-score-bar">
+                        <div 
+                          className="threat-score-fill"
+                          style={{ 
+                            width: `${block.threat_score}%`,
+                            background: getThreatColor(block.threat_score)
+                          }}
+                        />
+                        <span className="threat-score-text">{block.threat_score}/100</span>
+                      </div>
+                    </td>
+                    <td className="packets-cell">
+                      <span className="packet-count">
+                        {block.packet_count.toLocaleString()}
                       </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="blocked-footer">
-                  <button
-                    className="btn-unblock"
-                    onClick={() => handleUnblock(blocked.id, blocked.ip_address)}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <path d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
-                    </svg>
-                    Sblocca IP
-                  </button>
-                </div>
-              </div>
-            ))}
+                    </td>
+                    <td className="user-cell">
+                      <div className="user-avatar">
+                        {block.blocked_by.charAt(0).toUpperCase()}
+                      </div>
+                      <span>{block.blocked_by}</span>
+                    </td>
+                    <td className="date-cell">
+                      {formatDate(block.blocked_at)}
+                    </td>
+                    <td className="last-attempt-cell">
+                      {block.last_attempt ? (
+                        <span className="last-attempt">
+                          {formatTimestamp(block.last_attempt)}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="actions-cell">
+                      <button
+                        className="btn-icon btn-success"
+                        onClick={() => handleUnblock(block.id, block.ip_address)}
+                        title="Sblocca IP"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path d="M15.5 6.5A7.5 7.5 0 1023 14v-2a7.5 7.5 0 00-7.5-7.5zM1 12a11 11 0 0111-11v0" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Add Modal */}
+      {/* Add Block Modal */}
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Blocca Indirizzo IP</h2>
+              <h2>Blocca IP</h2>
               <button className="modal-close" onClick={() => setShowAddModal(false)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <path d="M6 18L18 6M6 6l12 12"></path>
@@ -522,36 +394,53 @@ const BlockedIPs: React.FC = () => {
               </div>
 
               <div className="form-group">
-                <label>Motivo</label>
-                <input
-                  type="text"
-                  placeholder="Motivo del blocco..."
-                  value={newBlock.reason}
-                  onChange={(e) => setNewBlock({ ...newBlock, reason: e.target.value })}
-                />
+                <label>Motivo Blocco</label>
+                <select 
+                  value={newBlock.block_reason}
+                  onChange={(e) => setNewBlock({ ...newBlock, block_reason: e.target.value })}
+                >
+                  <option value="manual">Manuale</option>
+                  <option value="threat_detected">Minaccia Rilevata</option>
+                  <option value="port_scan">Port Scan</option>
+                  <option value="brute_force">Brute Force</option>
+                  <option value="syn_flood">SYN Flood</option>
+                  <option value="ddos">DDoS</option>
+                  <option value="malware">Malware</option>
+                  <option value="other">Altro</option>
+                </select>
               </div>
 
               <div className="form-group">
-                <label>Durata</label>
-                <select
-                  value={newBlock.duration}
-                  onChange={(e) => setNewBlock({ ...newBlock, duration: e.target.value })}
-                >
-                  <option value="permanent">Permanente</option>
-                  <option value="1">1 ora</option>
-                  <option value="24">24 ore</option>
-                  <option value="168">7 giorni</option>
-                  <option value="720">30 giorni</option>
-                </select>
+                <label>Threat Score (0-100)</label>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={newBlock.threat_score}
+                  onChange={(e) => setNewBlock({ ...newBlock, threat_score: parseInt(e.target.value) })}
+                />
+                <span className="range-value">{newBlock.threat_score}/100</span>
+              </div>
+
+              <div className="form-group">
+                <label>Descrizione</label>
+                <textarea
+                  placeholder="Descrizione opzionale..."
+                  value={newBlock.description}
+                  onChange={(e) => setNewBlock({ ...newBlock, description: e.target.value })}
+                  rows={3}
+                />
               </div>
 
               <div className="warning-box">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
                 <div>
-                  <strong>Attenzione:</strong> L'IP bloccato non potrà accedere a nessun servizio del target.
-                  Verifica attentamente prima di procedere.
+                  <strong>Attenzione:</strong> L'IP verrà bloccato permanentemente.
+                  Verifica che non sia un indirizzo critico per il sistema.
                 </div>
               </div>
             </div>
@@ -560,10 +449,6 @@ const BlockedIPs: React.FC = () => {
                 Annulla
               </button>
               <button className="btn-danger" onClick={handleAddBlock}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <path d="M4.93 4.93l14.14 14.14"></path>
-                </svg>
                 Blocca IP
               </button>
             </div>

@@ -372,6 +372,38 @@ class ApiService {
       );
       return response.data;
     }
+    // Whitelist methods
+    async getWhitelistByTarget(targetId: number) {
+      const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);
+      return response.data;
+    }
+
+    async createWhitelistEntry(data: any) {
+      const response = await this.api.post('/whitelist/', data);
+      return response.data;
+    }
+
+    async deleteWhitelistEntry(id: number) {
+      const response = await this.api.delete(`/whitelist/${id}/`);
+      return response.data;
+    }
+
+    // Blocked IPs methods
+    async getBlockedIPsByTarget(targetId: number) {
+      const response = await this.api.get(`/blocked-ips/by_target/?target_id=${targetId}`);
+      return response.data;
+    }
+
+    async createBlockedIP(data: any) {
+      const response = await this.api.post('/blocked-ips/', data);
+      return response.data;
+    }
+
+    async unblockIP(id: number) {
+      const response = await this.api.post(`/blocked-ips/${id}/unblock/`);
+      return response.data;
+    }
   }
+
 export default new ApiService();
 

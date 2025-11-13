@@ -3,17 +3,18 @@
 import Whitelist from './pages/Whitelist';
  */
 import React from 'react';
+import './App.css';
+import './contexts/NotificationContext.css';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
-import './contexts/NotificationContext.css';
+import { TargetProvider } from './contexts/TargetContext';
 import Layout from './components/layout/Layout';
 import Discovery from './pages/Discovery';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Targets from './pages/Targets';
 import Settings from './pages/Settings';
-import './App.css';
 import Rules from './pages/FirewallRules';
 import Threats from './pages/Threats';
 import Audit from './pages/Audit';
@@ -60,159 +61,161 @@ const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
 function App() {
   return (
     <AuthProvider>
-      <NotificationProvider>
-        <Router>
-          <Routes>
+      <TargetProvider>
+        <NotificationProvider>
+          <Router>
+            <Routes>
 
-            {/* Protected Routes */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Navigate to="/dashboard" replace />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            {/* Public Routes */}
-            <Route
-              path="/login"
-              element={
-                <PublicRoute>
-                  <Login />
-                </PublicRoute>
-              }
-            />
-            <Route
-              path="/discovery"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Discovery />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Dashboard />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/targets"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Targets />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route 
-              path="firewall/rules" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Rules />
-                  </Layout>
-                </ProtectedRoute>
-              }
-              />
-            <Route 
-              path="/logs" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <LogsPage />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
-
-            {/* Audit Logs */}
-            <Route 
-              path="/audit" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Audit />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route
-                path="/firewall/blocked"
+              {/* Protected Routes */}
+              <Route
+                path="/"
                 element={
                   <ProtectedRoute>
                     <Layout>
-                      <BlockedIPs />
+                      <Navigate to="/dashboard" replace />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              {/* Public Routes */}
+              <Route
+                path="/login"
+                element={
+                  <PublicRoute>
+                    <Login />
+                  </PublicRoute>
+                }
+              />
+              <Route
+                path="/discovery"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Discovery />
                     </Layout>
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/firewall/whitelist"
+                path="/dashboard"
                 element={
                   <ProtectedRoute>
                     <Layout>
-                      <Whitelist />
+                      <Dashboard />
                     </Layout>
                   </ProtectedRoute>
                 }
               />
-            <Route 
-              path="/threats" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Threats />
-                  </Layout>
-                </ProtectedRoute>
-              }
+              <Route
+                path="/targets"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Targets />
+                    </Layout>
+                  </ProtectedRoute>
+                }
               />
-            <Route 
-              path="/audit" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Audit />
-                  </Layout>
-                </ProtectedRoute>
-              }
-              />
-            {/* Settings Routes */}
-            <Route
-              path="/settings/*"
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Settings />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route 
-              path="/integrity" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Integrity />
-                  </Layout>
-                </ProtectedRoute>
-              }
+              <Route 
+                path="firewall/rules" 
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Rules />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+                />
+              <Route 
+                path="/logs" 
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <LogsPage />
+                    </Layout>
+                  </ProtectedRoute>
+                } 
               />
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </Router>
-      </NotificationProvider>
+              {/* Audit Logs */}
+              <Route 
+                path="/audit" 
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Audit />
+                    </Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route
+                  path="/firewall/blocked"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <BlockedIPs />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/firewall/whitelist"
+                  element={
+                    <ProtectedRoute>
+                      <Layout>
+                        <Whitelist />
+                      </Layout>
+                    </ProtectedRoute>
+                  }
+                />
+              <Route 
+                path="/threats" 
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Threats />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+                />
+              <Route 
+                path="/audit" 
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Audit />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+                />
+              {/* Settings Routes */}
+              <Route
+                path="/settings/*"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Settings />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/integrity" 
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Integrity />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+                />
+
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Router>
+        </NotificationProvider>
+       </TargetProvider>
     </AuthProvider>
   );
 }

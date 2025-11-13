@@ -4,9 +4,9 @@
  */
 import React, { useEffect, useState } from 'react';
 import apiService from '../services/api';
-import type { Target } from '../types';
 import './Whitelist.css';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useTarget } from '../contexts/TargetContext';
 
 interface WhitelistEntry {
   id: number;
@@ -16,13 +16,13 @@ interface WhitelistEntry {
   added_at: string;
   last_seen?: string;
   hit_count: number;
+  is_active: boolean;
 }
 
 const Whitelist: React.FC = () => {
+  const { selectedTarget } = useTarget();
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
-  const [targets, setTargets] = useState<Target[]>([]);
-  const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const { showToast, showConfirm } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,28 +32,10 @@ const Whitelist: React.FC = () => {
   });
 
   useEffect(() => {
-    loadTargets();
-  }, []);
-
-  useEffect(() => {
     if (selectedTarget) {
       loadWhitelist();
     }
   }, [selectedTarget]);
-
-  const loadTargets = async () => {
-    try {
-      const response = await apiService.getTargets();
-      setTargets(response.results.filter(t => t.status === 'online'));
-      if (response.results.length > 0) {
-        setSelectedTarget(response.results[0].id);
-      }
-    } catch (error) {
-      console.error('Error loading targets:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadWhitelist = async () => {
     if (!selectedTarget) return;
@@ -61,69 +43,25 @@ const Whitelist: React.FC = () => {
     try {
       setLoading(true);
       
-      // TODO: Implementare API backend per whitelist
-      // Per ora uso dati mock
-      const mockEntries = generateMockWhitelist();
-      setEntries(mockEntries);
+      // API call per whitelist
+      const response = await apiService.getWhitelistByTarget(selectedTarget.id);
+      setEntries(response.data.results || []);
       
     } catch (error) {
       console.error('Error loading whitelist:', error);
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile caricare la whitelist'
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const generateMockWhitelist = (): WhitelistEntry[] => {
-    return [
-      {
-        id: 1,
-        ip_address: '192.168.1.0/24',
-        description: 'Rete locale ufficio',
-        added_by: 'admin',
-        added_at: new Date(Date.now() - 86400000 * 30).toISOString(),
-        last_seen: new Date(Date.now() - 3600000).toISOString(),
-        hit_count: 15234,
-      },
-      {
-        id: 2,
-        ip_address: '10.0.0.50',
-        description: 'Server monitoring Nagios',
-        added_by: 'admin',
-        added_at: new Date(Date.now() - 86400000 * 15).toISOString(),
-        last_seen: new Date(Date.now() - 300000).toISOString(),
-        hit_count: 8921,
-      },
-      {
-        id: 3,
-        ip_address: '172.16.0.0/16',
-        description: 'VPN aziendale',
-        added_by: 'sysadmin',
-        added_at: new Date(Date.now() - 86400000 * 60).toISOString(),
-        last_seen: new Date(Date.now() - 7200000).toISOString(),
-        hit_count: 45678,
-      },
-      {
-        id: 4,
-        ip_address: '203.0.113.10',
-        description: 'API Gateway esterno',
-        added_by: 'devops',
-        added_at: new Date(Date.now() - 86400000 * 7).toISOString(),
-        last_seen: new Date(Date.now() - 1800000).toISOString(),
-        hit_count: 3421,
-      },
-      {
-        id: 5,
-        ip_address: '8.8.8.8',
-        description: 'DNS Google (testing)',
-        added_by: 'admin',
-        added_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-        last_seen: new Date(Date.now() - 600000).toISOString(),
-        hit_count: 1234,
-      },
-    ];
-  };
-
   const handleAddEntry = async () => {
+    if (!selectedTarget) return;
+
     if (!newEntry.ip_address.trim()) {
       showToast({
         type: 'warning',
@@ -145,55 +83,61 @@ const Whitelist: React.FC = () => {
     }
 
     try {
-      // TODO: Implementare API backend
-      // await apiService.addWhitelistEntry(selectedTarget, newEntry);
-      
-      // Mock: aggiungi localmente
-      const mockEntry: WhitelistEntry = {
-        id: Date.now(),
+      await apiService.createWhitelistEntry({
+        target: selectedTarget.id,
         ip_address: newEntry.ip_address,
-        description: newEntry.description || 'Nessuna descrizione',
+        description: newEntry.description,
         added_by: 'current_user',
-        added_at: new Date().toISOString(),
-        hit_count: 0,
-      };
+      });
       
-      setEntries([mockEntry, ...entries]);
-        showToast({
-          type: 'success',
-          title: 'IP aggiunto',
-          message: `${newEntry.ip_address} aggiunto alla whitelist`
-        });
-      setShowAddModal(false);
-      setShowAddModal(false);
-      setNewEntry({ ip_address: '', description: '' });
-      
-    } catch (error) {
-      console.error('Error adding whitelist entry:', error);
-      alert('Errore durante l\'aggiunta dell\'IP alla whitelist');
-    }
-  };
-
-const handleRemoveEntry = async (id: number, ip: string) => {
-    if (!window.confirm(`Rimuovere ${ip} dalla whitelist?`)) return;
-
-    try {
-      // await apiService.removeWhitelistEntry(selectedTarget, id);
-      
-      setEntries(entries.filter(e => e.id !== id));
       showToast({
         type: 'success',
-        title: 'IP rimosso',
-        message: `${ip} rimosso dalla whitelist`
+        title: 'IP aggiunto',
+        message: `${newEntry.ip_address} aggiunto alla whitelist`
       });
-    } catch (error) {
-      console.error('Error removing whitelist entry:', error);
+      
+      setShowAddModal(false);
+      setNewEntry({ ip_address: '', description: '' });
+      loadWhitelist();
+      
+    } catch (error: any) {
+      console.error('Error adding whitelist entry:', error);
       showToast({
         type: 'error',
         title: 'Errore',
-        message: 'Impossibile rimuovere l\'IP dalla whitelist'
+        message: error.response?.data?.error || 'Impossibile aggiungere IP alla whitelist'
       });
     }
+  };
+
+  const handleRemoveEntry = async (id: number, ip: string) => {
+    showConfirm({
+      title: 'Conferma Rimozione',
+      message: `Rimuovere ${ip} dalla whitelist?`,
+      confirmText: 'Rimuovi',
+      cancelText: 'Annulla',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          await apiService.deleteWhitelistEntry(id);
+          
+          showToast({
+            type: 'success',
+            title: 'IP rimosso',
+            message: `${ip} rimosso dalla whitelist`
+          });
+          
+          loadWhitelist();
+        } catch (error) {
+          console.error('Error removing whitelist entry:', error);
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: 'Impossibile rimuovere l\'IP dalla whitelist'
+          });
+        }
+      }
+    });
   };
 
   const formatTimestamp = (timestamp: string) => {
@@ -222,9 +166,26 @@ const handleRemoveEntry = async (id: number, ip: string) => {
   };
 
   const filteredEntries = entries.filter(entry => 
-    entry.ip_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    entry.description.toLowerCase().includes(searchTerm.toLowerCase())
+    entry.is_active && (
+      entry.ip_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.description.toLowerCase().includes(searchTerm.toLowerCase())
+    )
   );
+
+  if (!selectedTarget) {
+    return (
+      <div className="whitelist-page">
+        <div className="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3>Nessun Target Selezionato</h3>
+          <p>Seleziona un target dal menu in alto per gestire la whitelist</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="whitelist-page">
@@ -236,7 +197,9 @@ const handleRemoveEntry = async (id: number, ip: string) => {
             </svg>
             Whitelist
           </h1>
-          <p>Gestione IP e subnet autorizzati permanentemente</p>
+          <p>
+            Target: <strong>{selectedTarget.hostname || selectedTarget.ip_address}</strong>
+          </p>
         </div>
         <div className="header-actions">
           <button className="btn-primary" onClick={() => setShowAddModal(true)}>
@@ -250,22 +213,6 @@ const handleRemoveEntry = async (id: number, ip: string) => {
 
       {/* Controls */}
       <div className="controls-section">
-        <div className="control-group">
-          <label>Target</label>
-          <select
-            value={selectedTarget || ''}
-            onChange={(e) => setSelectedTarget(Number(e.target.value))}
-            disabled={loading}
-          >
-            <option value="">Seleziona un target</option>
-            {targets.map((target) => (
-              <option key={target.id} value={target.id}>
-                {target.hostname} ({target.ip_address})
-              </option>
-            ))}
-          </select>
-        </div>
-
         <div className="control-group search-group">
           <label>Cerca</label>
           <input
@@ -278,7 +225,7 @@ const handleRemoveEntry = async (id: number, ip: string) => {
 
         <div className="stats-display">
           <span className="stat-item">
-            <strong>{entries.length}</strong> entry totali
+            <strong>{entries.filter(e => e.is_active).length}</strong> entry attive
           </span>
           <span className="stat-item">
             <strong>{filteredEntries.length}</strong> visualizzate
@@ -293,14 +240,6 @@ const handleRemoveEntry = async (id: number, ip: string) => {
             <div className="spinner"></div>
             <p>Caricamento whitelist...</p>
           </div>
-        ) : !selectedTarget ? (
-          <div className="empty-state">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <h3>Seleziona un Target</h3>
-            <p>Scegli un target per visualizzare la sua whitelist</p>
-          </div>
         ) : filteredEntries.length === 0 ? (
           <div className="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -308,6 +247,9 @@ const handleRemoveEntry = async (id: number, ip: string) => {
             </svg>
             <h3>Nessun IP in Whitelist</h3>
             <p>Aggiungi IP o subnet autorizzati per bypassare il firewall</p>
+            <button className="btn-secondary" onClick={() => setShowAddModal(true)}>
+              Aggiungi primo IP
+            </button>
           </div>
         ) : (
           <div className="whitelist-table-wrapper">
@@ -333,7 +275,7 @@ const handleRemoveEntry = async (id: number, ip: string) => {
                       )}
                     </td>
                     <td className="description-cell">
-                      {entry.description}
+                      {entry.description || '—'}
                     </td>
                     <td className="user-cell">
                       <div className="user-avatar">

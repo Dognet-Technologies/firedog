@@ -1,9 +1,11 @@
 /**
  * Professional Layout Component - Chronograf Style
+ * Con Target Selector integrato nella navbar
  */
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTarget } from '../../contexts/TargetContext';
 import './Layout.css';
 
 interface LayoutProps {
@@ -20,10 +22,12 @@ interface NavItem {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { logout, user } = useAuth();
+  const { selectedTarget, targets, setSelectedTarget, loading: targetsLoading } = useTarget();
   const navigate = useNavigate();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>(['dashboard']);
+  const [showTargetDropdown, setShowTargetDropdown] = useState(false);
 
   const navigationItems: NavItem[] = [
     {
@@ -95,6 +99,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const isActive = (path?: string) => {
     if (!path) return false;
     return location.pathname === path || location.pathname.startsWith(path);
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'online':
+        return <span className="status-dot status-online" title="Online"></span>;
+      case 'offline':
+        return <span className="status-dot status-offline" title="Offline"></span>;
+      case 'error':
+        return <span className="status-dot status-error" title="Error"></span>;
+      case 'installing':
+        return <span className="status-dot status-installing" title="Installing"></span>;
+      default:
+        return <span className="status-dot status-pending" title="Pending"></span>;
+    }
   };
 
   const renderIcon = (iconName: string) => {
@@ -172,28 +191,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
           <line x1="12" y1="9" x2="12" y2="13" />
           <line x1="12" y1="17" x2="12.01" y2="17" />
-        </svg>
-      ),
-      network: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="16" y="16" width="6" height="6" rx="1" />
-          <rect x="2" y="16" width="6" height="6" rx="1" />
-          <rect x="9" y="2" width="6" height="6" rx="1" />
-          <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8" />
-        </svg>
-      ),
-      cpu: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
-          <rect x="9" y="9" width="6" height="6" />
-          <line x1="9" y1="1" x2="9" y2="4" />
-          <line x1="15" y1="1" x2="15" y2="4" />
-          <line x1="9" y1="20" x2="9" y2="23" />
-          <line x1="15" y1="20" x2="15" y2="23" />
-          <line x1="20" y1="9" x2="23" y2="9" />
-          <line x1="20" y1="14" x2="23" y2="14" />
-          <line x1="1" y1="9" x2="4" y2="9" />
-          <line x1="1" y1="14" x2="4" y2="14" />
         </svg>
       ),
       book: (
@@ -324,6 +321,81 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </svg>
           </button>
         </div>
+
+        {/* TARGET SELECTOR */}
+        {!isCollapsed && (
+          <div className="target-selector-container">
+            <label className="target-selector-label">Target Selezionato:</label>
+            <div className="target-selector">
+              <button
+                className="target-selector-button"
+                onClick={() => setShowTargetDropdown(!showTargetDropdown)}
+                disabled={targetsLoading}
+              >
+                {targetsLoading ? (
+                  <span>Caricamento...</span>
+                ) : selectedTarget ? (
+                  <>
+                    {getStatusIcon(selectedTarget.status)}
+                    <span className="target-name">
+                      {selectedTarget.hostname || selectedTarget.ip_address}
+                    </span>
+                    <svg className="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </>
+                ) : (
+                  <span className="no-target">Seleziona target...</span>
+                )}
+              </button>
+
+              {showTargetDropdown && (
+                <>
+                  <div 
+                    className="dropdown-overlay" 
+                    onClick={() => setShowTargetDropdown(false)}
+                  />
+                  <div className="target-dropdown">
+                    {targets.length === 0 ? (
+                      <div className="dropdown-empty">
+                        <p>Nessun target online</p>
+                        <a href="/targets" className="dropdown-link">
+                          Gestisci targets →
+                        </a>
+                      </div>
+                    ) : (
+                      targets.map((target) => (
+                        <button
+                          key={target.id}
+                          className={`target-dropdown-item ${
+                            selectedTarget?.id === target.id ? 'selected' : ''
+                          }`}
+                          onClick={() => {
+                            setSelectedTarget(target);
+                            setShowTargetDropdown(false);
+                          }}
+                        >
+                          {getStatusIcon(target.status)}
+                          <div className="target-info">
+                            <span className="target-hostname">
+                              {target.hostname || target.ip_address}
+                            </span>
+                            <span className="target-ip">{target.ip_address}</span>
+                          </div>
+                          {selectedTarget?.id === target.id && (
+                            <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <nav className="nav">
           {navigationItems.map((item) => renderNavItem(item))}

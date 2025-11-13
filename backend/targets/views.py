@@ -12,6 +12,25 @@ from .models import Target
 from .serializers import TargetSerializer, TargetListSerializer, TargetCreateSerializer
 from core.ssh_manager import SSHManager, SSHConnectionError
 from audit.models import AuditLog
+"""
+Views per Whitelist e BlockedIPs
+API endpoints completi con logging audit e validazioni
+"""
+from django.utils import timezone
+from django.db.models import Count, Sum, Q
+from datetime import timedelta
+import logging
+
+from .models import WhitelistEntry, BlockedIP
+from .serializers import (
+    WhitelistEntrySerializer,
+    WhitelistEntryCreateSerializer,
+    BlockedIPSerializer,
+    BlockedIPCreateSerializer,
+    BlockedIPStatsSerializer,
+)
+from targets.models import Target
+from audit.models import AuditLog
 
 logger = logging.getLogger('firedog.targets')
 
@@ -89,3 +108,314 @@ class TargetViewSet(viewsets.ModelViewSet):
         install_firedog_on_target.delay(target.id, request.user.id)
         
         return Response({'success': True, 'message': 'Installazione avviata', 'status': 'installing'})
+
+
+class WhitelistEntryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet per gestione Whitelist
+    
+    Endpoints:
+    - GET /api/whitelist/ - Lista entries
+    - GET /api/whitelist/{id}/ - Dettaglio entry
+    - POST /api/whitelist/ - Crea entry
+    - PATCH /api/whitelist/{id}/ - Aggiorna entry
+    - DELETE /api/whitelist/{id}/ - Elimina entry
+    - POST /api/whitelist/{id}/deactivate/ - Disattiva entry
+    - POST /api/whitelist/{id}/activate/ - Riattiva entry
+    - GET /api/whitelist/by_target/ - Filtra per target
+    """
+    
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['target', 'is_active']
+    
+    def get_queryset(self):
+        return WhitelistEntry.objects.all().select_related('target').order_by('-added_at')
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return WhitelistEntryCreateSerializer
+        return WhitelistEntrySerializer
+    
+    def perform_create(self, serializer):
+        """Crea entry con logging audit"""
+        entry = serializer.save()
+        
+        # Log audit
+        AuditLog.log_action(
+            action='create',
+            description=f'Added {entry.ip_address} to whitelist',
+            user=self.request.user,
+            content_object=entry,
+            ip_address=self.request.META.get('REMOTE_ADDR'),
+            new_values={'ip_address': entry.ip_address, 'target': entry.target.id}
+        )
+        
+        logger.info(f'Whitelist entry created: {entry.ip_address} on target {entry.target.id}')
+    
+    def perform_destroy(self, instance):
+        """Elimina entry con logging audit"""
+        ip_address = instance.ip_address
+        target_id = instance.target.id
+        
+        # Log audit
+        AuditLog.log_action(
+            action='delete',
+            description=f'Removed {ip_address} from whitelist',
+            user=self.request.user,
+            content_object=instance,
+            ip_address=self.request.META.get('REMOTE_ADDR'),
+            old_values={'ip_address': ip_address, 'target': target_id}
+        )
+        
+        instance.delete()
+        logger.info(f'Whitelist entry deleted: {ip_address} on target {target_id}')
+    
+    @action(detail=True, methods=['post'])
+    def deactivate(self, request, pk=None):
+        """Disattiva entry (soft delete)"""
+        entry = self.get_object()
+        entry.is_active = False
+        entry.save(update_fields=['is_active'])
+        
+        # Log audit
+        AuditLog.log_action(
+            action='update',
+            description=f'Deactivated whitelist entry {entry.ip_address}',
+            user=request.user,
+            content_object=entry,
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        return Response({'message': 'Entry deactivated successfully'})
+    
+    @action(detail=True, methods=['post'])
+    def activate(self, request, pk=None):
+        """Riattiva entry"""
+        entry = self.get_object()
+        entry.is_active = True
+        entry.save(update_fields=['is_active'])
+        
+        # Log audit
+        AuditLog.log_action(
+            action='update',
+            description=f'Activated whitelist entry {entry.ip_address}',
+            user=request.user,
+            content_object=entry,
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        return Response({'message': 'Entry activated successfully'})
+    
+    @action(detail=False, methods=['get'])
+    def by_target(self, request):
+        """
+        Filtra whitelist per target specifico
+        GET /api/whitelist/by_target/?target_id=1
+        """
+        target_id = request.query_params.get('target_id')
+        
+        if not target_id:
+            return Response(
+                {'error': 'target_id parameter required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        entries = self.get_queryset().filter(target_id=target_id)
+        serializer = self.get_serializer(entries, many=True)
+        
+        return Response({
+            'count': entries.count(),
+            'results': serializer.data
+        })
+
+
+class BlockedIPViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet per gestione IP bloccati
+    
+    Endpoints:
+    - GET /api/blocked-ips/ - Lista IP bloccati
+    - GET /api/blocked-ips/{id}/ - Dettaglio IP
+    - POST /api/blocked-ips/ - Blocca IP
+    - DELETE /api/blocked-ips/{id}/ - Elimina blocco
+    - POST /api/blocked-ips/{id}/unblock/ - Sblocca IP
+    - GET /api/blocked-ips/stats/ - Statistiche
+    - GET /api/blocked-ips/by_target/ - Filtra per target
+    - POST /api/blocked-ips/cleanup_expired/ - Rimuovi blocchi scaduti
+    """
+    
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['target', 'is_active', 'block_reason']
+    
+    def get_queryset(self):
+        return BlockedIP.objects.all().select_related('target').order_by('-blocked_at')
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return BlockedIPCreateSerializer
+        elif self.action == 'stats':
+            return BlockedIPStatsSerializer
+        return BlockedIPSerializer
+    
+    def perform_create(self, serializer):
+        """Crea blocco con logging audit"""
+        block = serializer.save()
+        
+        # Log audit
+        AuditLog.log_action(
+            action='create',
+            description=f'Blocked IP {block.ip_address} (reason: {block.block_reason})',
+            user=self.request.user,
+            content_object=block,
+            ip_address=self.request.META.get('REMOTE_ADDR'),
+            new_values={
+                'ip_address': block.ip_address,
+                'target': block.target.id,
+                'reason': block.block_reason
+            }
+        )
+        
+        logger.warning(f'IP blocked: {block.ip_address} on target {block.target.id} - Reason: {block.block_reason}')
+    
+    def perform_destroy(self, instance):
+        """Elimina blocco con logging audit"""
+        ip_address = instance.ip_address
+        target_id = instance.target.id
+        
+        # Log audit
+        AuditLog.log_action(
+            action='delete',
+            description=f'Removed block for IP {ip_address}',
+            user=self.request.user,
+            content_object=instance,
+            ip_address=self.request.META.get('REMOTE_ADDR'),
+            old_values={'ip_address': ip_address, 'target': target_id}
+        )
+        
+        instance.delete()
+        logger.info(f'IP block removed: {ip_address} on target {target_id}')
+    
+    @action(detail=True, methods=['post'])
+    def unblock(self, request, pk=None):
+        """
+        Sblocca un IP
+        POST /api/blocked-ips/{id}/unblock/
+        """
+        block = self.get_object()
+        
+        if not block.is_active:
+            return Response(
+                {'error': 'IP is already unblocked'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        block.unblock(unblocked_by=request.user.username)
+        
+        # Log audit
+        AuditLog.log_action(
+            action='update',
+            description=f'Unblocked IP {block.ip_address}',
+            user=request.user,
+            content_object=block,
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        logger.info(f'IP unblocked: {block.ip_address} on target {block.target.id}')
+        
+        serializer = self.get_serializer(block)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """
+        Statistiche IP bloccati
+        GET /api/blocked-ips/stats/?target_id=1
+        """
+        target_id = request.query_params.get('target_id')
+        
+        queryset = self.get_queryset()
+        if target_id:
+            queryset = queryset.filter(target_id=target_id)
+        
+        # Statistiche
+        stats = {
+            'total_blocked': queryset.count(),
+            'active_blocks': queryset.filter(is_active=True).count(),
+            'expired_blocks': queryset.filter(
+                is_active=True,
+                expires_at__lte=timezone.now()
+            ).count(),
+            'manual_blocks': queryset.filter(block_reason='manual').count(),
+            'automatic_blocks': queryset.exclude(block_reason='manual').count(),
+            'total_packets_blocked': queryset.aggregate(
+                total=Sum('packet_count')
+            )['total'] or 0,
+            'top_blocked_ips': list(
+                queryset.filter(is_active=True)
+                .values('ip_address', 'packet_count', 'threat_score', 'block_reason')
+                .order_by('-packet_count')[:10]
+            ),
+            'blocks_by_reason': dict(
+                queryset.values('block_reason')
+                .annotate(count=Count('id'))
+                .values_list('block_reason', 'count')
+            )
+        }
+        
+        serializer = self.get_serializer(stats)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_target(self, request):
+        """
+        Filtra IP bloccati per target
+        GET /api/blocked-ips/by_target/?target_id=1
+        """
+        target_id = request.query_params.get('target_id')
+        
+        if not target_id:
+            return Response(
+                {'error': 'target_id parameter required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        blocks = self.get_queryset().filter(target_id=target_id, is_active=True)
+        serializer = self.get_serializer(blocks, many=True)
+        
+        return Response({
+            'count': blocks.count(),
+            'results': serializer.data
+        })
+    
+    @action(detail=False, methods=['post'])
+    def cleanup_expired(self, request):
+        """
+        Rimuovi blocchi scaduti
+        POST /api/blocked-ips/cleanup_expired/
+        """
+        expired_blocks = self.get_queryset().filter(
+            is_active=True,
+            expires_at__lte=timezone.now()
+        )
+        
+        count = expired_blocks.count()
+        
+        for block in expired_blocks:
+            block.unblock(unblocked_by='system')
+        
+        # Log audit
+        AuditLog.log_action(
+            action='delete',
+            description=f'Cleanup: removed {count} expired blocks',
+            user=request.user,
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        logger.info(f'Cleaned up {count} expired IP blocks')
+        
+        return Response({
+            'message': f'{count} expired blocks removed',
+            'count': count
+        })
