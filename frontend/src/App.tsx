@@ -1,4 +1,4 @@
-/**
+ /**
  * Main App Component with Routing
 import Whitelist from './pages/Whitelist';
  */
@@ -23,6 +23,7 @@ import MonitoringPerformance from './pages/MonitoringPerformance';
 import SystemLogs from './pages/SystemLogs';
 import BlockedIPs from './pages/BlockedIPs';
 import LogsPage from './pages/LogsPage';
+import Whitelist from  './pages/Whitelist';
 
 
 
@@ -151,6 +152,16 @@ function App() {
                   <ProtectedRoute>
                     <Layout>
                       <BlockedIPs />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/firewall/whitelist"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <Whitelist />
                     </Layout>
                   </ProtectedRoute>
                 }
