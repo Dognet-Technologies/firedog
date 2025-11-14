@@ -29,6 +29,9 @@ export interface Target {
   updated_at: string;
   connection_string: string;
   is_active: boolean;
+  gruppo?: string | null;
+  gruppo_custom?: string | null;
+  gruppo_display?: string;
 }
 
 export interface TargetCreate {
@@ -37,6 +40,8 @@ export interface TargetCreate {
   description?: string;
   ssh_port?: number;
   ssh_user?: string;
+  gruppo?: string;
+  gruppo_custom?: string;
 }
 
 export interface TargetStatus {
@@ -264,29 +269,6 @@ export interface AuditLog {
   action_description: string;
 }
 
-// export interface AuditLog {
-//   id: number;
-//   username: string;
-//   action: string;
-//   target_id: number | null;
-//   target_hostname: string | null;
-//   details: any;
-//   ip_address: string;
-//   timestamp: string;
-//   action_description: string;
-// }
-
-// export interface AuditLog {
-//   id: number;
-//   username: string;
-//   action: string;
-//   target_id: number | null;
-//   target_hostname: string | null;
-//   details: any;
-//   ip_address: string;
-//   timestamp: string;
-//   action_description: string;
-// }
 // // ========== Auth Types ==========
 
 export interface LoginCredentials {
@@ -320,3 +302,4 @@ export interface TimeSeriesDataPoint {
   value: number;
   [key: string]: any;
 }
+

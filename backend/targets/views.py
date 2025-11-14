@@ -419,3 +419,52 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
             'message': f'{count} expired blocks removed',
             'count': count
         })
+
+
+@action(detail=False, methods=['get'], url_path='by-gruppo')
+def by_gruppo(self, request):
+    """
+    Filtra target per gruppo
+    GET /api/targets/by-gruppo/?gruppo=web
+    """
+    gruppo_param = request.query_params.get('gruppo')
+    
+    if gruppo_param:
+        targets = Target.objects.filter(gruppo=gruppo_param)
+        serializer = self.get_serializer(targets, many=True)
+        return Response(serializer.data)
+    else:
+        # Ritorna statistiche per gruppo
+        groups = Target.objects.values('gruppo').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        return Response(groups)
+
+
+@action(detail=False, methods=['post'], url_path='bulk-update-gruppo')
+def bulk_update_gruppo(self, request):
+    """
+    Aggiorna gruppo per multipli target
+    POST /api/targets/bulk-update-gruppo/
+    Body: {"target_ids": [1,2,3], "gruppo": "web"}
+    """
+    target_ids = request.data.get('target_ids', [])
+    gruppo = request.data.get('gruppo')
+    gruppo_custom = request.data.get('gruppo_custom')
+    
+    if not target_ids or not gruppo:
+        return Response({'error': 'target_ids e gruppo obbligatori'}, status=400)
+    
+    if gruppo == 'custom' and not gruppo_custom:
+        return Response({'error': 'gruppo_custom obbligatorio'}, status=400)
+    
+    updated = Target.objects.filter(id__in=target_ids).update(
+        gruppo=gruppo,
+        gruppo_custom=gruppo_custom if gruppo == 'custom' else None
+    )
+    
+    return Response({
+        'success': True,
+        'updated_count': updated,
+        'gruppo': gruppo
+    })

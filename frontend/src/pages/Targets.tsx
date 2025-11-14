@@ -1,6 +1,5 @@
 /**
- * Targets Management Page - Table View
- * Gestione target con tabella ordinabile e icone stato
+ * Targets Management Page - Table View with Gruppo
  */
 import React, { useEffect, useState } from 'react';
 import apiService from '../services/api';
@@ -9,8 +8,28 @@ import './Targets.css';
 import { useNotifications } from '../contexts/NotificationContext';
 import SSHTerminal from '../components/SSHTerminal';
 
-type SortField = 'ip_address' | 'hostname' | 'firedog_version' | 'last_seen' | 'status';
+type SortField = 'ip_address' | 'hostname' | 'firedog_version' | 'last_seen' | 'status' | 'gruppo';
 type SortDirection = 'asc' | 'desc';
+
+// Gruppi disponibili
+const GRUPPO_OPTIONS = [
+  { value: '', label: 'Tutti i gruppi' },
+  { value: 'web', label: 'Web Server' },
+  { value: 'db', label: 'Database' },
+  { value: 'dns', label: 'DNS Server' },
+  { value: 'storage', label: 'Storage' },
+  { value: 'mail', label: 'Mail Server' },
+  { value: 'backup', label: 'Backup Server' },
+  { value: 'monitoring', label: 'Monitoring' },
+  { value: 'proxy', label: 'Proxy/Load Balancer' },
+  { value: 'vpn', label: 'VPN Gateway' },
+  { value: 'firewall', label: 'Firewall' },
+  { value: 'application', label: 'Application Server' },
+  { value: 'cache', label: 'Cache Server' },
+  { value: 'queue', label: 'Message Queue' },
+  { value: 'other', label: 'Altro' },
+  { value: 'custom', label: 'Personalizzato' },
+];
 
 const Targets: React.FC = () => {
   const [targets, setTargets] = useState<Target[]>([]);
@@ -21,10 +40,14 @@ const Targets: React.FC = () => {
   const [terminalTargetId, setTerminalTargetId] = useState<number | null>(null);
   const [sortField, setSortField] = useState<SortField>('ip_address');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [formData, setFormData] = useState<TargetCreate>({
+  const [filterGruppo, setFilterGruppo] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [formData, setFormData] = useState<TargetCreate & { gruppo?: string; gruppo_custom?: string }>({
     ip_address: '',
     hostname: '',
     description: '',
+    gruppo: '',
+    gruppo_custom: '',
   });
 
   useEffect(() => {
@@ -49,10 +72,27 @@ const Targets: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validazione gruppo custom
+    if (formData.gruppo === 'custom' && !formData.gruppo_custom?.trim()) {
+      showToast({
+        type: 'warning',
+        title: 'Attenzione',
+        message: 'Specifica il nome del gruppo personalizzato'
+      });
+      return;
+    }
+    
     try {
       await apiService.createTarget(formData);
       setShowModal(false);
-      setFormData({ ip_address: '', hostname: '', description: '' });
+      setFormData({ 
+        ip_address: '', 
+        hostname: '', 
+        description: '',
+        gruppo: '',
+        gruppo_custom: ''
+      });
       showToast({
         type: 'success',
         title: 'Target creato',
@@ -77,7 +117,7 @@ const Targets: React.FC = () => {
         showToast({
           type: 'success',
           title: 'Connessione riuscita!',
-          message: `SSH connection to target ${id} successful`
+          message: `SSH connection successful`
         });
       } else {
         showToast({
@@ -104,8 +144,8 @@ const Targets: React.FC = () => {
     showConfirm({
       title: isReinstall ? 'Conferma Reinstallazione' : 'Conferma Installazione',
       message: isReinstall 
-        ? 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse. Verrà aperto un terminale SSH interattivo per completare l\'installazione.'
-        : 'Vuoi installare FireDog su questo target? Verrà aperto un terminale SSH interattivo per completare l\'installazione. Assicurati di avere la password sudo del target.',
+        ? 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse.'
+        : 'Vuoi installare FireDog su questo target? Assicurati di avere la password sudo del target.',
       confirmText: 'Apri Terminale',
       cancelText: 'Annulla',
       onConfirm: () => {
@@ -145,116 +185,81 @@ const Targets: React.FC = () => {
   // Funzione ordinamento
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      // Toggle direction
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      // Nuovo campo, default asc
       setSortField(field);
       setSortDirection('asc');
     }
   };
 
-  // Ordina targets
-  const sortedTargets = [...targets].sort((a, b) => {
-    let aValue: any;
-    let bValue: any;
+  // Filtra e ordina targets
+  const filteredAndSortedTargets = targets
+    .filter(target => {
+      const matchesSearch = 
+        target.ip_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (target.hostname || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesGruppo = !filterGruppo || target.gruppo === filterGruppo;
+      
+      return matchesSearch && matchesGruppo;
+    })
+    .sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
 
-    switch (sortField) {
-      case 'ip_address':
-        // Ordina IP come numeri
-        aValue = a.ip_address.split('.').map(num => parseInt(num).toString().padStart(3, '0')).join('.');
-        bValue = b.ip_address.split('.').map(num => parseInt(num).toString().padStart(3, '0')).join('.');
-        break;
-      case 'hostname':
-        aValue = a.hostname || '';
-        bValue = b.hostname || '';
-        break;
-      case 'firedog_version':
-        aValue = a.firedog_version || '';
-        bValue = b.firedog_version || '';
-        break;
-      case 'last_seen':
-        aValue = a.last_seen ? new Date(a.last_seen).getTime() : 0;
-        bValue = b.last_seen ? new Date(b.last_seen).getTime() : 0;
-        break;
-      case 'status':
-        aValue = a.status;
-        bValue = b.status;
-        break;
-      default:
-        return 0;
-    }
+      switch (sortField) {
+        case 'ip_address':
+          aValue = a.ip_address.split('.').map(num => parseInt(num).toString().padStart(3, '0')).join('.');
+          bValue = b.ip_address.split('.').map(num => parseInt(num).toString().padStart(3, '0')).join('.');
+          break;
+        case 'hostname':
+          aValue = a.hostname || '';
+          bValue = b.hostname || '';
+          break;
+        case 'firedog_version':
+          aValue = a.firedog_version || '';
+          bValue = b.firedog_version || '';
+          break;
+        case 'last_seen':
+          aValue = a.last_seen ? new Date(a.last_seen).getTime() : 0;
+          bValue = b.last_seen ? new Date(b.last_seen).getTime() : 0;
+          break;
+        case 'status':
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        case 'gruppo':
+          aValue = a.gruppo_display || '';
+          bValue = b.gruppo_display || '';
+          break;
+        default:
+          return 0;
+      }
 
-    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
 
   // Icona stato
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'online':
-        return (
-          <span className="status-icon status-online" title="Online">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 6v6l4 2" />
-            </svg>
-          </span>
-        );
+        return <span className="status-dot status-online" title="Online"></span>;
       case 'offline':
-        return (
-          <span className="status-icon status-offline" title="Offline">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-            </svg>
-          </span>
-        );
+        return <span className="status-dot status-offline" title="Offline"></span>;
       case 'error':
-        return (
-          <span className="status-icon status-error" title="Error">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-          </span>
-        );
+        return <span className="status-dot status-error" title="Error"></span>;
       case 'installing':
-        return (
-          <span className="status-icon status-installing" title="Installing">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="spin">
-              <path d="M21 12a9 9 0 11-6.219-8.56" />
-            </svg>
-          </span>
-        );
-      case 'pending':
-        return (
-          <span className="status-icon status-pending" title="Pending">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </span>
-        );
+        return <span className="status-dot status-installing" title="Installing"></span>;
       default:
-        return (
-          <span className="status-icon status-unknown" title="Unknown">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-          </span>
-        );
+        return <span className="status-dot status-pending" title="Pending"></span>;
     }
   };
 
   // Formatta Last Seen
   const formatLastSeen = (lastSeen: string | null) => {
     if (!lastSeen) return 'Never';
-    
     const date = new Date(lastSeen);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -262,14 +267,25 @@ const Targets: React.FC = () => {
     
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m ago`;
-    
     const diffHours = Math.floor(diffMins / 60);
     if (diffHours < 24) return `${diffHours}h ago`;
-    
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 7) return `${diffDays}d ago`;
-    
     return date.toLocaleDateString();
+  };
+
+  // Badge gruppo
+  const getGruppoBadge = (target: Target) => {
+    if (!target.gruppo) {
+      return <span className="gruppo-badge gruppo-none">—</span>;
+    }
+    
+    const gruppoDisplay = target.gruppo_display || target.gruppo;
+    return (
+      <span className={`gruppo-badge gruppo-${target.gruppo}`}>
+        {gruppoDisplay}
+      </span>
+    );
   };
 
   // Icona ordinamento
@@ -310,6 +326,37 @@ const Targets: React.FC = () => {
         </button>
       </div>
 
+      {/* Filtri */}
+      <div className="filters-section">
+        <div className="filter-group">
+          <label>Cerca</label>
+          <input
+            type="text"
+            placeholder="IP o hostname..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="filter-input"
+          />
+        </div>
+        
+        <div className="filter-group">
+          <label>Gruppo</label>
+          <select 
+            value={filterGruppo} 
+            onChange={(e) => setFilterGruppo(e.target.value)}
+            className="filter-select"
+          >
+            {GRUPPO_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-stats">
+          <span>Visualizzati: <strong>{filteredAndSortedTargets.length}</strong></span>
+        </div>
+      </div>
+
       {/* Targets Table */}
       <div className="targets-table-container">
         <table className="targets-table">
@@ -320,6 +367,9 @@ const Targets: React.FC = () => {
               </th>
               <th onClick={() => handleSort('hostname')} className="sortable">
                 Hostname {renderSortIcon('hostname')}
+              </th>
+              <th onClick={() => handleSort('gruppo')} className="sortable">
+                Gruppo {renderSortIcon('gruppo')}
               </th>
               <th onClick={() => handleSort('firedog_version')} className="sortable">
                 Version {renderSortIcon('firedog_version')}
@@ -334,28 +384,28 @@ const Targets: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {sortedTargets.length === 0 ? (
+            {filteredAndSortedTargets.length === 0 ? (
               <tr>
-                <td colSpan={6} className="empty-state">
+                <td colSpan={7} className="empty-state">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <circle cx="12" cy="12" r="10" />
                     <line x1="12" y1="8" x2="12" y2="12" />
                     <line x1="12" y1="16" x2="12.01" y2="16" />
                   </svg>
-                  <p>Nessun target configurato</p>
-                  <button onClick={() => setShowModal(true)} className="btn-secondary">
-                    Aggiungi il primo target
-                  </button>
+                  <p>Nessun target trovato</p>
                 </td>
               </tr>
             ) : (
-              sortedTargets.map(target => (
+              filteredAndSortedTargets.map(target => (
                 <tr key={target.id} className={`target-row status-${target.status}`}>
                   <td className="ip-cell">
                     <code>{target.ip_address}</code>
                   </td>
                   <td className="hostname-cell">
                     {target.hostname || <span className="text-muted">—</span>}
+                  </td>
+                  <td className="gruppo-cell">
+                    {getGruppoBadge(target)}
                   </td>
                   <td className="version-cell">
                     {target.firedog_version ? (
@@ -425,18 +475,11 @@ const Targets: React.FC = () => {
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Add New Target</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+              <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
             </div>
             <form onSubmit={handleCreate}>
               <div className="form-group">
-                <label>
-                  IP Address <span className="required">*</span>
-                </label>
+                <label>IP Address <span className="required">*</span></label>
                 <input
                   type="text"
                   value={formData.ip_address}
@@ -454,6 +497,29 @@ const Targets: React.FC = () => {
                   placeholder="server-01"
                 />
               </div>
+              <div className="form-group">
+                <label>Gruppo</label>
+                <select
+                  value={formData.gruppo || ''}
+                  onChange={e => setFormData({...formData, gruppo: e.target.value})}
+                >
+                  {GRUPPO_OPTIONS.slice(1).map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              {formData.gruppo === 'custom' && (
+                <div className="form-group">
+                  <label>Nome Gruppo Personalizzato <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    value={formData.gruppo_custom || ''}
+                    onChange={e => setFormData({...formData, gruppo_custom: e.target.value})}
+                    placeholder="es: IoT Devices"
+                    required
+                  />
+                </div>
+              )}
               <div className="form-group">
                 <label>Description</label>
                 <textarea

@@ -87,6 +87,42 @@ class TargetCreateSerializer(serializers.ModelSerializer):
         return value
 
 
+class TargetSerializer(serializers.ModelSerializer):
+    gruppo_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Target
+        fields = [
+            'id', 'hostname', 'ip_address', 'description', 
+            'status', 'ssh_port', 'firedog_version',
+            'last_seen', 'created_at', 'updated_at',
+            'gruppo', 'gruppo_custom', 'gruppo_display'  # ← AGGIUNGI
+        ]
+        read_only_fields = ['id', 'status', 'firedog_version', 'last_seen', 'created_at']
+    
+    def get_gruppo_display(self, obj):
+        """Ritorna il nome leggibile del gruppo"""
+        return obj.get_gruppo_display_name()
+
+
+class TargetCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Target
+        fields = ['hostname', 'ip_address', 'description', 'ssh_port', 'gruppo', 'gruppo_custom']
+    
+    def validate(self, data):
+        """Validazione gruppo"""
+        if data.get('gruppo') == 'custom' and not data.get('gruppo_custom'):
+            raise serializers.ValidationError({
+                'gruppo_custom': 'Nome gruppo personalizzato obbligatorio quando gruppo="custom"'
+            })
+        
+        if data.get('gruppo') != 'custom':
+            data['gruppo_custom'] = None
+        
+        return data
+
+
 class WhitelistEntrySerializer(serializers.ModelSerializer):
     """Serializer per WhitelistEntry"""
     
