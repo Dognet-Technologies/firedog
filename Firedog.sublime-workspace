@@ -148,62 +148,13 @@
 	"buffers":
 	[
 		{
-			"contents": "useEffect(() => {\n  if (!terminal) return;\n\n  // Connessione WebSocket al BACKEND (Django su porta 8000)\n  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';\n  // CORREZIONE: usa localhost:8000 invece di window.location.host\n  const wsUrl = `${protocol}//localhost:8000/ws/terminal/`;\n\n  const websocket = new WebSocket(wsUrl);\n  // ... resto del codice",
+			"contents": "/* Discovery Page Styles - Neon/Chronograf Theme */ \n\n.discovery-page {\n  padding: 0;\n  min-height: 100vh;\n}\n\n/* ==================== Header ==================== */\n\n.page-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 30px;\n  padding-bottom: 20px;\n  border-bottom: 1px solid var(--border-primary);\n}\n\n.page-header h1 {\n  margin: 0;\n  font-size: 28px;\n  font-weight: 600;\n  color: var(--text-primary);\n  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));\n  -webkit-background-clip: text;\n  -webkit-text-fill-color: transparent;\n}\n\n.header-info {\n  display: flex;\n  gap: 12px;\n  align-items: center;\n}\n\n.info-badge {\n  padding: 6px 12px;\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-primary);\n  border-radius: 6px;\n  font-size: 13px;\n  color: var(--text-secondary);\n}\n\n/* ==================== Tabs ==================== */\n\n.discovery-tabs {\n  display: flex;\n  gap: 12px;\n  margin-bottom: 30px;\n  border-bottom: 2px solid var(--border-primary);\n}\n\n.tab-button {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 12px 20px;\n  background: transparent;\n  border: none;\n  border-bottom: 2px solid transparent;\n  color: var(--text-secondary);\n  font-size: 14px;\n  font-weight: 500;\n  cursor: pointer;\n  transition: all 0.2s;\n  margin-bottom: -2px;\n}\n\n.tab-button:hover {\n  color: var(--text-primary);\n  background: var(--bg-secondary);\n}\n\n.tab-button.active {\n  color: var(--accent-primary);\n  border-bottom-color: var(--accent-primary);\n  box-shadow: 0 0 15px rgba(0, 201, 255, 0.3);\n}\n\n.tab-icon {\n  width: 18px;\n  height: 18px;\n  stroke-width: 2;\n}\n\n/* ==================== Tab Content ==================== */\n\n.tab-content {\n  animation: fadeIn 0.3s ease-in;\n}\n\n@keyframes fadeIn {\n  from { opacity: 0; transform: translateY(10px); }\n  to { opacity: 1; transform: translateY(0); }\n}\n\n/* ==================== ARP-SCAN ==================== */\n\n.arp-scan-container {\n  display: flex;\n  flex-direction: column;\n  gap: 20px;\n}\n\n.scan-controls {\n  display: flex;\n  align-items: center;\n  gap: 20px;\n  padding: 20px;\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-primary);\n  border-radius: 8px;\n}\n\n.btn-scan {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n}\n\n.btn-scan svg {\n  width: 20px;\n  height: 20px;\n}\n\n.spinner {\n  display: inline-block;\n  width: 16px;\n  height: 16px;\n  border: 2px solid rgba(255, 255, 255, 0.3);\n  border-top-color: white;\n  border-radius: 50%;\n  animation: spin 0.8s linear infinite;\n}\n\n@keyframes spin {\n  to { transform: rotate(360deg); }\n}\n\n.scan-status {\n  padding: 8px 16px;\n  border-radius: 6px;\n  font-size: 13px;\n  font-weight: 500;\n}\n\n.scan-status.status-scanning {\n  background: rgba(0, 201, 255, 0.1);\n  color: var(--accent-primary);\n  border: 1px solid var(--accent-primary);\n}\n\n.scan-status.status-completed {\n  background: rgba(38, 222, 129, 0.1);\n  color: var(--status-success);\n  border: 1px solid var(--status-success);\n}\n\n.scan-status.status-error {\n  background: rgba(255, 71, 87, 0.1);\n  color: var(--status-error);\n  border: 1px solid var(--status-error);\n}\n\n/* ==================== Table Actions ==================== */\n\n.table-actions {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  padding: 12px 20px;\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-primary);\n  border-radius: 8px;\n}\n\n/* ==================== Hosts Table ==================== */\n\n.hosts-table-container {\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-primary);\n  border-radius: 8px;\n  overflow: hidden;\n}\n\n.hosts-table {\n  width: 100%;\n  border-collapse: collapse;\n}\n\n.hosts-table thead {\n  background: var(--bg-tertiary);\n  border-bottom: 2px solid var(--border-primary);\n}\n\n.hosts-table th {\n  padding: 12px 16px;\n  text-align: left;\n  font-size: 12px;\n  font-weight: 600;\n  text-transform: uppercase;\n  color: var(--text-secondary);\n  letter-spacing: 0.5px;\n}\n\n.hosts-table td {\n  padding: 12px 16px;\n  border-bottom: 1px solid var(--border-primary);\n  font-size: 14px;\n  color: var(--text-primary);\n}\n\n.hosts-table tbody tr {\n  transition: all 0.2s;\n}\n\n.hosts-table tbody tr:hover {\n  background: var(--bg-tertiary);\n}\n\n.hosts-table tbody tr.selected {\n  background: rgba(0, 201, 255, 0.1);\n  border-left: 3px solid var(--accent-primary);\n}\n\n.col-checkbox {\n  width: 40px;\n  text-align: center;\n}\n\n.col-checkbox input[type=\"checkbox\"] {\n  width: 16px;\n  height: 16px;\n  cursor: pointer;\n}\n\n.col-ip {\n  font-family: 'JetBrains Mono', monospace;\n  color: var(--accent-primary);\n  font-weight: 500;\n}\n\n.col-mac {\n  font-family: 'JetBrains Mono', monospace;\n  font-size: 13px;\n  color: var(--text-secondary);\n}\n\n.col-vendor {\n  font-size: 13px;\n  color: var(--text-secondary);\n}\n\n/* ==================== Badges ==================== */\n\n.badge {\n  padding: 4px 8px;\n  border-radius: 4px;\n  font-size: 11px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.badge-success {\n  background: rgba(38, 222, 129, 0.15);\n  color: var(--status-success);\n  border: 1px solid var(--status-success);\n}\n\n.badge-warning {\n  background: rgba(255, 193, 7, 0.15);\n  color: var(--status-warning);\n  border: 1px solid var(--status-warning);\n}\n\n.badge-info {\n  background: rgba(0, 201, 255, 0.15);\n  color: var(--accent-primary);\n  border: 1px solid var(--accent-primary);\n}\n\n/* ==================== Empty State ==================== */\n\n.empty-state {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  justify-content: center;\n  padding: 80px 20px;\n  text-align: center;\n  background: var(--bg-secondary);\n  border: 1px dashed var(--border-primary);\n  border-radius: 8px;\n}\n\n.empty-state svg {\n  width: 64px;\n  height: 64px;\n  stroke: var(--text-tertiary);\n  margin-bottom: 20px;\n  opacity: 0.5;\n}\n\n.empty-state p {\n  margin: 0;\n  font-size: 16px;\n  color: var(--text-secondary);\n}\n\n.empty-subtitle {\n  margin-top: 8px !important;\n  font-size: 14px !important;\n  color: var(--text-tertiary) !important;\n}\n\n/* ==================== FILE IMPORT ==================== */\n\n.file-import-container {\n  max-width: 800px;\n  margin: 0 auto;\n}\n\n.import-card,\n.manual-card {\n  background: var(--bg-secondary);\n  border: 1px solid var(--border-primary);\n  border-radius: 8px;\n  padding: 30px;\n}\n\n.import-card h2,\n.manual-card h2 {\n  margin: 0 0 10px 0;\n  font-size: 20px;\n  color: var(--text-primary);\n}\n\n.import-description,\n.manual-description {\n  margin: 0 0 20px 0;\n  font-size: 14px;\n  color: var(--text-secondary);\n  line-height: 1.5;\n}\n\n.import-description code {\n  padding: 2px 6px;\n  background: var(--bg-tertiary);\n  border: 1px solid var(--border-primary);\n  border-radius: 4px;\n  font-family: 'JetBrains Mono', monospace;\n  font-size: 13px;\n  color: var(--accent-primary);\n}\n\n/* File Format Example */\n\n.file-format-example {\n  margin: 20px 0;\n  padding: 20px;\n  background: var(--bg-tertiary);\n  border: 1px solid var(--border-primary);\n  border-radius: 6px;\n}\n\n.file-format-example h3 {\n  margin: 0 0 10px 0;\n  font-size: 14px;\n  color: var(--text-secondary);\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.file-format-example pre {\n  margin: 0;\n  padding: 12px;\n  background: var(--bg-primary);\n  border: 1px solid var(--border-primary);\n  border-radius: 4px;\n  font-family: 'JetBrains Mono', monospace;\n  font-size: 13px;\n  color: var(--accent-primary);\n  line-height: 1.6;\n  overflow-x: auto;\n}\n\n/* File Input */\n\n.file-input-group {\n  margin: 20px 0;\n}\n\n.file-input {\n  display: none;\n}\n\n.file-label {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  gap: 10px;\n  padding: 40px;\n  background: var(--bg-tertiary);\n  border: 2px dashed var(--border-primary);\n  border-radius: 8px;\n  cursor: pointer;\n  transition: all 0.2s;\n  font-size: 14px;\n  color: var(--text-secondary);\n}\n\n.file-label:hover {\n  border-color: var(--accent-primary);\n  background: rgba(0, 201, 255, 0.05);\n  color: var(--accent-primary);\n}\n\n.file-label svg {\n  width: 24px;\n  height: 24px;\n}\n\n/* Import Results */\n\n.import-result {\n  margin-top: 30px;\n  padding: 20px;\n  background: var(--bg-tertiary);\n  border: 1px solid var(--border-primary);\n  border-radius: 6px;\n}\n\n.import-result h3 {\n  margin: 0 0 15px 0;\n  font-size: 16px;\n  color: var(--text-primary);\n}\n\n.result-stats {\n  display: flex;\n  gap: 15px;\n  margin-bottom: 20px;\n}\n\n.stat-item {\n  flex: 1;\n  padding: 15px;\n  border-radius: 6px;\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n}\n\n.stat-item.stat-success {\n  background: rgba(38, 222, 129, 0.1);\n  border: 1px solid var(--status-success);\n}\n\n.stat-item.stat-warning {\n  background: rgba(255, 193, 7, 0.1);\n  border: 1px solid var(--status-warning);\n}\n\n.stat-item.stat-error {\n  background: rgba(255, 71, 87, 0.1);\n  border: 1px solid var(--status-error);\n}\n\n.stat-label {\n  font-size: 12px;\n  text-transform: uppercase;\n  color: var(--text-secondary);\n  letter-spacing: 0.5px;\n}\n\n.stat-value {\n  font-size: 24px;\n  font-weight: 700;\n  color: var(--text-primary);\n}\n\n/* Import Errors */\n\n.import-errors {\n  margin-top: 20px;\n}\n\n.import-errors h4 {\n  margin: 0 0 10px 0;\n  font-size: 14px;\n  color: var(--status-error);\n}\n\n.error-item {\n  display: flex;\n  flex-direction: column;\n  gap: 5px;\n  padding: 10px;\n  margin-bottom: 10px;\n  background: rgba(255, 71, 87, 0.05);\n  border-left: 3px solid var(--status-error);\n  border-radius: 4px;\n}\n\n.error-line {\n  font-size: 12px;\n  font-weight: 600;\n  color: var(--status-error);\n}\n\n.error-message {\n  font-size: 13px;\n  color: var(--text-primary);\n}\n\n.error-item code {\n  padding: 6px 10px;\n  background: var(--bg-primary);\n  border: 1px solid var(--border-primary);\n  border-radius: 4px;\n  font-family: 'JetBrains Mono', monospace;\n  font-size: 12px;\n  color: var(--text-tertiary);\n}\n\n/* ==================== MANUAL ADD ==================== */\n\n.manual-add-container {\n  max-width: 600px;\n  margin: 0 auto;\n}\n\n.manual-form {\n  display: flex;\n  flex-direction: column;\n  gap: 20px;\n}\n\n.form-group {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.form-group label {\n  font-size: 13px;\n  font-weight: 500;\n  color: var(--text-secondary);\n  text-transform: uppercase;\n  letter-spacing: 0.5px;\n}\n\n.input {\n  padding: 10px 14px;\n  background: var(--bg-tertiary);\n  border: 1px solid var(--border-primary);\n  border-radius: 6px;\n  color: var(--text-primary);\n  font-size: 14px;\n  font-family: inherit;\n  transition: all 0.2s;\n}\n\n.input:focus {\n  outline: none;\n  border-color: var(--accent-primary);\n  box-shadow: 0 0 0 3px rgba(0, 201, 255, 0.1);\n}\n\n.input.textarea {\n  resize: vertical;\n  font-family: inherit;\n  line-height: 1.5;\n}\n\n/* ==================== Buttons ==================== */\n\n.btn-primary,\n.btn-secondary {\n  padding: 12px 24px;\n  border: none;\n  border-radius: 6px;\n  font-size: 14px;\n  font-weight: 600;\n  cursor: pointer;\n  transition: all 0.2s;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n}\n\n.btn-primary {\n  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));\n  color: white;\n  box-shadow: 0 0 20px rgba(0, 201, 255, 0.3);\n}\n\n.btn-primary:hover:not(:disabled) {\n  box-shadow: 0 0 30px rgba(0, 201, 255, 0.5);\n  transform: translateY(-1px);\n}\n\n.btn-primary:disabled {\n  opacity: 0.5;\n  cursor: not-allowed;\n}\n\n.btn-secondary {\n  background: var(--bg-tertiary);\n  color: var(--text-primary);\n  border: 1px solid var(--border-primary);\n}\n\n.btn-secondary:hover:not(:disabled) {\n  background: var(--bg-secondary);\n  border-color: var(--accent-primary);\n  color: var(--accent-primary);\n}\n\n/* ==================== Responsive ==================== */\n\n@media (max-width: 768px) {\n  .page-header {\n    flex-direction: column;\n    align-items: flex-start;\n    gap: 15px;\n  }\n\n  .discovery-tabs {\n    overflow-x: auto;\n    -webkit-overflow-scrolling: touch;\n  }\n\n  .hosts-table-container {\n    overflow-x: auto;\n  }\n\n  .result-stats {\n    flex-direction: column;\n  }\n\n  .table-actions {\n    flex-direction: column;\n    gap: 10px;\n  }\n}\n\n/* ============================================================================\n   GROUPS TAB - Additional CSS\n   Aggiungi questo al tuo file Discovery.css esistente\n   ============================================================================ */\n\n/* Groups Container Layout */\n.groups-container {\n  padding: 1.5rem;\n}\n\n.groups-layout {\n  display: grid;\n  grid-template-columns: 280px 1fr;\n  gap: 1.5rem;\n  min-height: 600px;\n}\n\n/* Groups Sidebar */\n.groups-sidebar {\n  background: var(--card-bg, #1a1a2e);\n  border-radius: 8px;\n  padding: 1rem;\n  height: fit-content;\n  position: sticky;\n  top: 1rem;\n}\n\n.sidebar-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 1rem;\n  padding-bottom: 1rem;\n  border-bottom: 1px solid rgba(255, 255, 255, 0.1);\n}\n\n.sidebar-header h3 {\n  margin: 0;\n  font-size: 1.1rem;\n  color: var(--text-primary, #fff);\n}\n\n.btn-create-group {\n  background: var(--primary-color, #4CAF50);\n  border: none;\n  border-radius: 6px;\n  padding: 0.5rem;\n  cursor: pointer;\n  transition: all 0.3s ease;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n}\n\n.btn-create-group svg {\n  width: 16px;\n  height: 16px;\n  stroke: white;\n  stroke-width: 2.5;\n}\n\n.btn-create-group:hover {\n  transform: scale(1.1);\n  box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);\n}\n\n/* Groups List */\n.groups-list {\n  display: flex;\n  flex-direction: column;\n  gap: 0.5rem;\n}\n\n.group-item {\n  display: flex;\n  align-items: center;\n  gap: 0.75rem;\n  padding: 0.75rem;\n  background: rgba(255, 255, 255, 0.03);\n  border-radius: 6px;\n  cursor: pointer;\n  transition: all 0.2s ease;\n  border: 1px solid transparent;\n}\n\n.group-item:hover {\n  background: rgba(255, 255, 255, 0.06);\n  border-color: rgba(255, 255, 255, 0.1);\n}\n\n.group-item.active {\n  background: var(--primary-color, #4CAF50);\n  background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(76, 175, 80, 0.1));\n  border-color: var(--primary-color, #4CAF50);\n}\n\n.group-color {\n  width: 12px;\n  height: 12px;\n  border-radius: 50%;\n  flex-shrink: 0;\n}\n\n.group-info {\n  flex: 1;\n  min-width: 0;\n}\n\n.group-info h4 {\n  margin: 0 0 0.25rem 0;\n  font-size: 0.9rem;\n  color: var(--text-primary, #fff);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.group-count {\n  font-size: 0.75rem;\n  color: var(--text-secondary, #888);\n}\n\n/* Main Content Area */\n.groups-main {\n  background: var(--card-bg, #1a1a2e);\n  border-radius: 8px;\n  padding: 1.5rem;\n  min-height: 600px;\n}\n\n/* Group Header */\n.group-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: flex-start;\n  margin-bottom: 2rem;\n  padding-bottom: 1rem;\n  border-bottom: 1px solid rgba(255, 255, 255, 0.1);\n}\n\n.group-title {\n  display: flex;\n  align-items: center;\n  gap: 1rem;\n}\n\n.group-badge {\n  width: 48px;\n  height: 48px;\n  border-radius: 12px;\n  flex-shrink: 0;\n}\n\n.group-title h2 {\n  margin: 0 0 0.25rem 0;\n  font-size: 1.5rem;\n  color: var(--text-primary, #fff);\n}\n\n.group-title p {\n  margin: 0;\n  font-size: 0.9rem;\n  color: var(--text-secondary, #888);\n}\n\n.btn-delete {\n  background: rgba(244, 67, 54, 0.1);\n  border: 1px solid rgba(244, 67, 54, 0.3);\n  border-radius: 6px;\n  padding: 0.5rem;\n  cursor: pointer;\n  transition: all 0.2s ease;\n}\n\n.btn-delete svg {\n  width: 20px;\n  height: 20px;\n  stroke: #f44336;\n  stroke-width: 2;\n}\n\n.btn-delete:hover {\n  background: rgba(244, 67, 54, 0.2);\n  border-color: #f44336;\n  transform: scale(1.05);\n}\n\n/* Target Assignment */\n.target-assignment {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 1.5rem;\n}\n\n.target-panel {\n  background: rgba(255, 255, 255, 0.02);\n  border: 1px solid rgba(255, 255, 255, 0.1);\n  border-radius: 8px;\n  padding: 1rem;\n}\n\n.target-panel h3 {\n  margin: 0 0 1rem 0;\n  font-size: 1rem;\n  color: var(--text-primary, #fff);\n  display: flex;\n  align-items: center;\n  gap: 0.5rem;\n}\n\n.target-panel h3::before {\n  content: '';\n  width: 3px;\n  height: 16px;\n  background: var(--primary-color, #4CAF50);\n  border-radius: 2px;\n}\n\n.target-list {\n  display: flex;\n  flex-direction: column;\n  gap: 0.5rem;\n  max-height: 500px;\n  overflow-y: auto;\n  padding-right: 0.5rem;\n}\n\n/* Custom scrollbar */\n.target-list::-webkit-scrollbar {\n  width: 6px;\n}\n\n.target-list::-webkit-scrollbar-track {\n  background: rgba(255, 255, 255, 0.05);\n  border-radius: 3px;\n}\n\n.target-list::-webkit-scrollbar-thumb {\n  background: rgba(255, 255, 255, 0.2);\n  border-radius: 3px;\n}\n\n.target-list::-webkit-scrollbar-thumb:hover {\n  background: rgba(255, 255, 255, 0.3);\n}\n\n/* Target Cards */\n.target-card {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 0.75rem;\n  background: rgba(255, 255, 255, 0.03);\n  border: 1px solid rgba(255, 255, 255, 0.05);\n  border-radius: 6px;\n  transition: all 0.2s ease;\n}\n\n.target-card:hover {\n  background: rgba(255, 255, 255, 0.06);\n  border-color: rgba(255, 255, 255, 0.1);\n  transform: translateX(2px);\n}\n\n.target-card.target-in-group {\n  background: rgba(76, 175, 80, 0.05);\n  border-color: rgba(76, 175, 80, 0.2);\n}\n\n.target-info {\n  display: flex;\n  align-items: center;\n  gap: 0.75rem;\n  flex: 1;\n  min-width: 0;\n}\n\n.status-dot {\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  flex-shrink: 0;\n}\n\n.status-dot.status-online {\n  background: #4CAF50;\n  box-shadow: 0 0 6px rgba(76, 175, 80, 0.6);\n}\n\n.status-dot.status-offline {\n  background: #f44336;\n}\n\n.status-dot.status-pending {\n  background: #ff9800;\n}\n\n.target-ip {\n  margin: 0;\n  font-size: 0.9rem;\n  font-weight: 500;\n  font-family: 'Courier New', monospace;\n  color: var(--text-primary, #fff);\n}\n\n.target-hostname {\n  margin: 0;\n  font-size: 0.75rem;\n  color: var(--text-secondary, #888);\n}\n\n.btn-add-target,\n.btn-remove-target {\n  background: rgba(76, 175, 80, 0.1);\n  border: 1px solid rgba(76, 175, 80, 0.3);\n  border-radius: 4px;\n  padding: 0.4rem 0.6rem;\n  cursor: pointer;\n  font-size: 1rem;\n  font-weight: bold;\n  color: #4CAF50;\n  transition: all 0.2s ease;\n  min-width: 32px;\n}\n\n.btn-add-target:hover {\n  background: rgba(76, 175, 80, 0.2);\n  border-color: #4CAF50;\n  transform: translateX(3px);\n}\n\n.btn-remove-target {\n  background: rgba(244, 67, 54, 0.1);\n  border-color: rgba(244, 67, 54, 0.3);\n  color: #f44336;\n  font-size: 1.5rem;\n  line-height: 1;\n}\n\n.btn-remove-target:hover {\n  background: rgba(244, 67, 54, 0.2);\n  border-color: #f44336;\n  transform: scale(1.1);\n}\n\n/* Empty States */\n.empty-state-small {\n  text-align: center;\n  padding: 2rem 1rem;\n  color: var(--text-secondary, #888);\n}\n\n.empty-state-small p {\n  margin: 0 0 0.5rem 0;\n  font-size: 0.9rem;\n}\n\n.btn-link {\n  background: none;\n  border: none;\n  color: var(--primary-color, #4CAF50);\n  cursor: pointer;\n  font-size: 0.85rem;\n  text-decoration: underline;\n  padding: 0;\n}\n\n.btn-link:hover {\n  color: var(--primary-hover, #45a049);\n}\n\n/* Modal Overlay */\n.modal-overlay {\n  position: fixed;\n  top: 0;\n  left: 0;\n  right: 0;\n  bottom: 0;\n  background: rgba(0, 0, 0, 0.7);\n  backdrop-filter: blur(4px);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  z-index: 1000;\n  animation: fadeIn 0.2s ease;\n}\n\n@keyframes fadeIn {\n  from {\n    opacity: 0;\n  }\n  to {\n    opacity: 1;\n  }\n}\n\n/* Modal Content */\n.modal-content {\n  background: var(--card-bg, #1a1a2e);\n  border: 1px solid rgba(255, 255, 255, 0.1);\n  border-radius: 12px;\n  padding: 2rem;\n  max-width: 500px;\n  width: 90%;\n  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);\n  animation: slideUp 0.3s ease;\n}\n\n@keyframes slideUp {\n  from {\n    transform: translateY(20px);\n    opacity: 0;\n  }\n  to {\n    transform: translateY(0);\n    opacity: 1;\n  }\n}\n\n.modal-header {\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  margin-bottom: 1.5rem;\n  padding-bottom: 1rem;\n  border-bottom: 1px solid rgba(255, 255, 255, 0.1);\n}\n\n.modal-header h2 {\n  margin: 0;\n  font-size: 1.3rem;\n  color: var(--text-primary, #fff);\n}\n\n.modal-close {\n  background: none;\n  border: none;\n  font-size: 2rem;\n  color: var(--text-secondary, #888);\n  cursor: pointer;\n  line-height: 1;\n  padding: 0;\n  width: 32px;\n  height: 32px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  border-radius: 4px;\n  transition: all 0.2s ease;\n}\n\n.modal-close:hover {\n  background: rgba(255, 255, 255, 0.1);\n  color: var(--text-primary, #fff);\n}\n\n.modal-form {\n  display: flex;\n  flex-direction: column;\n  gap: 1rem;\n}\n\n.form-row {\n  display: grid;\n  grid-template-columns: 1fr 1fr;\n  gap: 1rem;\n}\n\n.form-group input[type=\"color\"] {\n  width: 100%;\n  height: 40px;\n  border: 1px solid rgba(255, 255, 255, 0.2);\n  border-radius: 6px;\n  cursor: pointer;\n  padding: 4px;\n  background: rgba(255, 255, 255, 0.05);\n}\n\n.modal-actions {\n  display: flex;\n  gap: 0.75rem;\n  margin-top: 1rem;\n}\n\n.modal-actions .btn-primary,\n.modal-actions .btn-secondary {\n  flex: 1;\n}\n\n/* Responsive Design */\n@media (max-width: 1024px) {\n  .groups-layout {\n    grid-template-columns: 1fr;\n  }\n\n  .groups-sidebar {\n    position: static;\n  }\n\n  .target-assignment {\n    grid-template-columns: 1fr;\n  }\n}\n\n@media (max-width: 768px) {\n  .groups-container {\n    padding: 1rem;\n  }\n\n  .modal-content {\n    padding: 1.5rem;\n    max-width: 95%;\n  }\n\n  .form-row {\n    grid-template-columns: 1fr;\n  }\n}\n\n\n/* Delete Button */\n.btn-delete {\n  background: rgba(244, 67, 54, 0.1);\n  border: 1px solid rgba(244, 67, 54, 0.3);\n  color: #f44336;\n  padding: 0.75rem 1.5rem;\n  border-radius: 6px;\n  font-size: 0.95rem;\n  font-weight: 500;\n  cursor: pointer;\n  transition: all 0.2s ease;\n  display: flex;\n  align-items: center;\n  gap: 0.5rem;\n}\n\n.btn-delete svg {\n  width: 18px;\n  height: 18px;\n  stroke: currentColor;\n  stroke-width: 2;\n}\n\n.btn-delete:hover:not(:disabled) {\n  background: rgba(244, 67, 54, 0.2);\n  border-color: #f44336;\n  transform: translateY(-1px);\n  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);\n}\n\n.btn-delete:disabled {\n  opacity: 0.5;\n  cursor: not-allowed;\n}\n\n.btn-delete:active:not(:disabled) {\n  transform: translateY(0);\n}\n\n/* Host già importato - stile diverso */\n.hosts-table tbody tr.already-imported {\n  background: rgba(33, 150, 243, 0.05);\n  opacity: 0.7;\n}\n\n.hosts-table tbody tr.already-imported:hover {\n  background: rgba(33, 150, 243, 0.1);\n  opacity: 0.85;\n}\n\n",
+			"file": "frontend/src/pages/Discovery.css",
+			"file_size": 22265,
+			"file_write_time": 134074341947094853,
 			"settings":
 			{
-				"buffer_size": 375,
-				"line_ending": "Unix",
-				"name": "useEffect(() => {"
-			},
-			"undo_stack":
-			[
-				[
-					4,
-					1,
-					"",
-					null,
-					"AQAAAAAAAAAAAAAAdwEAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/"
-				]
-			]
-		},
-		{
-			"contents": "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc2MjUxMzcwOCwiaWF0IjoxNzYyNDI3MzA4LCJqdGkiOiJhNzAzMWNjNjk1ZjA0YTVjYWZmODQ0YjM0ZWU0MzEzMiIsInVzZXJfaWQiOjF9.dnA6ccrxoMcEG4E8QLi9PzAwZ2bZnw73j0oJoM-4_hI\",\"access\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzYyNDMwOTA4LCJpYXQiOjE3NjI0MjczMDgsImp0aSI6ImEzN2JhYTBlNGE5MzQ4NWNhMTE4ZjM5OTk0YTQxZmI0IiwidXNlcl9pZCI6MX0.31OGSbPiN7AtGUP-1bRabkASdwLw2fcszV-sXJ8q_FM\"",
-			"settings":
-			{
-				"buffer_size": 471,
-				"line_ending": "Unix",
-				"name": "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90"
-			},
-			"undo_stack":
-			[
-				[
-					4,
-					1,
-					"",
-					null,
-					"AQAAAAAAAAAAAAAA1wEAAAAAAAAAAAAA",
-					"AgAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/AAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8L8"
-				]
-			]
-		},
-		{
-			"file": "backend/audit/models.py",
-			"settings":
-			{
-				"buffer_size": 5700,
-				"encoding": "UTF-8",
-				"line_ending": "Unix"
-			},
-			"undo_stack":
-			[
-			]
-		},
-		{
-			"file": "backend/firedog/urls.py",
-			"settings":
-			{
-				"buffer_size": 2337,
+				"buffer_size": 22265,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			},
@@ -214,58 +165,19 @@
 					1,
 					"insert",
 					{
-						"characters": "\n\n"
+						"characters": " "
 					},
-					"AgAAAEgCAAAAAAAASQIAAAAAAAAAAAAASQIAAAAAAABKAgAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAASAIAAAAAAABIAgAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					6,
-					1,
-					"paste",
-					null,
-					"AQAAAEoCAAAAAAAAgAUAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAASgIAAAAAAABKAgAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					11,
-					1,
-					"toggle_comment",
-					{
-						"block": true
-					},
-					"FAAAAFwFAAAAAAAAXAUAAAAAAAACAAAAIyBaBQAAAAAAAFoFAAAAAAAAAQAAACMRBQAAAAAAABEFAAAAAAAAAgAAACMg8QQAAAAAAADxBAAAAAAAAAIAAAAjIO8EAAAAAAAA7wQAAAAAAAABAAAAI5IEAAAAAAAAkgQAAAAAAAACAAAAIyA6BAAAAAAAADoEAAAAAAAAAgAAACMg5wMAAAAAAADnAwAAAAAAAAIAAAAjIJcDAAAAAAAAlwMAAAAAAAACAAAAIyBEAwAAAAAAAEQDAAAAAAAAAgAAACMgFAMAAAAAAAAUAwAAAAAAAAIAAAAjIBIDAAAAAAAAEgMAAAAAAAABAAAAIw4DAAAAAAAADgMAAAAAAAACAAAAIyD1AgAAAAAAAPUCAAAAAAAAAgAAACMg2AIAAAAAAADYAgAAAAAAAAIAAAAjIMECAAAAAAAAwQIAAAAAAAACAAAAIyCpAgAAAAAAAKkCAAAAAAAAAgAAACMgkAIAAAAAAACQAgAAAAAAAAIAAAAjIHYCAAAAAAAAdgIAAAAAAAACAAAAIyBKAgAAAAAAAEoCAAAAAAAAAgAAACMg",
-					"AQAAAAAAAAABAAAAgQUAAAAAAABKAgAAAAAAAAAAAAAAAPC/"
-				],
-				[
-					17,
-					1,
-					"toggle_comment",
-					{
-						"block": false
-					},
-					"EQAAADkFAAAAAAAAOwUAAAAAAAAAAAAA8QQAAAAAAADzBAAAAAAAAAAAAADTBAAAAAAAANUEAAAAAAAAAAAAAHcEAAAAAAAAeQQAAAAAAAAAAAAAIQQAAAAAAAAjBAAAAAAAAAAAAADQAwAAAAAAANIDAAAAAAAAAAAAAIIDAAAAAAAAhAMAAAAAAAAAAAAAMQMAAAAAAAAzAwAAAAAAAAAAAAADAwAAAAAAAAUDAAAAAAAAAAAAAAADAAAAAAAAAgMAAAAAAAAAAAAA6QIAAAAAAADrAgAAAAAAAAAAAADOAgAAAAAAANACAAAAAAAAAAAAALkCAAAAAAAAuwIAAAAAAAAAAAAAowIAAAAAAAClAgAAAAAAAAAAAACMAgAAAAAAAI4CAAAAAAAAAAAAAHQCAAAAAAAAdgIAAAAAAAAAAAAASgIAAAAAAABMAgAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAWwUAAAAAAABKAgAAAAAAAAAAAAAAAPC/"
+					"AQAAADMAAAAAAAAANAAAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAMwAAAAAAAAAzAAAAAAAAAAAAAAAAAPC/"
 				]
 			]
 		},
 		{
-			"file": "firedog-package/Struttura.md",
+			"file": "frontend/src/pages/Settings.css",
 			"settings":
 			{
-				"buffer_size": 2792,
+				"buffer_size": 20632,
 				"encoding": "UTF-8",
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"contents": "\"\"\"\nNuovi API Endpoints per Frontend\nFile: backend/api/views.py (NUOVE VIEWS DA AGGIUNGERE)\n\nQuesti endpoint forniscono i dati necessari per le pagine frontend:\n- Statistics per un target\n- Threats con filtri\n- Traffic analysis\n- Logs (audit, system, firewall)\n\"\"\"\n\nfrom rest_framework import viewsets, status\nfrom rest_framework.decorators import action\nfrom rest_framework.response import Response\nfrom rest_framework.permissions import IsAuthenticated\nfrom django_filters.rest_framework import DjangoFilterBackend\nfrom django.utils import timezone\nfrom datetime import timedelta\nfrom django.db.models import Count, Q\nimport logging\n\nlogger = logging.getLogger('firedog.api')\n\n\nclass StatisticsViewSet(viewsets.ReadOnlyModelViewSet):\n    \"\"\"\n    ViewSet per visualizzare statistics\n    \n    Endpoints:\n \n    \"\"\"\n    GET /api/targets/{target_id}/stats/ \n    GET /api/targets/{target_id}/stats/latest/\n    GET /api/targets/{target_id}/stats/{id}/\n\n    permission_classes = [IsAuthenticated]\n    filter_backends = [DjangoFilterBackend]\n    filterset_fields = ['collected_at']\n    \n    def get_queryset(self):\n        \"\"\"Filtra stats per target\"\"\"\n        from targets.models import Statistics\n        target_id = self.kwargs.get('target_pk')\n        return Statistics.objects.filter(target_id=target_id).order_by('-collected_at')\n    \n    def get_serializer_class(self):\n        from api.serializers import StatisticsSerializer\n        return StatisticsSerializer\n    \n    @action(detail=False, methods=['get'])\n    def latest(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Restituisce l'ultima statistica registrata\n        \"\"\"\n        GET /api/targets/{target_id}/stats/latest/\n        stats = self.get_queryset().first()\n        \n        if not stats:\n            return Response(\n                {'error': 'No statistics available'},\n                status=status.HTTP_404_NOT_FOUND\n            )\n        \n        serializer = self.get_serializer(stats)\n        return Response(serializer.data)\n    \n    @action(detail=False, methods=['get'])\n    def history(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Restituisce lo storico stats nelle ultime N ore\n        \"\"\"\n        GET /api/targets/{target_id}/stats/history/?hours=24\n\n        hours = int(request.query_params.get('hours', 24))\n        since = timezone.now() - timedelta(hours=hours)\n        \n        stats = self.get_queryset().filter(collected_at__gte=since)\n        serializer = self.get_serializer(stats, many=True)\n        \n        return Response({\n            'hours': hours,\n            'count': stats.count(),\n            'results': serializer.data\n        })\n\n\nclass ThreatLogViewSet(viewsets.ReadOnlyModelViewSet):\n    \"\"\"\n    ViewSet per visualizzare threats\n    \n    Endpoints:\n    - \n    \"\"\"\n    GET /api/targets/{target_id}/threats/\n    GET /api/targets/{target_id}/threats/{id}/ \n    POST /api/targets/{target_id}/threats/{id}/acknowledge/\n    GET /api/targets/{target_id}/threats/summary/ \n\n    permission_classes = [IsAuthenticated]\n    filter_backends = [DjangoFilterBackend]\n    filterset_fields = ['classification', 'threat_type', 'acknowledged', 'source_ip']\n    \n    def get_queryset(self):\n        \"\"\"Filtra threats per target\"\"\"\n        from threats.models import ThreatLog\n        target_id = self.kwargs.get('target_pk')\n        return ThreatLog.objects.filter(target_id=target_id).order_by('-detected_at')\n    \n    def get_serializer_class(self):\n        from threats.serializers import ThreatLogSerializer\n        return ThreatLogSerializer\n    \n    @action(detail=True, methods=['post'])\n    def acknowledge(self, request, target_pk=None, pk=None):\n        \"\"\"\n        \n        \n        Marca una minaccia come acknowledged\n        \"\"\"\n        POST /api/targets/{target_id}/threats/{id}/acknowledge/\n\n        threat = self.get_object()\n        threat.acknowledged = True\n        threat.save()\n        \n        # Log audit\n        from audit.models import AuditLog\n        AuditLog.log_action(\n            username=request.user.username,\n            action='threat.acknowledge',\n            target_id=target_pk,\n            details={'threat_id': pk, 'source_ip': str(threat.source_ip)},\n            ip_address=request.META.get('REMOTE_ADDR')\n        )\n        \n        serializer = self.get_serializer(threat)\n        return Response(serializer.data)\n    \n    @action(detail=False, methods=['get'])\n    def summary(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Restituisce riepilogo threats per severity\n        \"\"\"\n        GET /api/targets/{target_id}/threats/summary/?hours=24\n\n        hours = int(request.query_params.get('hours', 24))\n        since = timezone.now() - timedelta(hours=hours)\n        \n        threats = self.get_queryset().filter(detected_at__gte=since)\n        \n        summary = {\n            'total': threats.count(),\n            'by_classification': {\n                'critical': threats.filter(classification='CRITICAL').count(),\n                'high': threats.filter(classification='HIGH').count(),\n                'medium': threats.filter(classification='MEDIUM').count(),\n                'low': threats.filter(classification='LOW').count(),\n            },\n            'acknowledged': threats.filter(acknowledged=True).count(),\n            'unacknowledged': threats.filter(acknowledged=False).count(),\n            'top_attackers': list(\n                threats.values('source_ip')\n                .annotate(count=Count('id'))\n                .order_by('-count')[:10]\n            )\n        }\n        \n        return Response(summary)\n\n\nclass AuditLogViewSet(viewsets.ReadOnlyModelViewSet):\n    \"\"\"\n    ViewSet per visualizzare audit logs\n    \n    Endpoints:\n    -  - Log specifico\n    \"\"\"\n    GET /api/logs/audit/\n    GET /api/logs/audit/{id}/\n    \n    permission_classes = [IsAuthenticated]\n    filter_backends = [DjangoFilterBackend]\n    filterset_fields = ['username', 'action', 'target']\n    \n    def get_queryset(self):\n        from audit.models import AuditLog\n        return AuditLog.objects.all().order_by('-timestamp')\n    \n    def get_serializer_class(self):\n        from audit.serializers import AuditLogSerializer\n        return AuditLogSerializer\n    \n    @action(detail=False, methods=['get'])\n    def recent(self, request):\n        \"\"\"\n       \n        \n        Ultimi N audit logs\n        \"\"\"\n        GET /api/logs/audit/recent/?hours=24&limit=100\n   \n        hours = int(request.query_params.get('hours', 24))\n        limit = int(request.query_params.get('limit', 100))\n        since = timezone.now() - timedelta(hours=hours)\n        \n        logs = self.get_queryset().filter(timestamp__gte=since)[:limit]\n        serializer = self.get_serializer(logs, many=True)\n        \n        return Response({\n            'count': logs.count(),\n            'results': serializer.data\n        })\n\n\nclass NetworkTrafficViewSet(viewsets.ViewSet):\n    \"\"\"\n    ViewSet per analisi traffico rete\n    \n    Endpoints:\n    -  - Analisi traffico\n    \"\"\"\n    GET /api/targets/{target_id}/traffic/realtime/ \n    GET /api/targets/{target_id}/traffic/analyze/\n    \n    permission_classes = [IsAuthenticated]\n    \n    @action(detail=False, methods=['get'])\n    def realtime(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Ottiene stats in tempo reale\n        \"\"\"\n        GET /api/targets/{target_id}/traffic/realtime/\n\n        from targets.models import Target, Statistics\n        \n        try:\n            target = Target.objects.get(id=target_pk)\n            \n            # Ultime 10 statistics per grafico\n            recent_stats = Statistics.objects.filter(\n                target=target\n            ).order_by('-collected_at')[:10]\n            \n            from api.serializers import StatisticsSerializer\n            serializer = StatisticsSerializer(recent_stats, many=True)\n            \n            return Response({\n                'target': {\n                    'id': target.id,\n                    'hostname': target.hostname,\n                    'ip_address': str(target.ip_address),\n                    'status': target.status\n                },\n                'statistics': serializer.data\n            })\n            \n        except Target.DoesNotExist:\n            return Response(\n                {'error': 'Target not found'},\n                status=status.HTTP_404_NOT_FOUND\n            )\n    \n    @action(detail=False, methods=['post'])\n    def analyze(self, request, target_pk=None):\n        \"\"\"\n        \n        \n        Triggera analisi traffico sul target\n        \"\"\"\n        POST /api/targets/{target_id}/traffic/analyze/\n        Body: {\"hours\": 24}\n\n        from targets.models import Target\n        from core.ssh_manager import SSHManager, SSHConnectionError\n        \n        hours = request.data.get('hours', 1)\n        \n        try:\n            target = Target.objects.get(id=target_pk)\n            \n            if target.status != 'online':\n                return Response(\n                    {'error': 'Target is not online'},\n                    status=status.HTTP_503_SERVICE_UNAVAILABLE\n                )\n            \n            # Connessione SSH e analisi\n            ssh = SSHManager(\n                host=target.ip_address,\n                port=target.ssh_port,\n                username=target.ssh_user\n            )\n            ssh.connect()\n            \n            analysis = ssh.analyze_traffic(hours=hours)\n            ssh.disconnect()\n            \n            if not analysis:\n                return Response(\n                    {'error': 'Analysis failed'},\n                    status=status.HTTP_500_INTERNAL_SERVER_ERROR\n                )\n            \n            # Log audit\n            from audit.models import AuditLog\n            AuditLog.log_action(\n                username=request.user.username,\n                action='traffic.analyze',\n                target=target,\n                details={'hours': hours},\n                ip_address=request.META.get('REMOTE_ADDR')\n            )\n            \n            return Response(analysis)\n            \n        except Target.DoesNotExist:\n            return Response(\n                {'error': 'Target not found'},\n                status=status.HTTP_404_NOT_FOUND\n            )\n        except SSHConnectionError as e:\n            return Response(\n                {'error': f'SSH connection failed: {str(e)}'},\n                status=status.HTTP_503_SERVICE_UNAVAILABLE\n            )\n\n\nclass PerformanceViewSet(viewsets.ViewSet):\n    \"\"\"\n    ViewSet per metriche performance sistema\n    \n    Endpoints:\n    -  - Metriche sistema\n    \"\"\"\n    GET /api/targets/{target_id}/performance/\n\n    permission_classes = [IsAuthenticated]\n    \n    def list(self, request, target_pk=None):\n        \"\"\"\n        \n         \n        Ottiene metriche CPU, RAM, Disk (future implementation)\n        \"\"\"\n        # TODO: Implementare quando saranno disponibili i comandi\n        # per recuperare metriche sistema dal target\n        \n        GET /api/targets/{target_id}/performance/\n\n\n        return Response({\n            'message': 'Performance monitoring not yet implemented',\n            'planned_metrics': [\n                'cpu_usage_percent',\n                'memory_usage_percent',\n                'disk_usage_percent',\n                'network_io_bytes'\n            ]\n        })\n\n\n# ============================================\n# URL ROUTING\n# ============================================\n# Aggiungi in backend/firedog/urls.py:\n#\n# from rest_framework_nested import routers\n# from api.views import (\n#     StatisticsViewSet,\n#     ThreatLogViewSet,\n#     AuditLogViewSet,\n#     NetworkTrafficViewSet,\n#     PerformanceViewSet\n# )\n#\n# # Nested router per target-specific endpoints\n# targets_router = routers.NestedSimpleRouter(router, r'targets', lookup='target')\n# targets_router.register(r'stats', StatisticsViewSet, basename='target-stats')\n# targets_router.register(r'threats', ThreatLogViewSet, basename='target-threats')\n# targets_router.register(r'traffic', NetworkTrafficViewSet, basename='target-traffic')\n# targets_router.register(r'performance', PerformanceViewSet, basename='target-performance')\n#\n# # Logs endpoints (non nested)\n# router.register(r'logs/audit', AuditLogViewSet, basename='audit-logs')\n#\n# urlpatterns += targets_router.urls\n",
-			"file": "backend/api/views.py",
-			"file_size": 12342,
-			"file_write_time": 134066498030463406,
-			"settings":
-			{
-				"buffer_size": 12343,
 				"line_ending": "Unix"
 			},
 			"undo_stack":
@@ -273,12 +185,52 @@
 				[
 					3,
 					1,
+					"paste",
+					null,
+					"AQAAANABAAAAAAAA/wEAAAAAAAAtAAAAYm9yZGVyLWJvdHRvbTogMXB4IHNvbGlkIHZhcigtLWJvcmRlci1jb2xvcik7",
+					"AQAAAAAAAAABAAAA0AEAAAAAAAD9AQAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					6,
+					1,
+					"paste",
+					null,
+					"AQAAAH0IAAAAAAAAnQgAAAAAAAAjAAAAYmFja2dyb3VuZDogdmFyKC0tY2FyZC1iYWNrZ3JvdW5kKTs",
+					"AQAAAAAAAAABAAAAfQgAAAAAAACgCAAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					19,
+					1,
+					"paste",
+					null,
+					"AQAAAGAMAAAAAAAAgAwAAAAAAAAlAAAAIGJhY2tncm91bmQ6IHZhcigtLWlucHV0LWJhY2tncm91bmQpOw",
+					"AQAAAAAAAAABAAAAYAwAAAAAAACFDAAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					23,
+					1,
 					"insert",
 					{
 						"characters": " "
 					},
-					"AQAAADgqAAAAAAAAOSoAAAAAAAAAAAAA",
-					"AQAAAAAAAAABAAAAOCoAAAAAAAA4KgAAAAAAAAAAAAAAAPC/"
+					"AQAAAF8MAAAAAAAAYAwAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAXwwAAAAAAABfDAAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					27,
+					1,
+					"right_delete",
+					null,
+					"AQAAAAAAAAAAAAAAAAAAAAAAAAAjQgAALyogU2V0dGluZ3MgUGFnZSBTdHlsZXMgLSBFbmhhbmNlZCB3aXRoIFNTSCBhbmQgRGF0YWJhc2Ugc2VjdGlvbnMgKi8KCi5zZXR0aW5ncy1wYWdlIHsKICBwYWRkaW5nOiAycmVtOwogIG1heC13aWR0aDogMTQwMHB4OwogIG1hcmdpbjogMCBhdXRvOwp9CgovKiA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiAgIEhFQURFUgogICA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09ICovCgouc2V0dGluZ3MtaGVhZGVyIHsKICBkaXNwbGF5OiBmbGV4OwogIGp1c3RpZnktY29udGVudDogc3BhY2UtYmV0d2VlbjsKICBhbGlnbi1pdGVtczogY2VudGVyOwogIG1hcmdpbi1ib3R0b206IDJyZW07CiAgcGFkZGluZy1ib3R0b206IDEuNXJlbTsKICBib3JkZXItYm90dG9tOiAxcHggc29saWQgdmFyKC0tYm9yZGVyLXByaW1hcnkpOwp9CgouaGVhZGVyLWNvbnRlbnQgaDEgewogIGZvbnQtc2l6ZTogMnJlbTsKICBmb250LXdlaWdodDogNjAwOwogIG1hcmdpbjogMCAwIDAuNXJlbSAwOwogIGNvbG9yOiB2YXIoLS10ZXh0LXByaW1hcnkpOwp9CgouaGVhZGVyLWNvbnRlbnQgcCB7CiAgbWFyZ2luOiAwOwogIGNvbG9yOiB2YXIoLS10ZXh0LXNlY29uZGFyeSk7CiAgZm9udC1zaXplOiAwLjk1cmVtOwp9CgouaGVhZGVyLWFjdGlvbnMgewogIGRpc3BsYXk6IGZsZXg7CiAgZ2FwOiAxcmVtOwp9CgovKiA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiAgIFRBQlMKICAgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PSAqLwoKLnNldHRpbmdzLXRhYnMgewogIGRpc3BsYXk6IGZsZXg7CiAgZ2FwOiAwLjVyZW07CiAgbWFyZ2luLWJvdHRvbTogMnJlbTsKICBib3JkZXItYm90dG9tOiAycHggc29saWQgdmFyKC0tYm9yZGVyLWNvbG9yKTsKICBvdmVyZmxvdy14OiBhdXRvOwogIHBhZGRpbmctYm90dG9tOiAwOwp9Cgouc2V0dGluZ3MtdGFicyAudGFiIHsKICBkaXNwbGF5OiBmbGV4OwogIGFsaWduLWl0ZW1zOiBjZW50ZXI7CiAgZ2FwOiAwLjVyZW07CiAgcGFkZGluZzogMXJlbSAxLjVyZW07CiAgYmFja2dyb3VuZDogbm9uZTsKICBib3JkZXI6IG5vbmU7CiAgYm9yZGVyLWJvdHRvbTogM3B4IHNvbGlkIHRyYW5zcGFyZW50OwogIGNvbG9yOiB2YXIoLS10ZXh0LXNlY29uZGFyeSk7CiAgZm9udC1zaXplOiAwLjk1cmVtOwogIGZvbnQtd2VpZ2h0OiA1MDA7CiAgY3Vyc29yOiBwb2ludGVyOwogIHRyYW5zaXRpb246IGFsbCAwLjJzIGVhc2U7CiAgd2hpdGUtc3BhY2U6IG5vd3JhcDsKICBwb3NpdGlvbjogcmVsYXRpdmU7CiAgYm90dG9tOiAtMnB4Owp9Cgouc2V0dGluZ3MtdGFicyAudGFiIHN2ZyB7CiAgd2lkdGg6IDE4cHg7CiAgaGVpZ2h0OiAxOHB4Owp9Cgouc2V0dGluZ3MtdGFicyAudGFiOmhvdmVyIHsKICBjb2xvcjogdmFyKC0tcHJpbWFyeS1jb2xvcik7CiAgYmFja2dyb3VuZDogcmdiYSgwLCAyNTUsIDI1NSwgMC4wNSk7Cn0KCi5zZXR0aW5ncy10YWJzIC50YWIuYWN0aXZlIHsKICBjb2xvcjogdmFyKC0tcHJpbWFyeS1jb2xvcik7CiAgYm9yZGVyLWJvdHRvbS1jb2xvcjogdmFyKC0tcHJpbWFyeS1jb2xvcik7CiAgYmFja2dyb3VuZDogcmdiYSgwLCAyNTUsIDI1NSwgMC4wOCk7Cn0KCi8qID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KICAgQ09OVEVOVAogICA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09ICovCgouc2V0dGluZ3MtY29udGVudCB7CiAgYW5pbWF0aW9uOiBmYWRlSW4gMC4zcyBlYXNlOwp9CgpAa2V5ZnJhbWVzIGZhZGVJbiB7CiAgZnJvbSB7CiAgICBvcGFjaXR5OiAwOwogICAgdHJhbnNmb3JtOiB0cmFuc2xhdGVZKDEwcHgpOwogIH0KICB0byB7CiAgICBvcGFjaXR5OiAxOwogICAgdHJhbnNmb3JtOiB0cmFuc2xhdGVZKDApOwogIH0KfQoKLnNldHRpbmdzLXNlY3Rpb24gewogIGJhY2tncm91bmQ6IHZhcigtLWJnLXNlY29uZGFyeSk7CiAgYm9yZGVyOiAxcHggc29saWQgdmFyKC0tYm9yZGVyLWNvbG9yKTsKICBib3JkZXItcmFkaXVzOiAxMnB4OwogIHBhZGRpbmc6IDJyZW07Cn0KCi5zZWN0aW9uLXRpdGxlIHsKICBmb250LXNpemU6IDEuNXJlbTsKICBmb250LXdlaWdodDogNjAwOwogIG1hcmdpbjogMCAwIDAuNXJlbSAwOwogIGNvbG9yOiB2YXIoLS10ZXh0LXByaW1hcnkpOwp9Cgouc2VjdGlvbi1kZXNjcmlwdGlvbiB7CiAgY29sb3I6IHZhcigtLXRleHQtc2Vjb25kYXJ5KTsKICBtYXJnaW46IDAgMCAycmVtIDA7CiAgZm9udC1zaXplOiAwLjk1cmVtOwp9Cgouc2VjdGlvbi1oZWFkZXItd2l0aC1hY3Rpb24gewogIGRpc3BsYXk6IGZsZXg7CiAganVzdGlmeS1jb250ZW50OiBzcGFjZS1iZXR3ZWVuOwogIGFsaWduLWl0ZW1zOiBmbGV4LXN0YXJ0OwogIG1hcmdpbi1ib3R0b206IDJyZW07Cn0KCi8qID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KICAgRk9STSBFTEVNRU5UUwogICA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09ICovCgouc2V0dGluZ3MtZ3JpZCB7CiAgZGlzcGxheTogZ3JpZDsKICBncmlkLXRlbXBsYXRlLWNvbHVtbnM6IHJlcGVhdChhdXRvLWZpdCwgbWlubWF4KDMwMHB4LCAxZnIpKTsKICBnYXA6IDEuNXJlbTsKfQoKLmZvcm0tZ3JvdXAgewogIGRpc3BsYXk6IGZsZXg7CiAgZmxleC1kaXJlY3Rpb246IGNvbHVtbjsKICBnYXA6IDAuNXJlbTsKfQoKLmZvcm0tZ3JvdXAgbGFiZWwgewogIGZvbnQtc2l6ZTogMC45cmVtOwogIGZvbnQtd2VpZ2h0OiA1MDA7CiAgY29sb3I6IHZhcigtLXRleHQtcHJpbWFyeSk7Cn0KCi5mb3JtLWdyb3VwIC5pbnB1dCB7CiAgd2lkdGg6IDEwMCU7CiAgcGFkZGluZzogMC43NXJlbSAxcmVtOwogIGJhY2tncm91bmQ6IHZhcigtLWJnLXNlY29uZGFyeSk7CiAgYm9yZGVyOiAxcHggc29saWQgdmFyKC0tYm9yZGVyLWNvbG9yKTsKICBib3JkZXItcmFkaXVzOiA4cHg7CiAgY29sb3I6IHZhcigtLXRleHQtcHJpbWFyeSk7CiAgZm9udC1zaXplOiAwLjk1cmVtOwogIHRyYW5zaXRpb246IGFsbCAwLjJzIGVhc2U7Cn0KCi5mb3JtLWdyb3VwIC5pbnB1dDpmb2N1cyB7CiAgb3V0bGluZTogbm9uZTsKICBib3JkZXItY29sb3I6IHZhcigtLXByaW1hcnktY29sb3IpOwogIGJveC1zaGFkb3c6IDAgMCAwIDNweCByZ2JhKDAsIDI1NSwgMjU1LCAwLjEpOwp9CgouZm9ybS1ncm91cCAuaW5wdXQ6OnBsYWNlaG9sZGVyIHsKICBjb2xvcjogdmFyKC0tdGV4dC10ZXJ0aWFyeSk7Cn0KCi5mb3JtLWhpbnQgewogIGZvbnQtc2l6ZTogMC44NXJlbTsKICBjb2xvcjogdmFyKC0tdGV4dC10ZXJ0aWFyeSk7CiAgbWFyZ2luLXRvcDogLTAuMjVyZW07Cn0KCi5jaGVja2JveC1sYWJlbCB7CiAgZGlzcGxheTogZmxleDsKICBhbGlnbi1pdGVtczogY2VudGVyOwogIGdhcDogMC43NXJlbTsKICBjdXJzb3I6IHBvaW50ZXI7CiAgcGFkZGluZzogMC41cmVtOwogIGJvcmRlci1yYWRpdXM6IDZweDsKICB0cmFuc2l0aW9uOiBiYWNrZ3JvdW5kIDAuMnMgZWFzZTsKfQoKLmNoZWNrYm94LWxhYmVsOmhvdmVyIHsKICBiYWNrZ3JvdW5kOiByZ2JhKDAsIDI1NSwgMjU1LCAwLjA1KTsKfQoKLmNoZWNrYm94LWxhYmVsIGlucHV0W3R5cGU9ImNoZWNrYm94Il0gewogIHdpZHRoOiAxOHB4OwogIGhlaWdodDogMThweDsKICBjdXJzb3I6IHBvaW50ZXI7CiAgYWNjZW50LWNvbG9yOiB2YXIoLS1wcmltYXJ5LWNvbG9yKTsKfQoKLmNoZWNrYm94LWxhYmVsIHNwYW4gewogIGZvbnQtc2l6ZTogMC45NXJlbTsKICBjb2xvcjogdmFyKC0tdGV4dC1wcmltYXJ5KTsKfQoKLyogU2xpZGVycyAqLwouc2xpZGVyIHsKICB3aWR0aDogMTAwJTsKICBoZWlnaHQ6IDZweDsKICBib3JkZXItcmFkaXVzOiAzcHg7CiAgYmFja2dyb3VuZDogdmFyKC0tYm9yZGVyLWNvbG9yKTsKICBvdXRsaW5lOiBub25lOwogIC13ZWJraXQtYXBwZWFyYW5jZTogbm9uZTsKICBjdXJzb3I6IHBvaW50ZXI7Cn0KCi5zbGlkZXI6Oi13ZWJraXQtc2xpZGVyLXRodW1iIHsKICAtd2Via2l0LWFwcGVhcmFuY2U6IG5vbmU7CiAgYXBwZWFyYW5jZTogbm9uZTsKICB3aWR0aDogMThweDsKICBoZWlnaHQ6IDE4cHg7CiAgYm9yZGVyLXJhZGl1czogNTAlOwogIGJhY2tncm91bmQ6IHZhcigtLXByaW1hcnktY29sb3IpOwogIGN1cnNvcjogcG9pbnRlcjsKICBib3gtc2hhZG93OiAwIDAgMTBweCByZ2JhKDAsIDI1NSwgMjU1LCAwLjUpOwogIHRyYW5zaXRpb246IGFsbCAwLjJzIGVhc2U7Cn0KCi5zbGlkZXI6Oi13ZWJraXQtc2xpZGVyLXRodW1iOmhvdmVyIHsKICB0cmFuc2Zvcm06IHNjYWxlKDEuMik7CiAgYm94LXNoYWRvdzogMCAwIDE1cHggcmdiYSgwLCAyNTUsIDI1NSwgMC43KTsKfQoKLnNsaWRlcjo6LW1vei1yYW5nZS10aHVtYiB7CiAgd2lkdGg6IDE4cHg7CiAgaGVpZ2h0OiAxOHB4OwogIGJvcmRlci1yYWRpdXM6IDUwJTsKICBiYWNrZ3JvdW5kOiB2YXIoLS1wcmltYXJ5LWNvbG9yKTsKICBjdXJzb3I6IHBvaW50ZXI7CiAgYm9yZGVyOiBub25lOwogIGJveC1zaGFkb3c6IDAgMCAxMHB4IHJnYmEoMCwgMjU1LCAyNTUsIDAuNSk7Cn0KCi5zbGlkZXItbGFiZWxzIHsKICBkaXNwbGF5OiBmbGV4OwogIGp1c3RpZnktY29udGVudDogc3BhY2UtYmV0d2VlbjsKICBmb250LXNpemU6IDAuOHJlbTsKICBjb2xvcjogdmFyKC0tdGV4dC10ZXJ0aWFyeSk7CiAgbWFyZ2luLXRvcDogMC4yNXJlbTsKfQoKLyogPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogICBTU0ggS0VZUyBTRUNUSU9OCiAgID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0gKi8KCi5zc2gta2V5cy1saXN0IHsKICBkaXNwbGF5OiBmbGV4OwogIGZsZXgtZGlyZWN0aW9uOiBjb2x1bW47CiAgZ2FwOiAxcmVtOwp9Cgouc3NoLWtleS1jYXJkIHsKICBiYWNrZ3JvdW5kOiByZ2JhKDAsIDI1NSwgMjU1LCAwLjAzKTsKICBib3JkZXI6IDFweCBzb2xpZCB2YXIoLS1ib3JkZXItY29sb3IpOwogIGJvcmRlci1yYWRpdXM6IDhweDsKICBwYWRkaW5nOiAxLjVyZW07CiAgdHJhbnNpdGlvbjogYWxsIDAuMnMgZWFzZTsKfQoKLnNzaC1rZXktY2FyZDpob3ZlciB7CiAgYm9yZGVyLWNvbG9yOiB2YXIoLS1wcmltYXJ5LWNvbG9yKTsKICBib3gtc2hhZG93OiAwIDRweCAxMnB4IHJnYmEoMCwgMjU1LCAyNTUsIDAuMSk7Cn0KCi5zc2gta2V5LWhlYWRlciB7CiAgZGlzcGxheTogZmxleDsKICBqdXN0aWZ5LWNvbnRlbnQ6IHNwYWNlLWJldHdlZW47CiAgYWxpZ24taXRlbXM6IGZsZXgtc3RhcnQ7CiAgbWFyZ2luLWJvdHRvbTogMXJlbTsKfQoKLnNzaC1rZXktaW5mbyBoMyB7CiAgbWFyZ2luOiAwIDAgMC41cmVtIDA7CiAgZm9udC1zaXplOiAxLjFyZW07CiAgY29sb3I6IHZhcigtLXRleHQtcHJpbWFyeSk7Cn0KCi5zc2gta2V5LW1ldGEgewogIGRpc3BsYXk6IGZsZXg7CiAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICBnYXA6IDAuNzVyZW07CiAgZmxleC13cmFwOiB3cmFwOwp9Cgouc3NoLWtleS10YXJnZXRzIHsKICBmb250LXNpemU6IDAuODVyZW07CiAgY29sb3I6IHZhcigtLXRleHQtc2Vjb25kYXJ5KTsKfQoKLnNzaC1rZXktYWN0aW9ucyB7CiAgZGlzcGxheTogZmxleDsKICBnYXA6IDAuNXJlbTsKfQoKLnNzaC1rZXktZGV0YWlscyB7CiAgZGlzcGxheTogZ3JpZDsKICBncmlkLXRlbXBsYXRlLWNvbHVtbnM6IHJlcGVhdChhdXRvLWZpdCwgbWlubWF4KDI1MHB4LCAxZnIpKTsKICBnYXA6IDFyZW07CiAgcGFkZGluZy10b3A6IDFyZW07CiAgYm9yZGVyLXRvcDogMXB4IHNvbGlkIHZhcigtLWJvcmRlci1jb2xvcik7Cn0KCi5zc2gta2V5LWZpbmdlcnByaW50LAouc3NoLWtleS1jcmVhdGVkIHsKICBkaXNwbGF5OiBmbGV4OwogIGZsZXgtZGlyZWN0aW9uOiBjb2x1bW47CiAgZ2FwOiAwLjI1cmVtOwp9Cgouc3NoLWtleS1maW5nZXJwcmludCBsYWJlbCwKLnNzaC1rZXktY3JlYXRlZCBsYWJlbCB7CiAgZm9udC1zaXplOiAwLjg1cmVtOwogIGNvbG9yOiB2YXIoLS10ZXh0LXNlY29uZGFyeSk7CiAgZm9udC13ZWlnaHQ6IDUwMDsKfQoKLnNzaC1rZXktZmluZ2VycHJpbnQgY29kZSB7CiAgZm9udC1zaXplOiAwLjg1cmVtOwogIGNvbG9yOiB2YXIoLS1wcmltYXJ5LWNvbG9yKTsKICBiYWNrZ3JvdW5kOiByZ2JhKDAsIDI1NSwgMjU1LCAwLjEpOwogIHBhZGRpbmc6IDAuMjVyZW0gMC41cmVtOwogIGJvcmRlci1yYWRpdXM6IDRweDsKICBmb250LWZhbWlseTogJ0NvdXJpZXIgTmV3JywgbW9ub3NwYWNlOwp9Cgouc3NoLWtleS1jcmVhdGVkIHNwYW4gewogIGZvbnQtc2l6ZTogMC45cmVtOwogIGNvbG9yOiB2YXIoLS10ZXh0LXByaW1hcnkpOwp9CgovKiA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiAgIERBVEFCQVNFIFNFQ1RJT04KICAgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PSAqLwoKLmRiLXN0YXRzLWdyaWQgewogIGRpc3BsYXk6IGdyaWQ7CiAgZ3JpZC10ZW1wbGF0ZS1jb2x1bW5zOiByZXBlYXQoYXV0by1maXQsIG1pbm1heCgyMDBweCwgMWZyKSk7CiAgZ2FwOiAxcmVtOwogIG1hcmdpbi1ib3R0b206IDJyZW07Cn0KCi5zdGF0LWNhcmQgewogIGJhY2tncm91bmQ6IHJnYmEoMCwgMjU1LCAyNTUsIDAuMDMpOwogIGJvcmRlcjogMXB4IHNvbGlkIHZhcigtLWJvcmRlci1jb2xvcik7CiAgYm9yZGVyLXJhZGl1czogOHB4OwogIHBhZGRpbmc6IDEuNXJlbTsKICBkaXNwbGF5OiBmbGV4OwogIGFsaWduLWl0ZW1zOiBjZW50ZXI7CiAgZ2FwOiAxcmVtOwogIHRyYW5zaXRpb246IGFsbCAwLjJzIGVhc2U7Cn0KCi5zdGF0LWNhcmQ6aG92ZXIgewogIGJvcmRlci1jb2xvcjogdmFyKC0tcHJpbWFyeS1jb2xvcik7CiAgYm94LXNoYWRvdzogMCA0cHggMTJweCByZ2JhKDAsIDI1NSwgMjU1LCAwLjEpOwogIHRyYW5zZm9ybTogdHJhbnNsYXRlWSgtMnB4KTsKfQoKLnN0YXQtaWNvbiB7CiAgd2lkdGg6IDUwcHg7CiAgaGVpZ2h0OiA1MHB4OwogIGJvcmRlci1yYWRpdXM6IDhweDsKICBiYWNrZ3JvdW5kOiByZ2JhKDAsIDI1NSwgMjU1LCAwLjEpOwogIGRpc3BsYXk6IGZsZXg7CiAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICBqdXN0aWZ5LWNvbnRlbnQ6IGNlbnRlcjsKICBmbGV4LXNocmluazogMDsKfQoKLnN0YXQtaWNvbiBzdmcgewogIHdpZHRoOiAyNHB4OwogIGhlaWdodDogMjRweDsKICBjb2xvcjogdmFyKC0tcHJpbWFyeS1jb2xvcik7Cn0KCi5zdGF0LWNvbnRlbnQgewogIGZsZXg6IDE7Cn0KCi5zdGF0LWxhYmVsIHsKICBmb250LXNpemU6IDAuODVyZW07CiAgY29sb3I6IHZhcigtLXRleHQtc2Vjb25kYXJ5KTsKICBtYXJnaW4tYm90dG9tOiAwLjI1cmVtOwp9Cgouc3RhdC12YWx1ZSB7CiAgZm9udC1zaXplOiAxLjVyZW07CiAgZm9udC13ZWlnaHQ6IDYwMDsKICBjb2xvcjogdmFyKC0tdGV4dC1wcmltYXJ5KTsKfQoKLmRiLWFjdGlvbnMgewogIGRpc3BsYXk6IGZsZXg7CiAgZ2FwOiAxcmVtOwogIG1hcmdpbi1ib3R0b206IDJyZW07CiAgZmxleC13cmFwOiB3cmFwOwp9CgovKiBUYXJnZXQgTWFuYWdlbWVudCAqLwoudGFyZ2V0LW1hbmFnZW1lbnQgewogIG1hcmdpbi10b3A6IDJyZW07Cn0KCi50YXJnZXQtbWFuYWdlbWVudC1oZWFkZXIgewogIGRpc3BsYXk6IGZsZXg7CiAganVzdGlmeS1jb250ZW50OiBzcGFjZS1iZXR3ZWVuOwogIGFsaWduLWl0ZW1zOiBjZW50ZXI7CiAgbWFyZ2luLWJvdHRvbTogMS41cmVtOwogIGdhcDogMXJlbTsKICBmbGV4LXdyYXA6IHdyYXA7Cn0KCi50YXJnZXQtbWFuYWdlbWVudC1oZWFkZXIgaDMgewogIGZvbnQtc2l6ZTogMS4yNXJlbTsKICBmb250LXdlaWdodDogNjAwOwogIGNvbG9yOiB2YXIoLS10ZXh0LXByaW1hcnkpOwogIG1hcmdpbjogMDsKfQoKLnRhcmdldC1zZWFyY2ggewogIHBvc2l0aW9uOiByZWxhdGl2ZTsKICBmbGV4OiAxOwogIG1heC13aWR0aDogNDAwcHg7Cn0KCi50YXJnZXQtc2VhcmNoIHN2ZyB7CiAgcG9zaXRpb246IGFic29sdXRlOwogIGxlZnQ6IDFyZW07CiAgdG9wOiA1MCU7CiAgdHJhbnNmb3JtOiB0cmFuc2xhdGVZKC01MCUpOwogIHdpZHRoOiAxOHB4OwogIGhlaWdodDogMThweDsKICBjb2xvcjogdmFyKC0tdGV4dC10ZXJ0aWFyeSk7CiAgcG9pbnRlci1ldmVudHM6IG5vbmU7Cn0KCi50YXJnZXQtc2VhcmNoIC5pbnB1dCB7CiAgcGFkZGluZy1sZWZ0OiAzcmVtOwp9CgoudGFyZ2V0LWJ1bGstYWN0aW9ucyB7CiAgZGlzcGxheTogZmxleDsKICBqdXN0aWZ5LWNvbnRlbnQ6IHNwYWNlLWJldHdlZW47CiAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICBwYWRkaW5nOiAxcmVtOwogIGJhY2tncm91bmQ6IHJnYmEoMCwgMjU1LCAyNTUsIDAuMDUpOwogIGJvcmRlcjogMXB4IHNvbGlkIHZhcigtLWJvcmRlci1jb2xvcik7CiAgYm9yZGVyLXJhZGl1czogOHB4OwogIG1hcmdpbi1ib3R0b206IDFyZW07Cn0KCi50YXJnZXRzLXRhYmxlIHsKICBvdmVyZmxvdy14OiBhdXRvOwogIGJvcmRlcjogMXB4IHNvbGlkIHZhcigtLWJvcmRlci1jb2xvcik7CiAgYm9yZGVyLXJhZGl1czogOHB4Owp9CgoudGFyZ2V0cy10YWJsZSB0YWJsZSB7CiAgd2lkdGg6IDEwMCU7CiAgYm9yZGVyLWNvbGxhcHNlOiBjb2xsYXBzZTsKfQoKLnRhcmdldHMtdGFibGUgdGhlYWQgewogIGJhY2tncm91bmQ6IHJnYmEoMCwgMjU1LCAyNTUsIDAuMDUpOwogIGJvcmRlci1ib3R0b206IDJweCBzb2xpZCB2YXIoLS1ib3JkZXItY29sb3IpOwp9CgoudGFyZ2V0cy10YWJsZSB0aCB7CiAgcGFkZGluZzogMXJlbTsKICB0ZXh0LWFsaWduOiBsZWZ0OwogIGZvbnQtc2l6ZTogMC44NXJlbTsKICBmb250LXdlaWdodDogNjAwOwogIGNvbG9yOiB2YXIoLS10ZXh0LXNlY29uZGFyeSk7CiAgdGV4dC10cmFuc2Zvcm06IHVwcGVyY2FzZTsKICBsZXR0ZXItc3BhY2luZzogMC41cHg7Cn0KCi50YXJnZXRzLXRhYmxlIHRkIHsKICBwYWRkaW5nOiAxcmVtOwogIGJvcmRlci1ib3R0b206IDFweCBzb2xpZCB2YXIoLS1ib3JkZXItY29sb3IpOwogIGNvbG9yOiB2YXIoLS10ZXh0LXByaW1hcnkpOwogIGZvbnQtc2l6ZTogMC45NXJlbTsKfQoKLnRhcmdldHMtdGFibGUgdGJvZHkgdHIgewogIHRyYW5zaXRpb246IGJhY2tncm91bmQgMC4ycyBlYXNlOwp9CgoudGFyZ2V0cy10YWJsZSB0Ym9keSB0cjpob3ZlciB7CiAgYmFja2dyb3VuZDogcmdiYSgwLCAyNTUsIDI1NSwgMC4wMyk7Cn0KCi50YXJnZXRzLXRhYmxlIHRib2R5IHRyOmxhc3QtY2hpbGQgdGQgewogIGJvcmRlci1ib3R0b206IG5vbmU7Cn0KCi50YXJnZXRzLXRhYmxlIGNvZGUgewogIGZvbnQtZmFtaWx5OiAnQ291cmllciBOZXcnLCBtb25vc3BhY2U7CiAgYmFja2dyb3VuZDogcmdiYSgwLCAyNTUsIDI1NSwgMC4xKTsKICBwYWRkaW5nOiAwLjI1cmVtIDAuNXJlbTsKICBib3JkZXItcmFkaXVzOiA0cHg7CiAgZm9udC1zaXplOiAwLjg1cmVtOwogIGNvbG9yOiB2YXIoLS1wcmltYXJ5LWNvbG9yKTsKfQoKLnN0YXR1cy1iYWRnZSB7CiAgZGlzcGxheTogaW5saW5lLWJsb2NrOwogIHBhZGRpbmc6IDAuMjVyZW0gMC43NXJlbTsKICBib3JkZXItcmFkaXVzOiAxMnB4OwogIGZvbnQtc2l6ZTogMC44cmVtOwogIGZvbnQtd2VpZ2h0OiA2MDA7CiAgdGV4dC10cmFuc2Zvcm06IGNhcGl0YWxpemU7Cn0KCi5zdGF0dXMtYmFkZ2Uuc3RhdHVzLW9ubGluZSB7CiAgYmFja2dyb3VuZDogcmdiYSgzNCwgMTk3LCA5NCwgMC4yKTsKICBjb2xvcjogIzIyYzU1ZTsKfQoKLnN0YXR1cy1iYWRnZS5zdGF0dXMtb2ZmbGluZSB7CiAgYmFja2dyb3VuZDogcmdiYSgyMzksIDY4LCA2OCwgMC4yKTsKICBjb2xvcjogI2VmNDQ0NDsKfQoKLnN0YXR1cy1iYWRnZS5zdGF0dXMtcGVuZGluZyB7CiAgYmFja2dyb3VuZDogcmdiYSgyNTEsIDE5MSwgMzYsIDAuMik7CiAgY29sb3I6ICNmYmJmMjQ7Cn0KCi8qID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KICAgQkFER0VTCiAgID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0gKi8KCi5iYWRnZSB7CiAgZGlzcGxheTogaW5saW5lLWJsb2NrOwogIHBhZGRpbmc6IDAuMjVyZW0gMC43NXJlbTsKICBib3JkZXItcmFkaXVzOiAxMnB4OwogIGZvbnQtc2l6ZTogMC43NXJlbTsKICBmb250LXdlaWdodDogNjAwOwogIHRleHQtdHJhbnNmb3JtOiB1cHBlcmNhc2U7CiAgbGV0dGVyLXNwYWNpbmc6IDAuNXB4Owp9CgouYmFkZ2UtaW5mbyB7CiAgYmFja2dyb3VuZDogcmdiYSg1OSwgMTMwLCAyNDYsIDAuMik7CiAgY29sb3I6ICMzYjgyZjY7Cn0KCi5iYWRnZS1zZWNvbmRhcnkgewogIGJhY2tncm91bmQ6IHJnYmEoMCwgMjU1LCAyNTUsIDAuMik7CiAgY29sb3I6IHZhcigtLXByaW1hcnktY29sb3IpOwp9CgovKiA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiAgIEJVVFRPTlMKICAgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PSAqLwoKLmJ0biB7CiAgZGlzcGxheTogaW5saW5lLWZsZXg7CiAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICBnYXA6IDAuNXJlbTsKICBwYWRkaW5nOiAwLjc1cmVtIDEuNXJlbTsKICBib3JkZXI6IG5vbmU7CiAgYm9yZGVyLXJhZGl1czogOHB4OwogIGZvbnQtc2l6ZTogMC45NXJlbTsKICBmb250LXdlaWdodDogNTAwOwogIGN1cnNvcjogcG9pbnRlcjsKICB0cmFuc2l0aW9uOiBhbGwgMC4ycyBlYXNlOwogIHdoaXRlLXNwYWNlOiBub3dyYXA7Cn0KCi5idG4gc3ZnIHsKICB3aWR0aDogMThweDsKICBoZWlnaHQ6IDE4cHg7Cn0KCi5idG46ZGlzYWJsZWQgewogIG9wYWNpdHk6IDAuNTsKICBjdXJzb3I6IG5vdC1hbGxvd2VkOwp9CgouYnRuLXByaW1hcnkgewogIGJhY2tncm91bmQ6IHZhcigtLXByaW1hcnktY29sb3IpOwogIGNvbG9yOiB2YXIoLS1iYWNrZ3JvdW5kLWRhcmspOwp9CgouYnRuLXByaW1hcnk6aG92ZXI6bm90KDpkaXNhYmxlZCkgewogIGJhY2tncm91bmQ6IHZhcigtLXByaW1hcnktaG92ZXIpOwogIGJveC1zaGFkb3c6IDAgMCAyMHB4IHJnYmEoMCwgMjU1LCAyNTUsIDAuNCk7Cn0KCi5idG4tc2Vjb25kYXJ5IHsKICBiYWNrZ3JvdW5kOiByZ2JhKDAsIDI1NSwgMjU1LCAwLjEpOwogIGNvbG9yOiB2YXIoLS1wcmltYXJ5LWNvbG9yKTsKICBib3JkZXI6IDFweCBzb2xpZCB2YXIoLS1wcmltYXJ5LWNvbG9yKTsKfQoKLmJ0bi1zZWNvbmRhcnk6aG92ZXI6bm90KDpkaXNhYmxlZCkgewogIGJhY2tncm91bmQ6IHJnYmEoMCwgMjU1LCAyNTUsIDAuMik7Cn0KCi5idG4tZ2hvc3QgewogIGJhY2tncm91bmQ6IHRyYW5zcGFyZW50OwogIGNvbG9yOiB2YXIoLS10ZXh0LXNlY29uZGFyeSk7CiAgYm9yZGVyOiAxcHggc29saWQgdmFyKC0tYm9yZGVyLWNvbG9yKTsKfQoKLmJ0bi1naG9zdDpob3Zlcjpub3QoOmRpc2FibGVkKSB7CiAgYmFja2dyb3VuZDogcmdiYSgwLCAyNTUsIDI1NSwgMC4wNSk7CiAgYm9yZGVyLWNvbG9yOiB2YXIoLS1wcmltYXJ5LWNvbG9yKTsKICBjb2xvcjogdmFyKC0tcHJpbWFyeS1jb2xvcik7Cn0KCi5idG4tZGFuZ2VyIHsKICBiYWNrZ3JvdW5kOiByZ2JhKDIzOSwgNjgsIDY4LCAwLjEpOwogIGNvbG9yOiAjZWY0NDQ0OwogIGJvcmRlcjogMXB4IHNvbGlkIHJnYmEoMjM5LCA2OCwgNjgsIDAuMyk7Cn0KCi5idG4tZGFuZ2VyOmhvdmVyOm5vdCg6ZGlzYWJsZWQpIHsKICBiYWNrZ3JvdW5kOiByZ2JhKDIzOSwgNjgsIDY4LCAwLjIpOwogIGJvcmRlci1jb2xvcjogI2VmNDQ0NDsKfQoKLmJ0bi1zbSB7CiAgcGFkZGluZzogMC41cmVtIDAuNzVyZW07CiAgZm9udC1zaXplOiAwLjg1cmVtOwp9CgouYnRuLXNtIHN2ZyB7CiAgd2lkdGg6IDE2cHg7CiAgaGVpZ2h0OiAxNnB4Owp9CgovKiA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CiAgIFNUQVRFUwogICA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09ICovCgoubG9hZGluZy1zdGF0ZSwKLmVtcHR5LXN0YXRlIHsKICBkaXNwbGF5OiBmbGV4OwogIGZsZXgtZGlyZWN0aW9uOiBjb2x1bW47CiAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICBqdXN0aWZ5LWNvbnRlbnQ6IGNlbnRlcjsKICBwYWRkaW5nOiA0cmVtIDJyZW07CiAgdGV4dC1hbGlnbjogY2VudGVyOwp9CgoubG9hZGluZy1zdGF0ZSAuc3Bpbm5lciB7CiAgd2lkdGg6IDQwcHg7CiAgaGVpZ2h0OiA0MHB4OwogIGJvcmRlcjogM3B4IHNvbGlkIHJnYmEoMCwgMjU1LCAyNTUsIDAuMik7CiAgYm9yZGVyLXRvcC1jb2xvcjogdmFyKC0tcHJpbWFyeS1jb2xvcik7CiAgYm9yZGVyLXJhZGl1czogNTAlOwogIGFuaW1hdGlvbjogc3BpbiAwLjhzIGxpbmVhciBpbmZpbml0ZTsKICBtYXJnaW4tYm90dG9tOiAxcmVtOwp9CgpAa2V5ZnJhbWVzIHNwaW4gewogIHRvIHsKICAgIHRyYW5zZm9ybTogcm90YXRlKDM2MGRlZyk7CiAgfQp9CgoubG9hZGluZy1zdGF0ZSBwIHsKICBjb2xvcjogdmFyKC0tdGV4dC1zZWNvbmRhcnkpOwogIG1hcmdpbjogMDsKfQoKLmVtcHR5LXN0YXRlIHN2ZyB7CiAgd2lkdGg6IDY0cHg7CiAgaGVpZ2h0OiA2NHB4OwogIGNvbG9yOiB2YXIoLS10ZXh0LXRlcnRpYXJ5KTsKICBtYXJnaW4tYm90dG9tOiAxcmVtOwp9CgouZW1wdHktc3RhdGUgaDMgewogIGZvbnQtc2l6ZTogMS4yNXJlbTsKICBmb250LXdlaWdodDogNjAwOwogIGNvbG9yOiB2YXIoLS10ZXh0LXByaW1hcnkpOwogIG1hcmdpbjogMCAwIDAuNXJlbSAwOwp9CgouZW1wdHktc3RhdGUgcCB7CiAgY29sb3I6IHZhcigtLXRleHQtc2Vjb25kYXJ5KTsKICBtYXJnaW46IDA7Cn0KCi8qID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KICAgU0FWRSBNRVNTQUdFCiAgID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0gKi8KCi5zYXZlLW1lc3NhZ2UgewogIGRpc3BsYXk6IGZsZXg7CiAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICBnYXA6IDAuNzVyZW07CiAgcGFkZGluZzogMXJlbSAxLjVyZW07CiAgYm9yZGVyLXJhZGl1czogOHB4OwogIG1hcmdpbi1ib3R0b206IDEuNXJlbTsKICBmb250LXNpemU6IDAuOTVyZW07CiAgZm9udC13ZWlnaHQ6IDUwMDsKICBhbmltYXRpb246IHNsaWRlRG93biAwLjNzIGVhc2U7Cn0KCkBrZXlmcmFtZXMgc2xpZGVEb3duIHsKICBmcm9tIHsKICAgIG9wYWNpdHk6IDA7CiAgICB0cmFuc2Zvcm06IHRyYW5zbGF0ZVkoLTEwcHgpOwogIH0KICB0byB7CiAgICBvcGFjaXR5OiAxOwogICAgdHJhbnNmb3JtOiB0cmFuc2xhdGVZKDApOwogIH0KfQoKLnNhdmUtbWVzc2FnZSBzdmcgewogIHdpZHRoOiAyMHB4OwogIGhlaWdodDogMjBweDsKICBmbGV4LXNocmluazogMDsKfQoKLnNhdmUtbWVzc2FnZS5zdWNjZXNzIHsKICBiYWNrZ3JvdW5kOiByZ2JhKDM0LCAxOTcsIDk0LCAwLjEpOwogIGNvbG9yOiAjMjJjNTVlOwogIGJvcmRlcjogMXB4IHNvbGlkIHJnYmEoMzQsIDE5NywgOTQsIDAuMyk7Cn0KCi5zYXZlLW1lc3NhZ2UuZXJyb3IgewogIGJhY2tncm91bmQ6IHJnYmEoMjM5LCA2OCwgNjgsIDAuMSk7CiAgY29sb3I6ICNlZjQ0NDQ7CiAgYm9yZGVyOiAxcHggc29saWQgcmdiYSgyMzksIDY4LCA2OCwgMC4zKTsKfQoKLyogPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogICBNT0RBTFMKICAgPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PSAqLwoKLm1vZGFsLW92ZXJsYXkgewogIHBvc2l0aW9uOiBmaXhlZDsKICB0b3A6IDA7CiAgbGVmdDogMDsKICByaWdodDogMDsKICBib3R0b206IDA7CiAgYmFja2dyb3VuZDogcmdiYSgwLCAwLCAwLCAwLjcpOwogIGJhY2tkcm9wLWZpbHRlcjogYmx1cig0cHgpOwogIGRpc3BsYXk6IGZsZXg7CiAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICBqdXN0aWZ5LWNvbnRlbnQ6IGNlbnRlcjsKICB6LWluZGV4OiAxMDAwOwogIGFuaW1hdGlvbjogZmFkZUluIDAuMnMgZWFzZTsKfQoKLm1vZGFsLWNvbnRlbnQgewogIGJhY2tncm91bmQ6IHZhcigtLWNhcmQtYmFja2dyb3VuZCk7CiAgYm9yZGVyOiAxcHggc29saWQgdmFyKC0tYm9yZGVyLWNvbG9yKTsKICBib3JkZXItcmFkaXVzOiAxMnB4OwogIHdpZHRoOiA5MCU7CiAgbWF4LXdpZHRoOiA2MDBweDsKICBtYXgtaGVpZ2h0OiA5MHZoOwogIG92ZXJmbG93OiBhdXRvOwogIGJveC1zaGFkb3c6IDAgMjBweCA2MHB4IHJnYmEoMCwgMCwgMCwgMC41KTsKICBhbmltYXRpb246IHNjYWxlSW4gMC4ycyBlYXNlOwp9CgoubW9kYWwtY29udGVudC5tb2RhbC1zbSB7CiAgbWF4LXdpZHRoOiA0MDBweDsKfQoKQGtleWZyYW1lcyBzY2FsZUluIHsKICBmcm9tIHsKICAgIG9wYWNpdHk6IDA7CiAgICB0cmFuc2Zvcm06IHNjYWxlKDAuOTUpOwogIH0KICB0byB7CiAgICBvcGFjaXR5OiAxOwogICAgdHJhbnNmb3JtOiBzY2FsZSgxKTsKICB9Cn0KCi5tb2RhbC1oZWFkZXIgewogIGRpc3BsYXk6IGZsZXg7CiAganVzdGlmeS1jb250ZW50OiBzcGFjZS1iZXR3ZWVuOwogIGFsaWduLWl0ZW1zOiBjZW50ZXI7CiAgcGFkZGluZzogMS41cmVtOwogIGJvcmRlci1ib3R0b206IDFweCBzb2xpZCB2YXIoLS1ib3JkZXItY29sb3IpOwp9CgoubW9kYWwtaGVhZGVyIGgyIHsKICBtYXJnaW46IDA7CiAgZm9udC1zaXplOiAxLjI1cmVtOwogIGZvbnQtd2VpZ2h0OiA2MDA7CiAgY29sb3I6IHZhcigtLXRleHQtcHJpbWFyeSk7Cn0KCi5tb2RhbC1jbG9zZSB7CiAgYmFja2dyb3VuZDogbm9uZTsKICBib3JkZXI6IG5vbmU7CiAgY29sb3I6IHZhcigtLXRleHQtc2Vjb25kYXJ5KTsKICBjdXJzb3I6IHBvaW50ZXI7CiAgcGFkZGluZzogMC41cmVtOwogIGJvcmRlci1yYWRpdXM6IDZweDsKICB0cmFuc2l0aW9uOiBhbGwgMC4ycyBlYXNlOwp9CgoubW9kYWwtY2xvc2U6aG92ZXIgewogIGJhY2tncm91bmQ6IHJnYmEoMCwgMjU1LCAyNTUsIDAuMSk7CiAgY29sb3I6IHZhcigtLXByaW1hcnktY29sb3IpOwp9CgoubW9kYWwtY2xvc2Ugc3ZnIHsKICB3aWR0aDogMjBweDsKICBoZWlnaHQ6IDIwcHg7Cn0KCi5tb2RhbC1ib2R5IHsKICBwYWRkaW5nOiAxLjVyZW07Cn0KCi5tb2RhbC1ib2R5IHAgewogIGNvbG9yOiB2YXIoLS10ZXh0LXByaW1hcnkpOwogIGxpbmUtaGVpZ2h0OiAxLjY7CiAgbWFyZ2luOiAwOwp9CgoubW9kYWwtZm9vdGVyIHsKICBkaXNwbGF5OiBmbGV4OwogIGp1c3RpZnktY29udGVudDogZmxleC1lbmQ7CiAgZ2FwOiAxcmVtOwogIHBhZGRpbmc6IDEuNXJlbTsKICBib3JkZXItdG9wOiAxcHggc29saWQgdmFyKC0tYm9yZGVyLWNvbG9yKTsKfQoKLyogPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQogICBSRVNQT05TSVZFCiAgID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0gKi8KCkBtZWRpYSAobWF4LXdpZHRoOiA3NjhweCkgewogIC5zZXR0aW5ncy1wYWdlIHsKICAgIHBhZGRpbmc6IDFyZW07CiAgfQoKICAuc2V0dGluZ3MtaGVhZGVyIHsKICAgIGZsZXgtZGlyZWN0aW9uOiBjb2x1bW47CiAgICBhbGlnbi1pdGVtczogZmxleC1zdGFydDsKICAgIGdhcDogMXJlbTsKICB9CgogIC5oZWFkZXItYWN0aW9ucyB7CiAgICB3aWR0aDogMTAwJTsKICAgIGZsZXgtZGlyZWN0aW9uOiBjb2x1bW47CiAgfQoKICAuc2V0dGluZ3MtdGFicyB7CiAgICBmbGV4LXdyYXA6IG5vd3JhcDsKICAgIG92ZXJmbG93LXg6IGF1dG87CiAgICAtd2Via2l0LW92ZXJmbG93LXNjcm9sbGluZzogdG91Y2g7CiAgfQoKICAuc2V0dGluZ3MtZ3JpZCB7CiAgICBncmlkLXRlbXBsYXRlLWNvbHVtbnM6IDFmcjsKICB9CgogIC5kYi1zdGF0cy1ncmlkIHsKICAgIGdyaWQtdGVtcGxhdGUtY29sdW1uczogMWZyOwogIH0KCiAgLnRhcmdldC1tYW5hZ2VtZW50LWhlYWRlciB7CiAgICBmbGV4LWRpcmVjdGlvbjogY29sdW1uOwogICAgYWxpZ24taXRlbXM6IHN0cmV0Y2g7CiAgfQoKICAudGFyZ2V0LXNlYXJjaCB7CiAgICBtYXgtd2lkdGg6IG5vbmU7CiAgfQoKICAudGFyZ2V0cy10YWJsZSB7CiAgICBmb250LXNpemU6IDAuODVyZW07CiAgfQoKICAudGFyZ2V0cy10YWJsZSB0aCwKICAudGFyZ2V0cy10YWJsZSB0ZCB7CiAgICBwYWRkaW5nOiAwLjc1cmVtIDAuNXJlbTsKICB9CgogIC5tb2RhbC1jb250ZW50IHsKICAgIHdpZHRoOiA5NSU7CiAgICBtYXgtaGVpZ2h0OiA5NXZoOwogIH0KfQo",
+					"AQAAAAAAAAABAAAAAAAAAAAAAAAjQgAAAAAAAAAAAAAAAPC/"
+				],
+				[
+					29,
+					1,
+					"",
+					null,
+					"AQAAAAAAAAAAAAAAmFAAAAAAAAAAAAAA",
+					"AQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPC/"
 				]
 			]
 		}
@@ -348,54 +300,87 @@
 	"expanded_folders":
 	[
 		"/home/simone/Repos/Progetti/firedog",
-		"/home/simone/Repos/Progetti/firedog/backend",
-		"/home/simone/Repos/Progetti/firedog/backend/discovery",
-		"/home/simone/Repos/Progetti/firedog/backend/integrity",
-		"/home/simone/Repos/Progetti/firedog/firedog-package",
-		"/home/simone/Repos/Progetti/firedog/scripts",
+		"/home/simone/Repos/Progetti/firedog/files",
+		"/home/simone/Repos/Progetti/firedog/files/Settings",
+		"/home/simone/Repos/Progetti/firedog/frontend",
+		"/home/simone/Repos/Progetti/firedog/frontend/src",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/contexts",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/services",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/types",
 		"/home/simone/Repos/Progetti/firedog/tests"
 	],
 	"file_history":
 	[
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Targets.css",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/services/api.ts",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Settings.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Settings.css",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/services/audit.service.ts",
+		"/home/simone/Repos/Progetti/firedog/backend/settings/__init__.py",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/settings.py",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/urls.py",
+		"/home/simone/Repos/Progetti/firedog/files/Settings/settings_models.py",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/types/index.ts",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/views.py",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Targets.tsx",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/serializers.py",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/models.py",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/BlockedIPs.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Whitelist.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/contexts/TargetContext.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/App.tsx",
+		"/home/simone/Repos/Progetti/firedog/files/newfile/INSTALLATION_GUIDE.md",
+		"/home/simone/Repos/Progetti/firedog/scripts/populate_test_data.py",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/components/layout/Layout.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/components/layout/Layout.css",
+		"/home/simone/Repos/Progetti/firedog/files/newfile/BlockedIPs_NEW.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Rules.tsx",
+		"/home/simone/Repos/Progetti/firedog/files/newfile/Targets_NEW.tsx",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/LogsPage.css",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/consumers.py",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/services/logs.service.ts",
+		"/home/simone/Repos/Progetti/firedog/backend/api/views.py",
+		"/home/simone/Repos/Progetti/firedog/backend/firedog/routing.py",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Discovery.css",
+		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Discovery.tsx",
+		"/home/simone/Repos/Progetti/firedog/backend/discovery/views.py",
+		"/home/simone/Repos/Progetti/firedog/backend/audit/models.py",
+		"/home/simone/Repos/Progetti/firedog/files/ip.txt",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/views_groups.py",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/management/command/__init__.py",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/serializers_groups.py",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/management/command/init_target_groups.py",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/management/__init__.py",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/group_templates.py",
+		"/home/simone/Repos/Progetti/firedog/files/Groups/init_target_groups.py",
+		"/home/simone/Repos/Progetti/firedog/backend/targets/urls_groups.py",
+		"/home/simone/Repos/Progetti/firedog/files/Groups/views_groups.py",
 		"/home/simone/Repos/Progetti/firedog/backend/discovery/tasks.py",
 		"/home/simone/Repos/Progetti/firedog/backend/firedog/asgi.py",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/components/SSHTerminal.tsx",
-		"/home/simone/Repos/Progetti/firedog/backend/firedog/routing.py",
 		"/home/simone/Repos/Progetti/firedog/files/files/README.md",
 		"/home/simone/Repos/Progetti/firedog/files/CONFIGURATION_SNIPPETS.md",
-		"/home/simone/Repos/Progetti/firedog/backend/firedog/settings.py",
 		"/home/simone/Repos/Progetti/firedog/files/files/QUICK_START.md",
 		"/home/simone/Repos/Progetti/firedog/files/README.md",
 		"/home/simone/Repos/Progetti/firedog/backend/firedog/wsgi.py",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Targets.tsx",
 		"/home/simone/Repos/Progetti/firedog/frontend/package.json",
 		"/home/simone/Repos/Progetti/firedog/README.md",
 		"/home/simone/Repos/Progetti/firedog/firewall.service",
 		"/home/simone/Repos/Progetti/firedog/files/ssh-terminal-implementation/INSTALL_SSH_TERMINAL.md",
 		"/home/simone/Repos/Progetti/firedog/files/BACKEND_COMPLETION_GUIDE.md",
 		"/home/simone/Repos/Progetti/firedog/firedog-package/install.sh",
-		"/home/simone/Repos/Progetti/firedog/backend/targets/views.py",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/services/api.ts",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Whitelist.tsx",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/BlockedIPs.tsx",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/FirewallLogs.tsx",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/AuditLogs.tsx",
-		"/home/simone/Repos/Progetti/firedog/files/ip.txt",
 		"/home/simone/Repos/Progetti/firedog/backend/targets/tasks.py",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/App.tsx",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/types/index.ts",
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/FirewallRules.tsx",
 		"/home/simone/Repos/Progetti/firedog/files/IMPLEMENTATION_GUIDE.md",
 		"/home/simone/Repos/Progetti/firedog/backend/api/models.py_to_delete",
-		"/home/simone/Repos/Progetti/firedog/backend/audit/models.py",
 		"/home/simone/Repos/Progetti/firedog/backend/audit/serializers.py",
-		"/home/simone/Repos/Progetti/firedog/backend/targets/models.py",
 		"/home/simone/Repos/Progetti/firedog/backend/api/__init__.py",
 		"/home/simone/Repos/Progetti/firedog/backend/api/apps.py",
-		"/home/simone/Repos/Progetti/firedog/backend/api/views.py",
 		"/home/simone/Repos/Progetti/firedog/backend/rules/serializers.py",
 		"/home/simone/Repos/Progetti/firedog/backend/threats/serializers.py",
-		"/home/simone/Repos/Progetti/firedog/backend/firedog/urls.py",
 		"/home/simone/Repos/Progetti/firedog/backend/firedog/celery.py",
 		"/home/simone/Repos/Progetti/firedog/backend/api/serializers.py",
 		"/home/simone/Repos/Progetti/firedog/files/backend_api_NEW_ENDPOINTS.py",
@@ -403,7 +388,6 @@
 		"/home/simone/Repos/Progetti/firedog/frontend/src/pages/Dashboard.tsx",
 		"/home/simone/Repos/Progetti/firedog/backend/core/ssh_manager.py",
 		"/home/simone/Repos/Progetti/firedog/custom_rules.conf.example",
-		"/home/simone/Repos/Progetti/firedog/frontend/src/components/layout/Layout.tsx",
 		"/home/simone/Repos/Progetti/firedog/SETUP_GUIDE.md",
 		"/home/simone/.cache/.fr-ttPTpD/DASHBOARD_GUIDE.md",
 		"/home/simone/Lavoro/External/tplink.txt",
@@ -455,40 +439,11 @@
 		"/home/simone/Repos/Progetti/sentinelcore/.gitignore",
 		"/home/simone/Repos/Progetti/sentinelcore/vulnerability-manager/src/state.rs",
 		"/home/simone/Repos/zshplugins/zshnoyseapply.py",
-		"/home/simone/Repos/zshplugins/noyse_hack/noyse_hack.plugin.zsh",
-		"/home/simone/Repos/zshplugins/noyse_net/noyse_net.plugin.zsh",
-		"/home/simone/Repos/zshplugins/noyse_script/noyse_script.plugin.zsh",
-		"/home/simone/Repos/zshplugins/noyse_sys/noyse_sys.plugin.zsh",
-		"/home/simone/Repos/NoyseSysStuff/dom-xss-scanner/Struttura.txt",
-		"/home/simone/Repos/NoyseSysStuff/fast.kill/README.md",
-		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/sites.txt",
-		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/options.txt",
-		"/home/simone/Lavoro/Bounty/ATG/frame-1063.js",
-		"/home/simone/Lavoro/Bounty/ATG/url.txt",
-		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/Esempio_sites.txt",
-		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/js_crawler.py",
-		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/requirements.txt",
-		"/home/simone/Repos/NoyseSysStuff/Crawler_dw_js/SetUp.sh",
-		"/home/simone/Repos/NoyseSysStuff/anonme/anonme.sh",
-		"/home/simone/Repos/NoyseSysStuff/net_tables/net_tables.sh",
-		"/home/noyse/Repos/NoyseSysStuff/Test/test.dirty.stuff/testbin.sh",
-		"/home/simone/Desktop/Repos/NoyseSysStuff/hola/hola.sh",
-		"/home/simone/Desktop/Documenti/HackTheBox/OSINT/cheatsheet-28.md",
-		"/home/simone/Desktop/Documenti/HackTheBox/AdvancedWebAttack/WebSocket/src_websocket_xss/server.py",
-		"/home/simone/Repos/noyse_sys/noyse_sys.plugin.zsh",
-		"/home/simone/Repos/NoyseSysStuff/Test/cddir.sh",
-		"/home/noyse/Lavoro/CLIENTI/Grifal/Anydesk.txt",
-		"/home/noyse/Scrivania/MEGAsync.log",
-		"/home/noyse/cracked.json",
-		"/home/noyse/Scrivania/Collegamento a Lavoro/External/WiFi_Jle_txt",
-		"/home/noyse/Scrivania/tplink.txt",
-		"/home/noyse/Lavoro/External/CTF-icsc/IP.txt",
-		"/home/noyse/Lavoro/External/Arp.txt",
-		"/home/noyse/Lavoro/External/CTF-icsc/seq_1.txt"
+		"/home/simone/Repos/zshplugins/noyse_hack/noyse_hack.plugin.zsh"
 	],
 	"find":
 	{
-		"height": 25.0
+		"height": 38.0
 	},
 	"find_in_files":
 	{
@@ -503,6 +458,14 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"  key={host.id}",
+			"<tr\n  key={host.id}\n  className={`\n",
+			"<tr\n  key={host.id}\n  className={`\n    ${selectedHosts.has(host.id) ? 'selected' : ''}\n",
+			"<tr\n  key={host.id}\n  className={`\n    ${selectedHosts.has(host.id) ? 'selected' : ''}\n  `}\n>",
+			"<tr\n  key={host.id}\n  className={`\n    ${selectedHosts.has(host.id) ? 'selected' : ''}\n    ${host.already_target ? 'already-imported' : ''}\n  `}\n>",
+			"/* Host già importato - stile diverso */\n.hosts-table tbody tr.already-imported {\n  background: rgba(33, 150, 243, 0.05);\n  opacity: 0.7;\n}\n\n.hosts-table tbody tr.already-imported:hover {\n  background: rgba(33, 150, 243, 0.1);\n  opacity: 0.85;\n}",
+			"handleSelectAll",
+			"  \n",
 			" installTarget(",
 			"          <Route\n            path=\"/logs/audit\"\n            element={\n              <ProtectedRoute>\n                <Layout>\n                  <AuditLogs />\n                </Layout>\n              </ProtectedRoute>\n            }\n          />",
 			"</PrivateRoute>} ",
@@ -590,27 +553,99 @@
 			[
 				{
 					"buffer": 0,
+					"file": "frontend/src/pages/Discovery.css",
 					"selected": true,
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 375,
+						"buffer_size": 22265,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								349,
-								0
+								106,
+								106
 							]
 						],
 						"settings":
 						{
-							"auto_name": "useEffect(() => {",
 							"bracket_highlighter.busy": false,
-							"default_dir": "/home/simone/Repos/Progetti/firedog/backend/firedog",
-							"syntax": "Packages/Text/Plain text.tmLanguage",
+							"bracket_highlighter.locations":
+							{
+								"close":
+								{
+								},
+								"icon":
+								{
+								},
+								"open":
+								{
+								},
+								"unmatched":
+								{
+								}
+							},
+							"bracket_highlighter.regions":
+							[
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_angle_content",
+								"bh_c_define",
+								"bh_c_define_center",
+								"bh_c_define_open",
+								"bh_c_define_close",
+								"bh_c_define_content",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_curly_content",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_default_content",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_double_quote_content",
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_regex_content",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_round_content",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close",
+								"bh_single_quote_content",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_square_content",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_tag_content",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_unmatched_content"
+							],
+							"syntax": "Packages/CSS/CSS.sublime-syntax",
 							"tab_size": 2,
 							"translate_tabs_to_spaces": true
 						},
@@ -629,334 +664,20 @@
 			[
 				{
 					"buffer": 1,
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 471,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								471,
-								471
-							]
-						],
-						"settings":
-						{
-							"auto_name": "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90",
-							"bracket_highlighter.busy": false,
-							"bracket_highlighter.locations":
-							{
-								"close":
-								{
-								},
-								"icon":
-								{
-								},
-								"open":
-								{
-								},
-								"unmatched":
-								{
-								}
-							},
-							"bracket_highlighter.regions":
-							[
-								"bh_angle",
-								"bh_angle_center",
-								"bh_angle_open",
-								"bh_angle_close",
-								"bh_angle_content",
-								"bh_c_define",
-								"bh_c_define_center",
-								"bh_c_define_open",
-								"bh_c_define_close",
-								"bh_c_define_content",
-								"bh_curly",
-								"bh_curly_center",
-								"bh_curly_open",
-								"bh_curly_close",
-								"bh_curly_content",
-								"bh_default",
-								"bh_default_center",
-								"bh_default_open",
-								"bh_default_close",
-								"bh_default_content",
-								"bh_double_quote",
-								"bh_double_quote_center",
-								"bh_double_quote_open",
-								"bh_double_quote_close",
-								"bh_double_quote_content",
-								"bh_regex",
-								"bh_regex_center",
-								"bh_regex_open",
-								"bh_regex_close",
-								"bh_regex_content",
-								"bh_round",
-								"bh_round_center",
-								"bh_round_open",
-								"bh_round_close",
-								"bh_round_content",
-								"bh_single_quote",
-								"bh_single_quote_center",
-								"bh_single_quote_open",
-								"bh_single_quote_close",
-								"bh_single_quote_content",
-								"bh_square",
-								"bh_square_center",
-								"bh_square_open",
-								"bh_square_close",
-								"bh_square_content",
-								"bh_tag",
-								"bh_tag_center",
-								"bh_tag_open",
-								"bh_tag_close",
-								"bh_tag_content",
-								"bh_unmatched",
-								"bh_unmatched_center",
-								"bh_unmatched_open",
-								"bh_unmatched_close",
-								"bh_unmatched_content"
-							],
-							"default_dir": "/home/simone/Repos/Progetti/application_traceroute/AppTraceroute",
-							"syntax": "Packages/Text/Plain text.tmLanguage"
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 4,
-					"stack_multiselect": false,
-					"type": "text"
-				},
-				{
-					"buffer": 2,
-					"file": "backend/audit/models.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 5700,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								283,
-								283
-							]
-						],
-						"settings":
-						{
-							"bracket_highlighter.busy": false,
-							"bracket_highlighter.locations":
-							{
-								"close":
-								{
-								},
-								"icon":
-								{
-								},
-								"open":
-								{
-								},
-								"unmatched":
-								{
-								}
-							},
-							"bracket_highlighter.regions":
-							[
-								"bh_angle",
-								"bh_angle_center",
-								"bh_angle_open",
-								"bh_angle_close",
-								"bh_angle_content",
-								"bh_c_define",
-								"bh_c_define_center",
-								"bh_c_define_open",
-								"bh_c_define_close",
-								"bh_c_define_content",
-								"bh_curly",
-								"bh_curly_center",
-								"bh_curly_open",
-								"bh_curly_close",
-								"bh_curly_content",
-								"bh_default",
-								"bh_default_center",
-								"bh_default_open",
-								"bh_default_close",
-								"bh_default_content",
-								"bh_double_quote",
-								"bh_double_quote_center",
-								"bh_double_quote_open",
-								"bh_double_quote_close",
-								"bh_double_quote_content",
-								"bh_regex",
-								"bh_regex_center",
-								"bh_regex_open",
-								"bh_regex_close",
-								"bh_regex_content",
-								"bh_round",
-								"bh_round_center",
-								"bh_round_open",
-								"bh_round_close",
-								"bh_round_content",
-								"bh_single_quote",
-								"bh_single_quote_center",
-								"bh_single_quote_open",
-								"bh_single_quote_close",
-								"bh_single_quote_content",
-								"bh_square",
-								"bh_square_center",
-								"bh_square_open",
-								"bh_square_close",
-								"bh_square_content",
-								"bh_tag",
-								"bh_tag_center",
-								"bh_tag_open",
-								"bh_tag_close",
-								"bh_tag_content",
-								"bh_unmatched",
-								"bh_unmatched_center",
-								"bh_unmatched_open",
-								"bh_unmatched_close",
-								"bh_unmatched_content"
-							],
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 2501.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 3,
-					"stack_multiselect": false,
-					"type": "text"
-				},
-				{
-					"buffer": 3,
-					"file": "backend/firedog/urls.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 2337,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								1405,
-								588
-							]
-						],
-						"settings":
-						{
-							"bracket_highlighter.busy": false,
-							"bracket_highlighter.locations":
-							{
-								"close":
-								{
-								},
-								"icon":
-								{
-								},
-								"open":
-								{
-								},
-								"unmatched":
-								{
-								}
-							},
-							"bracket_highlighter.regions":
-							[
-								"bh_angle",
-								"bh_angle_center",
-								"bh_angle_open",
-								"bh_angle_close",
-								"bh_angle_content",
-								"bh_c_define",
-								"bh_c_define_center",
-								"bh_c_define_open",
-								"bh_c_define_close",
-								"bh_c_define_content",
-								"bh_curly",
-								"bh_curly_center",
-								"bh_curly_open",
-								"bh_curly_close",
-								"bh_curly_content",
-								"bh_default",
-								"bh_default_center",
-								"bh_default_open",
-								"bh_default_close",
-								"bh_default_content",
-								"bh_double_quote",
-								"bh_double_quote_center",
-								"bh_double_quote_open",
-								"bh_double_quote_close",
-								"bh_double_quote_content",
-								"bh_regex",
-								"bh_regex_center",
-								"bh_regex_open",
-								"bh_regex_close",
-								"bh_regex_content",
-								"bh_round",
-								"bh_round_center",
-								"bh_round_open",
-								"bh_round_close",
-								"bh_round_content",
-								"bh_single_quote",
-								"bh_single_quote_center",
-								"bh_single_quote_open",
-								"bh_single_quote_close",
-								"bh_single_quote_content",
-								"bh_square",
-								"bh_square_center",
-								"bh_square_open",
-								"bh_square_close",
-								"bh_square_content",
-								"bh_tag",
-								"bh_tag_center",
-								"bh_tag_open",
-								"bh_tag_close",
-								"bh_tag_content",
-								"bh_unmatched",
-								"bh_unmatched_center",
-								"bh_unmatched_open",
-								"bh_unmatched_close",
-								"bh_unmatched_content"
-							],
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 1,
-					"stack_multiselect": false,
-					"type": "text"
-				},
-				{
-					"buffer": 4,
-					"file": "firedog-package/Struttura.md",
+					"file": "frontend/src/pages/Settings.css",
 					"selected": true,
-					"semi_transient": true,
+					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 2792,
+						"buffer_size": 20632,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								0,
-								0
+								20632,
+								20632
 							]
 						],
 						"settings":
@@ -966,12 +687,27 @@
 							{
 								"close":
 								{
+									"1":
+									[
+										20631,
+										20632
+									]
 								},
 								"icon":
 								{
+									"1":
+									[
+										"Packages/BracketHighlighter/icons/curly_bracket.png",
+										"scope"
+									]
 								},
 								"open":
 								{
+									"1":
+									[
+										20453,
+										20454
+									]
 								},
 								"unmatched":
 								{
@@ -1035,120 +771,15 @@
 								"bh_unmatched_close",
 								"bh_unmatched_content"
 							],
-							"syntax": "Packages/Markdown/Markdown.sublime-syntax",
-							"tab_size": 4,
+							"syntax": "Packages/CSS/CSS.sublime-syntax",
+							"tab_size": 2,
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 10788.0,
 						"zoom_level": 1.0
 					},
 					"stack_index": 0,
-					"stack_multiselect": false,
-					"type": "text"
-				},
-				{
-					"buffer": 5,
-					"file": "backend/api/views.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 12343,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								12342,
-								11520
-							]
-						],
-						"settings":
-						{
-							"bracket_highlighter.busy": false,
-							"bracket_highlighter.locations":
-							{
-								"close":
-								{
-								},
-								"icon":
-								{
-								},
-								"open":
-								{
-								},
-								"unmatched":
-								{
-								}
-							},
-							"bracket_highlighter.regions":
-							[
-								"bh_angle",
-								"bh_angle_center",
-								"bh_angle_open",
-								"bh_angle_close",
-								"bh_angle_content",
-								"bh_c_define",
-								"bh_c_define_center",
-								"bh_c_define_open",
-								"bh_c_define_close",
-								"bh_c_define_content",
-								"bh_curly",
-								"bh_curly_center",
-								"bh_curly_open",
-								"bh_curly_close",
-								"bh_curly_content",
-								"bh_default",
-								"bh_default_center",
-								"bh_default_open",
-								"bh_default_close",
-								"bh_default_content",
-								"bh_double_quote",
-								"bh_double_quote_center",
-								"bh_double_quote_open",
-								"bh_double_quote_close",
-								"bh_double_quote_content",
-								"bh_regex",
-								"bh_regex_center",
-								"bh_regex_open",
-								"bh_regex_close",
-								"bh_regex_content",
-								"bh_round",
-								"bh_round_center",
-								"bh_round_open",
-								"bh_round_close",
-								"bh_round_content",
-								"bh_single_quote",
-								"bh_single_quote_center",
-								"bh_single_quote_open",
-								"bh_single_quote_close",
-								"bh_single_quote_content",
-								"bh_square",
-								"bh_square_center",
-								"bh_square_open",
-								"bh_square_close",
-								"bh_square_content",
-								"bh_tag",
-								"bh_tag_center",
-								"bh_tag_open",
-								"bh_tag_close",
-								"bh_tag_content",
-								"bh_unmatched",
-								"bh_unmatched_center",
-								"bh_unmatched_open",
-								"bh_unmatched_close",
-								"bh_unmatched_content"
-							],
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 5547.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 2,
 					"stack_multiselect": false,
 					"type": "text"
 				}
@@ -1183,7 +814,7 @@
 		"cols":
 		[
 			0.0,
-			0.449358795446,
+			0.206495108023,
 			1.0
 		],
 		"rows":
@@ -1264,8 +895,8 @@
 	"show_minimap": true,
 	"show_open_files": true,
 	"show_tabs": true,
-	"side_bar_visible": true,
-	"side_bar_width": 317.0,
+	"side_bar_visible": false,
+	"side_bar_width": 247.0,
 	"status_bar_visible": true,
 	"template_settings":
 	{

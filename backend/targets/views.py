@@ -41,6 +41,7 @@ class TargetViewSet(viewsets.ModelViewSet):
     queryset = Target.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
+    serializer_class = TargetSerializer
     filterset_fields = ['status', 'ip_address']
     
     def get_serializer_class(self):
@@ -108,6 +109,72 @@ class TargetViewSet(viewsets.ModelViewSet):
         install_firedog_on_target.delay(target.id, request.user.id)
         
         return Response({'success': True, 'message': 'Installazione avviata', 'status': 'installing'})
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Elimina FISICAMENTE il target dal database (hard delete)
+        DELETE /api/targets/{id}/
+        """
+        target = self.get_object()
+        target_ip = target.ip_address
+        target_hostname = target.hostname
+        
+        try:
+            with transaction.atomic():
+                # Audit log PRIMA di eliminare
+                from targets.models import AuditLog
+                AuditLog.objects.create(
+                    user=request.user,
+                    action='target_deleted',
+                    target=None,  # Target verrà eliminato
+                    details=f'Deleted target {target_hostname or target_ip} (IP: {target_ip})'
+                )
+                
+                # HARD DELETE - elimina fisicamente dal database
+                target_id = target.id
+                target.delete()  # Questo elimina davvero il record
+                
+                return Response({
+                    'success': True,
+                    'message': f'Target {target_ip} eliminato permanentemente',
+                    'deleted_id': target_id
+                }, status=status.HTTP_204_NO_CONTENT)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    @action(detail=False, methods=['get'], url_path='check-ip')
+    def check_ip(self, request):
+        """
+        Verifica se un IP è già registrato
+        GET /api/targets/check-ip/?ip=192.168.1.100
+        """
+        ip_address = request.query_params.get('ip')
+        
+        if not ip_address:
+            return Response({'error': 'IP address required'}, status=400)
+        
+        exists = Target.objects.filter(ip_address=ip_address).exists()
+        
+        if exists:
+            target = Target.objects.get(ip_address=ip_address)
+            return Response({
+                'exists': True,
+                'target': {
+                    'id': target.id,
+                    'hostname': target.hostname,
+                    'status': target.status,
+                    'created_at': target.created_at
+                }
+            })
+        else:
+            return Response({
+                'exists': False,
+                'message': 'IP disponibile'
+            })
 
 
 class WhitelistEntryViewSet(viewsets.ModelViewSet):

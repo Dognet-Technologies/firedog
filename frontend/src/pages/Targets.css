@@ -35,9 +35,10 @@
 /* ========== TABLE CONTAINER ========== */
 .targets-table-container {
   background: var(--bg-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   overflow: hidden;
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .targets-table {

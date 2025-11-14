@@ -23,6 +23,88 @@ import type {
   PaginatedResponse,
 } from '../types';
 
+
+   export interface SystemSetting {
+     id: number;
+     key: string;
+     value: any;
+     category: 'general' | 'appearance' | 'notifications' | 'security' | 'monitoring';
+     description: string;
+     is_public: boolean;
+     updated_at: string;
+     updated_by?: number;
+     updated_by_username?: string;
+   }
+
+    export interface SSHKey {
+      id: number;
+      name: string;
+      key_type: 'ed25519' | 'rsa' | 'ecdsa';
+      key_size?: number;
+      public_key: string;
+      fingerprint: string;
+      scope: 'global' | 'group' | 'target';
+      scope_value?: string;
+      created_at: string;
+      created_by?: number;
+      created_by_username?: string;
+      is_active: boolean;
+      last_used_at?: string;
+      associated_targets: number;
+    }
+
+    export interface SSHKeyCreateData {
+      name: string;
+      key_type: 'ed25519' | 'rsa' | 'ecdsa';
+      key_size?: number;
+      scope: 'global' | 'group' | 'target';
+      scope_value?: string;
+      passphrase?: string;
+    }
+
+    export interface SSHKeyImportData {
+      name: string;
+      public_key: string;
+      private_key: string;
+      scope: 'global' | 'group' | 'target';
+      scope_value?: string;
+    }
+
+    export interface DatabaseStats {
+      total_size: string;
+      connection_status: 'connected' | 'error';
+      database_name: string;
+      database_version: string;
+      targets_count: number;
+      rules_count: number;
+      threats_count: number;
+      audit_logs_count: number;
+      statistics_count: number;
+      discovered_hosts_count: number;
+      tables_size: { [key: string]: string };
+    }
+
+    export interface DatabaseCleanupData {
+      cleanup_type: 'audit_logs' | 'threat_logs' | 'statistics' | 'discovered_hosts' | 'all';
+      retention_days: number;
+      dry_run?: boolean;
+    }
+
+    export interface DatabaseCleanupResult {
+      success: boolean;
+      records_deleted: number;
+      dry_run: boolean;
+      message: string;
+    }
+
+    export interface DatabaseConnectionTest {
+      status: 'connected' | 'error';
+      message: string;
+      latency_ms: number;
+      database_name: string;
+      database_version: string;
+    }
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 class ApiService {
@@ -118,8 +200,44 @@ class ApiService {
     return response.data;
   }
 
+
   async deleteTarget(id: number): Promise<void> {
-    await this.api.delete(`/targets/${id}/`);
+    try {
+      const response = await this.api.delete(`/targets/${id}/`);
+      
+      // Log per debug
+      console.log(`Target ${id} eliminato:`, response.data);
+      
+      // Verifica eliminazione
+      if (response.status === 204 || response.status === 200) {
+        console.log('✅ Target eliminato con successo dal server');
+        
+        // Opzionale: verifica che non esista più
+        try {
+          await this.api.get(`/targets/${id}/`);
+          console.warn('⚠️ Target ancora presente dopo eliminazione!');
+        } catch (e: any) {
+          if (e.response?.status === 404) {
+            console.log('✅ Verifica: Target non più presente');
+          }
+        }
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Errore eliminazione target:', error);
+      throw error;
+    }
+  }
+
+  async checkIPExists(ipAddress: string): Promise<{ exists: boolean; target?: any }> {
+    try {
+      const response = await this.api.get(`/targets/check-ip/?ip=${ipAddress}`);
+      return response.data;
+    } catch (error) {
+      console.error('Errore verifica IP:', error);
+      return { exists: false };
+    }
   }
 
   async testConnection(id: number): Promise<any> {
@@ -131,14 +249,17 @@ class ApiService {
     const response = await this.api.post(`/targets/${id}/install/`);
     return response.data;
   }
+
   async installTarget(targetId: number, forceReinstall: boolean = false): Promise<any> {
   const response = await this.api.post(`/targets/${targetId}/install/`);
   return response.data;
-}
+  }
+
   async uninstallFiredog(id: number): Promise<any> {
     const response = await this.api.post(`/targets/${id}/uninstall/`);
     return response.data;
   }
+
 
   async getTargetStatus(id: number): Promise<TargetStatus> {
     const response = await this.api.get(`/targets/${id}/status/`);
@@ -309,7 +430,6 @@ class ApiService {
     return response.data;
   }
 
-
   // ========== File Integrity ==========
 
   async getFileIntegrity(): Promise<PaginatedResponse<FileIntegrity>> {
@@ -322,7 +442,6 @@ class ApiService {
     return response.data;
   }
 
-
   async getAuditLogs(filters?: any): Promise<PaginatedResponse<AuditLog>> {
     const response = await this.api.get('/audit/', { params: filters });
     return response.data;
@@ -331,79 +450,173 @@ class ApiService {
   // ============================================================================
     // GROUPS API (VERSIONE CORRETTA)
     // ============================================================================
-
-    async getGroups() {
+  async getGroups() {
       const response = await this.api.get('/groups/');
       return response.data;
-    }
-
-    async getGroup(groupId: number) {
-      const response = await this.api.get(`/groups/${groupId}/`);
-      return response.data;
-    }
-
-    async createGroup(data: { name: string; description?: string; color?: string; icon?: string }) {
-      const response = await this.api.post('/groups/', data);
-      return response.data;
-    }
-
-    async deleteGroup(groupId: number) {
-      await this.api.delete(`/groups/${groupId}/`);
-    }
-
-    async addTargetsToGroup(groupId: number, targetIds: number[]) {
-      const response = await this.api.post(
-        `/groups/${groupId}/add_targets/`,
-        { target_ids: targetIds }
-      );
-      return response.data;
-    }
-
-    async removeTargetsFromGroup(groupId: number, targetIds: number[]) {
-      await this.api.post(
-        `/groups/${groupId}/remove_targets/`,
-        { target_ids: targetIds }
-      );
-    }
-
-    async getAvailableTargetsForGroup(groupId: number) {
-      const response = await this.api.get(
-        `/groups/${groupId}/available_targets/`
-      );
-      return response.data;
-    }
-    // Whitelist methods
-    async getWhitelistByTarget(targetId: number) {
-      const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);
-      return response.data;
-    }
-
-    async createWhitelistEntry(data: any) {
-      const response = await this.api.post('/whitelist/', data);
-      return response.data;
-    }
-
-    async deleteWhitelistEntry(id: number) {
-      const response = await this.api.delete(`/whitelist/${id}/`);
-      return response.data;
-    }
-
-    // Blocked IPs methods
-    async getBlockedIPsByTarget(targetId: number) {
-      const response = await this.api.get(`/blocked-ips/by_target/?target_id=${targetId}`);
-      return response.data;
-    }
-
-    async createBlockedIP(data: any) {
-      const response = await this.api.post('/blocked-ips/', data);
-      return response.data;
-    }
-
-    async unblockIP(id: number) {
-      const response = await this.api.post(`/blocked-ips/${id}/unblock/`);
-      return response.data;
-    }
   }
+
+  async getGroup(groupId: number) {
+    const response = await this.api.get(`/groups/${groupId}/`);
+    return response.data;
+  }
+
+  async createGroup(data: { name: string; description?: string; color?: string; icon?: string }) {
+    const response = await this.api.post('/groups/', data);
+    return response.data;
+  }
+
+  async deleteGroup(groupId: number) {
+    await this.api.delete(`/groups/${groupId}/`);
+  }
+
+  async addTargetsToGroup(groupId: number, targetIds: number[]) {
+     const response = await this.api.post(
+       `/groups/${groupId}/add_targets/`,
+       { target_ids: targetIds }
+     );
+     return response.data;
+  }
+
+  async removeTargetsFromGroup(groupId: number, targetIds: number[]) {
+    await this.api.post(
+      `/groups/${groupId}/remove_targets/`,
+      { target_ids: targetIds }
+    );
+  }
+
+  async getAvailableTargetsForGroup(groupId: number) {
+    const response = await this.api.get(
+      `/groups/${groupId}/available_targets/`
+    );
+    return response.data;
+  }
+    // Whitelist methods
+  async getWhitelistByTarget(targetId: number) {
+    const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);
+    return response.data;
+  }
+
+  async createWhitelistEntry(data: any) {
+    const response = await this.api.post('/whitelist/', data);
+    return response.data;
+  }
+
+  async deleteWhitelistEntry(id: number) {
+    const response = await this.api.delete(`/whitelist/${id}/`);
+    return response.data;
+  }
+    // Blocked IPs methods
+  async getBlockedIPsByTarget(targetId: number) {
+    const response = await this.api.get(`/blocked-ips/by_target/?target_id=${targetId}`);
+    return response.data;
+  }
+
+  async createBlockedIP(data: any) {
+    const response = await this.api.post('/blocked-ips/', data);
+    return response.data;
+  }
+
+  async unblockIP(id: number) {
+    const response = await this.api.post(`/blocked-ips/${id}/unblock/`);
+    return response.data;
+  }
+
+  async getSettings(category?: string): Promise<SystemSetting[]> {
+    const params = category ? { category } : {};
+    const response = await this.api.get('/settings/', { params });
+    return response.data.results || response.data;
+  }
+
+  async getSetting(id: number): Promise<SystemSetting> {
+    const response = await this.api.get(`/settings/${id}/`);
+    return response.data;
+  }
+
+  async createSetting(data: Partial<SystemSetting>): Promise<SystemSetting> {
+    const response = await this.api.post('/settings/', data);
+    return response.data;
+  }
+
+  async updateSetting(id: number, data: Partial<SystemSetting>): Promise<SystemSetting> {
+    const response = await this.api.patch(`/settings/${id}/`, data);
+    return response.data;
+  }
+
+  async deleteSetting(id: number): Promise<void> {
+    await this.api.delete(`/settings/${id}/`);
+  }
+
+  async bulkUpdateSettings(settings: { [key: string]: any }, category?: string): Promise<any> {
+    const response = await this.api.post('/settings/bulk_update/', {
+      settings,
+      category,
+    });
+    return response.data;
+  }
+
+  async resetSettings(category?: string): Promise<any> {
+    const response = await this.api.post('/settings/reset/', {
+      category,
+    });
+    return response.data;
+  }
+
+    // ========== SSH Keys ==========
+
+  async getSSHKeys(scope?: string): Promise<SSHKey[]> {
+    const params = scope ? { scope } : {};
+    const response = await this.api.get('/settings/ssh-keys/', { params });
+    return response.data.results || response.data;
+  }
+
+  async getSSHKey(id: number): Promise<SSHKey> {
+    const response = await this.api.get(`/settings/ssh-keys/${id}/`);
+    return response.data;
+  }
+
+  async generateSSHKey(data: SSHKeyCreateData): Promise<SSHKey> {
+    const response = await this.api.post('/settings/ssh-keys/generate/', data);
+    return response.data;
+  }
+
+  async importSSHKey(data: SSHKeyImportData): Promise<SSHKey> {
+    const response = await this.api.post('/settings/ssh-keys/import_key/', data);
+    return response.data;
+  }
+
+  async deleteSSHKey(id: number): Promise<void> {
+    await this.api.delete(`/settings/ssh-keys/${id}/`);
+  }
+
+  async downloadSSHKeyPublic(id: number): Promise<Blob> {
+    const response = await this.api.get(`/settings/ssh-keys/${id}/download/`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  }
+
+    // ========== Database Management ==========
+
+  async getDatabaseStats(): Promise<DatabaseStats> {
+    const response = await this.api.get('/settings/database/stats/');
+    return response.data;
+  }
+
+  async testDatabaseConnection(): Promise<DatabaseConnectionTest> {
+    const response = await this.api.post('/settings/database/test_connection/');
+    return response.data;
+  }
+
+  async cleanupDatabase(data: DatabaseCleanupData): Promise<DatabaseCleanupResult> {
+    const response = await this.api.post('/settings/database/cleanup/', data);
+    return response.data;
+  }
+
+  async getDatabaseCleanupLogs(): Promise<any[]> {
+    const response = await this.api.get('/settings/database/cleanup_logs/');
+    return response.data;
+  }
+ }
 
 export default new ApiService();
 

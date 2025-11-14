@@ -48,4 +48,7 @@ urlpatterns = [
 
     # API endpoints
     path('api/', include(router.urls)),
+
+    # Settings
+    path('api/', include('settings.urls')),
 ]

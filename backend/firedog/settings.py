@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'integrity.apps.IntegrityConfig',
     'discovery.apps.DiscoveryConfig',
     'audit.apps.AuditConfig',
+    'settings.apps.SettingsConfig'
     'channels',
 ]
 
