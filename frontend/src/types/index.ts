@@ -303,3 +303,99 @@ export interface TimeSeriesDataPoint {
   [key: string]: any;
 }
 
+/**
+ * TypeScript Types
+ * AGGIUNGERE a frontend/src/types/index.ts
+ */
+
+// ==================== NOTIFICATION TYPES ====================
+
+export interface NotificationConfig {
+  id: number;
+  email_enabled: boolean;
+  email_recipients: string[];
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  smtp_password?: string;
+  smtp_use_tls: boolean;
+  smtp_from_email: string;
+  slack_enabled: boolean;
+  slack_webhook_url: string;
+  discord_enabled: boolean;
+  discord_webhook_url: string;
+  alert_on_critical_threat: boolean;
+  alert_on_high_threat: boolean;
+  alert_on_target_offline: boolean;
+  target_offline_threshold_minutes: number;
+  alert_on_ssh_error: boolean;
+  alert_on_install_success: boolean;
+  alert_on_install_failed: boolean;
+  cooldown_minutes: number;
+  updated_at: string;
+  updated_by: number | null;
+  updated_by_username: string | null;
+}
+
+export interface NotificationLog {
+  id: number;
+  notification_type: 'email' | 'slack' | 'discord';
+  notification_type_display: string;
+  alert_type: string;
+  alert_type_display: string;
+  target: number | null;
+  target_hostname: string | null;
+  recipient: string;
+  message: string;
+  success: boolean;
+  error_message: string;
+  sent_at: string;
+}
+
+export interface SmtpInfo {
+  title: string;
+  description: string;
+  steps: Array<{
+    step: number;
+    title: string;
+    command: string;
+    description: string;
+  }>;
+  common_configs: {
+    [key: string]: {
+      smtp_host: string;
+      smtp_port: number;
+      smtp_user: string;
+      smtp_use_tls: boolean;
+      description: string;
+    };
+  };
+  troubleshooting: Array<{
+    problem: string;
+    solution: string;
+  }>;
+}
+
+// ==================== USER TYPES ====================
+
+export interface UserProfile {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  is_staff: boolean;
+  is_superuser: boolean;
+  date_joined: string;
+  last_login: string;
+}
+
+export interface ChangeUsernameRequest {
+  new_username: string;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}

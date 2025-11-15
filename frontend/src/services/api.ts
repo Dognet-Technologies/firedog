@@ -200,7 +200,6 @@ class ApiService {
     return response.data;
   }
 
-
   async deleteTarget(id: number): Promise<void> {
     try {
       const response = await this.api.delete(`/targets/${id}/`);
@@ -259,7 +258,6 @@ class ApiService {
     const response = await this.api.post(`/targets/${id}/uninstall/`);
     return response.data;
   }
-
 
   async getTargetStatus(id: number): Promise<TargetStatus> {
     const response = await this.api.get(`/targets/${id}/status/`);
@@ -616,7 +614,87 @@ class ApiService {
     const response = await this.api.get('/settings/database/cleanup_logs/');
     return response.data;
   }
- }
+
+  // CORREZIONE PER I NUOVI METODI
+// Sostituisci dalla riga 620 alla fine del file api.ts
+
+  // ==================== NOTIFICATION API ====================
+
+  /**
+   * Ottieni configurazione notifiche
+   */
+  async getNotificationConfig(): Promise<any> {
+    const response = await this.api.get('/settings/notifications/config/');
+    return response.data;
+  }
+
+  /**
+   * Aggiorna configurazione notifiche
+   */
+  async updateNotificationConfig(config: any): Promise<any> {
+    const response = await this.api.put('/settings/notifications/config/', config);
+    return response.data;
+  }
+
+  /**
+   * Test notifica (email/slack/discord)
+   */
+  async testNotification(data: {
+    notification_type: 'email' | 'slack' | 'discord';
+    test_recipient?: string;
+  }): Promise<any> {
+    const response = await this.api.post('/settings/notifications/test/', data);
+    return response.data;
+  }
+
+  /**
+   * Ottieni log notifiche
+   */
+  async getNotificationLogs(limit: number = 50): Promise<any> {
+    const response = await this.api.get(`/settings/notifications/logs/?limit=${limit}`);
+    return response.data;
+  }
+
+  /**
+   * Ottieni info configurazione SMTP
+   */
+  async getSmtpInfo(): Promise<any> {
+    const response = await this.api.get('/settings/notifications/smtp-info/');
+    return response.data;
+  }
+
+  // ==================== USER MANAGEMENT API ====================
+
+  /**
+   * Ottieni profilo utente corrente
+   */
+  async getUserProfile(): Promise<any> {
+    const response = await this.api.get('/settings/user/profile/');
+    return response.data;
+  }
+
+  /**
+   * Cambia username
+   */
+  async changeUsername(newUsername: string): Promise<any> {
+    const response = await this.api.put('/settings/user/change-username/', {
+      new_username: newUsername
+    });
+    return response.data;
+  }
+
+  /**
+   * Cambia password
+   */
+  async changePassword(data: {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+  }): Promise<any> {
+    const response = await this.api.put('/settings/user/change-password/', data);
+    return response.data;
+  }
+}
 
 export default new ApiService();
 
