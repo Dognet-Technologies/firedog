@@ -82,4 +82,6 @@ uploads/
 # OS
 Thumbs.db
 files/*
-Firedog.sublime-*
+Firedog.sublime-workspace
+Firedog.sublime-project
+.gitignore
