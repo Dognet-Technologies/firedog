@@ -31,6 +31,13 @@ router.register(r'audit', AuditLogViewSet, basename='auditlog')
 router.register(r'whitelist', WhitelistEntryViewSet, basename='whitelist')
 router.register(r'blocked-ips', BlockedIPViewSet, basename='blocked-ip')
 
+# Settings ViewSets  ← AGGIUNGI
+router.register(r'settings/settings', SystemSettingsViewSet, basename='systemsettings')
+router.register(r'settings/ssh-keys', SSHKeyViewSet, basename='sshkey')
+router.register(r'settings/database', DatabaseManagementViewSet, basename='database')
+router.register(r'settings/notifications', NotificationViewSet, basename='notifications')
+router.register(r'settings/user', UserManagementViewSet, basename='user')
+
 urlpatterns = [
     # Admin
     path('admin/', admin.site.urls),
@@ -46,9 +53,10 @@ urlpatterns = [
     # Gruppi
     path('api/', include('targets.urls_groups')),
 
-    # API endpoints
-    path('api/', include(router.urls)),
-
     # Settings
-    path('api/', include('settings.urls')),
-]
+#    path('api/settings/', include('settings.urls')),
+
+    # API endpoints
+    path('api/', include('router.urls')),
+
+    ]
