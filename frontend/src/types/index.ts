@@ -13,6 +13,13 @@ export interface PaginatedResponse<T> {
 
 // ========== Target Types ==========
 
+export interface TargetGroupInfo {
+  id: number;
+  name: string;
+  color: string;
+  icon?: string;
+}
+
 export interface Target {
   id: number;
   ip_address: string;
@@ -32,6 +39,7 @@ export interface Target {
   gruppo?: string | null;
   gruppo_custom?: string | null;
   gruppo_display?: string;
+  target_groups?: TargetGroupInfo[];
 }
 
 export interface TargetCreate {
