@@ -63,46 +63,11 @@ const MonitoringPerformance: React.FC = () => {
 
     try {
       // TODO: Implementare API backend reale
-      // Per ora uso dati mock
-      const mockMetrics = generateMockMetrics();
-      setMetrics(mockMetrics.history);
-      setCurrentMetrics(mockMetrics.current);
-      setSystemInfo(mockMetrics.info);
+      // API call would go here when backend is ready
+      // For now, data remains empty
     } catch (error) {
       console.error('Error loading performance data:', error);
     }
-  };
-
-  const generateMockMetrics = () => {
-    const history: PerformanceMetrics[] = [];
-    const now = Date.now();
-
-    for (let i = 60; i >= 0; i--) {
-      history.push({
-        timestamp: new Date(now - i * 60000).toLocaleTimeString('it-IT', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        }),
-        cpu_percent: 20 + Math.random() * 60,
-        memory_percent: 40 + Math.random() * 30,
-        disk_percent: 55 + Math.random() * 5,
-        load_average: [
-          1.5 + Math.random() * 2,
-          1.2 + Math.random() * 1.5,
-          1.0 + Math.random() * 1
-        ],
-      });
-    }
-
-    const current = history[history.length - 1];
-    const info: SystemInfo = {
-      cpu_cores: 8,
-      total_memory_gb: 32,
-      total_disk_gb: 512,
-      uptime_hours: 168.5,
-    };
-
-    return { history, current, info };
   };
 
   const getStatusColor = (percent: number, type: 'cpu' | 'memory' | 'disk') => {

@@ -105,69 +105,16 @@ const SystemLogs: React.FC = () => {
 
     try {
       setLoading(true);
-      
+
       // TODO: Implementare API backend reale per recuperare log via SSH
-      // Per ora uso dati mock
-      const mockLogs = generateMockLogs(selectedLogType, filter.lines);
-      setLogs(mockLogs);
-      
+      // API call would go here when backend is ready
+      // For now, data remains empty
+
     } catch (error) {
       console.error('Error loading system logs:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateMockLogs = (type: LogType, count: number): LogEntry[] => {
-    const logs: LogEntry[] = [];
-    const now = Date.now();
-    
-    const templates: { [key in LogType]: Array<{ level: LogEntry['level'], service: string, message: string }> } = {
-      syslog: [
-        { level: 'info', service: 'systemd', message: 'Started Session c1 of user root.' },
-        { level: 'info', service: 'NetworkManager', message: 'device (eth0): link connected' },
-        { level: 'warning', service: 'systemd', message: 'Failed to start Daily apt download activities.' },
-        { level: 'info', service: 'cron', message: 'pam_unix(cron:session): session opened for user root' },
-      ],
-      auth: [
-        { level: 'info', service: 'sshd', message: 'Accepted publickey for admin from 192.168.1.100' },
-        { level: 'warning', service: 'sshd', message: 'Failed password for invalid user test from 10.0.0.1' },
-        { level: 'info', service: 'sudo', message: 'admin : TTY=pts/0 ; PWD=/home/admin ; USER=root ; COMMAND=/usr/bin/apt update' },
-        { level: 'error', service: 'sshd', message: 'Connection closed by authenticating user root 192.168.1.50' },
-      ],
-      kern: [
-        { level: 'info', service: 'kernel', message: 'NET: Registered protocol family 10' },
-        { level: 'warning', service: 'kernel', message: 'Out of memory: Kill process 1234 (chrome) score 500' },
-        { level: 'error', service: 'kernel', message: 'I/O error, dev sda, sector 123456' },
-        { level: 'info', service: 'kernel', message: 'TCP: request_sock_TCP: Possible SYN flooding' },
-      ],
-      apache: [
-        { level: 'error', service: 'apache2', message: '[php7:error] [client 192.168.1.50] PHP Fatal error: Undefined variable' },
-        { level: 'warning', service: 'apache2', message: '[core:warn] [client 10.0.0.1] AH00135: File does not exist: /var/www/html/favicon.ico' },
-        { level: 'error', service: 'apache2', message: '[ssl:error] SSL Library Error: error:140770FC:SSL' },
-      ],
-      nginx: [
-        { level: 'error', service: 'nginx', message: '2023/10/05 10:15:30 [error] 1234#1234: *1 open() "/var/www/html/test.php" failed' },
-        { level: 'warning', service: 'nginx', message: '2023/10/05 10:16:45 [warn] 1234#1234: *2 upstream server temporarily disabled' },
-        { level: 'error', service: 'nginx', message: '2023/10/05 10:17:00 [error] 1234#1234: *3 connect() failed (111: Connection refused)' },
-      ],
-    };
-
-    const templateSet = templates[type];
-    
-    for (let i = 0; i < count; i++) {
-      const template = templateSet[Math.floor(Math.random() * templateSet.length)];
-      const timestamp = new Date(now - i * 60000); // 1 minute intervals
-      
-      logs.push({
-        timestamp: timestamp.toISOString(),
-        level: template.level,
-        service: template.service,
-        message: template.message,
-      });
-    }
-
-    return logs;
   };
 
   const handleDownload = () => {
