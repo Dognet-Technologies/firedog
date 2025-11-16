@@ -346,15 +346,34 @@ const Targets: React.FC = () => {
 
   // Badge gruppo
   const getGruppoBadge = (target: Target) => {
-    if (!target.gruppo) {
+    const hasStaticGruppo = target.gruppo && target.gruppo.trim() !== '';
+    const hasTargetGroups = target.target_groups && target.target_groups.length > 0;
+
+    if (!hasStaticGruppo && !hasTargetGroups) {
       return <span className="gruppo-badge gruppo-none">—</span>;
     }
-    
-    const gruppoDisplay = target.gruppo_display || target.gruppo;
+
     return (
-      <span className={`gruppo-badge gruppo-${target.gruppo}`}>
-        {gruppoDisplay}
-      </span>
+      <div className="gruppo-badges-container">
+        {/* Campo gruppo statico */}
+        {hasStaticGruppo && (
+          <span className={`gruppo-badge gruppo-${target.gruppo}`}>
+            {target.gruppo_display || target.gruppo}
+          </span>
+        )}
+
+        {/* TargetGroups dalla tab Groups */}
+        {hasTargetGroups && target.target_groups!.map((group) => (
+          <span
+            key={group.id}
+            className="gruppo-badge gruppo-targetgroup"
+            style={{ backgroundColor: group.color + '20', borderColor: group.color, color: group.color }}
+            title={`TargetGroup: ${group.name}`}
+          >
+            {group.name}
+          </span>
+        ))}
+      </div>
     );
   };
 

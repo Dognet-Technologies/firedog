@@ -19,6 +19,7 @@ class TargetSerializer(serializers.ModelSerializer):
     connection_string = serializers.ReadOnlyField()
     is_active = serializers.ReadOnlyField()
     gruppo_display = serializers.SerializerMethodField()
+    target_groups = serializers.SerializerMethodField()
 
     class Meta:
         model = Target
@@ -41,6 +42,7 @@ class TargetSerializer(serializers.ModelSerializer):
             'gruppo',
             'gruppo_custom',
             'gruppo_display',
+            'target_groups',
         ]
         read_only_fields = [
             'status',
@@ -56,12 +58,25 @@ class TargetSerializer(serializers.ModelSerializer):
         """Ritorna il nome leggibile del gruppo"""
         return obj.get_gruppo_display_name()
 
+    def get_target_groups(self, obj):
+        """Ritorna i TargetGroup a cui appartiene questo target"""
+        return [
+            {
+                'id': group.id,
+                'name': group.name,
+                'color': group.color,
+                'icon': group.icon,
+            }
+            for group in obj.groups.all()
+        ]
+
 
 class TargetListSerializer(serializers.ModelSerializer):
     """Serializer semplificato per lista targets"""
 
     is_active = serializers.ReadOnlyField()
     gruppo_display = serializers.SerializerMethodField()
+    target_groups = serializers.SerializerMethodField()
 
     class Meta:
         model = Target
@@ -76,11 +91,23 @@ class TargetListSerializer(serializers.ModelSerializer):
             'gruppo',
             'gruppo_custom',
             'gruppo_display',
+            'target_groups',
         ]
 
     def get_gruppo_display(self, obj):
         """Ritorna il nome leggibile del gruppo"""
         return obj.get_gruppo_display_name()
+
+    def get_target_groups(self, obj):
+        """Ritorna i TargetGroup a cui appartiene questo target"""
+        return [
+            {
+                'id': group.id,
+                'name': group.name,
+                'color': group.color,
+            }
+            for group in obj.groups.all()
+        ]
 
 
 class TargetCreateSerializer(serializers.ModelSerializer):
