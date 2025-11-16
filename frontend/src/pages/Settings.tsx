@@ -6,8 +6,6 @@ import React, { useState, useEffect } from 'react';
 import './Settings.css';
 import api from '../services/api';
 import { useNotifications } from '../contexts/NotificationContext';
-import NotificationsTab from '../components/Settings/NotificationsTab';
-import SecurityTab from '../components/Settings/SecurityTab';
 
 interface SettingsData {
   // General Settings
@@ -1162,8 +1160,8 @@ const Settings: React.FC = () => {
       <div className="settings-content">
         {activeTab === 'general' && renderGeneralSettings()}
         {activeTab === 'appearance' && renderAppearanceSettings()}
-        {activeTab === 'notifications' && <NotificationsTab />}
-        {activeTab === 'security' && <SecurityTab />}
+        {activeTab === 'notifications' && renderNotificationSettings()}
+        {activeTab === 'security' && renderSecuritySettings()}
         {activeTab === 'monitoring' && renderMonitoringSettings()}
         {activeTab === 'ssh' && renderSSHSettings()}
         {activeTab === 'database' && renderDatabaseSettings()}
