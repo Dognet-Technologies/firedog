@@ -15,10 +15,11 @@ import ipaddress
 
 class TargetSerializer(serializers.ModelSerializer):
     """Serializer per il modello Target"""
-    
+
     connection_string = serializers.ReadOnlyField()
     is_active = serializers.ReadOnlyField()
-    
+    gruppo_display = serializers.SerializerMethodField()
+
     class Meta:
         model = Target
         fields = [
@@ -37,6 +38,9 @@ class TargetSerializer(serializers.ModelSerializer):
             'updated_at',
             'connection_string',
             'is_active',
+            'gruppo',
+            'gruppo_custom',
+            'gruppo_display',
         ]
         read_only_fields = [
             'status',
@@ -48,12 +52,17 @@ class TargetSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
+    def get_gruppo_display(self, obj):
+        """Ritorna il nome leggibile del gruppo"""
+        return obj.get_gruppo_display_name()
+
 
 class TargetListSerializer(serializers.ModelSerializer):
     """Serializer semplificato per lista targets"""
-    
+
     is_active = serializers.ReadOnlyField()
-    
+    gruppo_display = serializers.SerializerMethodField()
+
     class Meta:
         model = Target
         fields = [
@@ -64,12 +73,19 @@ class TargetListSerializer(serializers.ModelSerializer):
             'firedog_version',
             'last_seen',
             'is_active',
+            'gruppo',
+            'gruppo_custom',
+            'gruppo_display',
         ]
+
+    def get_gruppo_display(self, obj):
+        """Ritorna il nome leggibile del gruppo"""
+        return obj.get_gruppo_display_name()
 
 
 class TargetCreateSerializer(serializers.ModelSerializer):
     """Serializer per creazione target"""
-    
+
     class Meta:
         model = Target
         fields = [
@@ -78,48 +94,26 @@ class TargetCreateSerializer(serializers.ModelSerializer):
             'description',
             'ssh_port',
             'ssh_user',
+            'gruppo',
+            'gruppo_custom',
         ]
-    
+
     def validate_ip_address(self, value):
         """Verifica che IP non sia già presente"""
         if Target.objects.filter(ip_address=value).exists():
             raise serializers.ValidationError("Questo IP è già registrato come target")
         return value
 
-
-class TargetSerializer(serializers.ModelSerializer):
-    gruppo_display = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Target
-        fields = [
-            'id', 'hostname', 'ip_address', 'description', 
-            'status', 'ssh_port', 'firedog_version',
-            'last_seen', 'created_at', 'updated_at',
-            'gruppo', 'gruppo_custom', 'gruppo_display'  # ← AGGIUNGI
-        ]
-        read_only_fields = ['id', 'status', 'firedog_version', 'last_seen', 'created_at']
-    
-    def get_gruppo_display(self, obj):
-        """Ritorna il nome leggibile del gruppo"""
-        return obj.get_gruppo_display_name()
-
-
-class TargetCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Target
-        fields = ['hostname', 'ip_address', 'description', 'ssh_port', 'gruppo', 'gruppo_custom']
-    
     def validate(self, data):
         """Validazione gruppo"""
         if data.get('gruppo') == 'custom' and not data.get('gruppo_custom'):
             raise serializers.ValidationError({
                 'gruppo_custom': 'Nome gruppo personalizzato obbligatorio quando gruppo="custom"'
             })
-        
+
         if data.get('gruppo') != 'custom':
             data['gruppo_custom'] = None
-        
+
         return data
 
 
