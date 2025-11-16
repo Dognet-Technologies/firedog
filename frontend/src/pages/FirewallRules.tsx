@@ -79,120 +79,18 @@ const FirewallRules: React.FC = () => {
 
     try {
       setLoading(true);
-      
+
       // TODO: Implementare API backend
       // const response = await apiService.getFirewallRules(selectedTarget, refresh);
       // setRules(response);
-      
-      // Mock data
-      const mockRules = generateMockRules();
-      setRules(mockRules);
-      
+
+      // No mock data - rules remain empty until API is implemented
+
     } catch (error) {
       console.error('Error loading rules:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateMockRules = (): RulesData => {
-    return {
-      input_rules: [
-        {
-          id: 1,
-          target: selectedTarget!,     // ✅ CORRETTO
-          target_ip: targets.find(t => t.id === selectedTarget)?.ip_address || '',
-          chain: 'INPUT',
-          rule_number: 1,
-          protocol: 'tcp',
-          port: 22,
-          source_ip: null,
-          dest_ip: null,
-          action: 'ACCEPT',
-          comment: 'SSH Access',
-          is_custom: false,
-          is_synced: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          rule_description: 'INPUT tcp:22 -> ACCEPT',
-        },
-        {
-          id: 2,
-          target: selectedTarget!,     // ✅ CORRETTO
-          target_ip: targets.find(t => t.id === selectedTarget)?.ip_address || '',
-          chain: 'INPUT',
-          rule_number: 1,
-          protocol: 'tcp',
-          port: 22,
-          source_ip: null,
-          dest_ip: null,
-          action: 'ACCEPT',
-          comment: 'SSH Access',
-          is_custom: false,
-          is_synced: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          rule_description: 'INPUT tcp:22 -> ACCEPT',
-        },
-        {
-          id: 3,
-          target: selectedTarget!,     // ✅ CORRETTO
-          target_ip: targets.find(t => t.id === selectedTarget)?.ip_address || '',
-          chain: 'INPUT',
-          rule_number: 1,
-          protocol: 'tcp',
-          port: 22,
-          source_ip: null,
-          dest_ip: null,
-          action: 'ACCEPT',
-          comment: 'SSH Access',
-          is_custom: false,
-          is_synced: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          rule_description: 'INPUT tcp:22 -> ACCEPT',
-        },
-      ],
-      output_rules: [
-        {
-          id: 4,
-          target: selectedTarget!,
-          chain: 'OUTPUT',
-          rule_number: 1,
-          protocol: 'tcp',
-          port: 53,
-          source_ip: null,
-          dest_ip: null,
-          action: 'ACCEPT',
-          comment: 'DNS',
-          target_ip: "debian2", 
-          created_at:new Date().toISOString(), 
-          updated_at:new Date().toISOString(), 
-          rule_description:'OUTPUT test',
-          is_custom: false,
-          is_synced: true,
-        },
-        {
-          id: 5,
-          target: selectedTarget!,
-          chain: 'OUTPUT',
-          rule_number: 2,
-          protocol: 'tcp',
-          port: 443,
-          source_ip: null,
-          dest_ip: null,
-          action: 'ACCEPT',
-          comment: 'HTTPS Outbound',
-          target_ip: "debian3", 
-          created_at:new Date().toISOString(), 
-          updated_at:new Date().toISOString(), 
-          rule_description:'OUTPUT test',
-          is_custom: true,
-          is_synced: true,
-        },
-      ],
-      forward_rules: [],
-    };
   };
 
   const handleAddRule = async () => {

@@ -34,32 +34,10 @@ const Dashboard: React.FC = () => {
     { i: 'top-ips', x: 6, y: 2, w: 6, h: 3, type: 'top-ips', title: 'Top IP Addresses' },
   ]);
 
-  // Mock data for demo
-  const trafficData = [
-    { time: '00:00', upload: 4000, download: 2400 },
-    { time: '04:00', upload: 3000, download: 1398 },
-    { time: '08:00', upload: 2000, download: 9800 },
-    { time: '12:00', upload: 2780, download: 3908 },
-    { time: '16:00', upload: 1890, download: 4800 },
-    { time: '20:00', upload: 2390, download: 3800 },
-    { time: '23:59', upload: 3490, download: 4300 },
-  ];
-
-  const topThreatsData = [
-    { name: 'SSH Bruteforce', count: 145, severity: 'critical' },
-    { name: 'Port Scan', count: 98, severity: 'high' },
-    { name: 'DDoS Attempt', count: 67, severity: 'critical' },
-    { name: 'SQL Injection', count: 45, severity: 'high' },
-    { name: 'XSS Attack', count: 23, severity: 'medium' },
-  ];
-
-  const topIPsData = [
-    { ip: '192.168.1.105', traffic: 8500, status: 'high' },
-    { ip: '10.0.0.45', traffic: 6200, status: 'medium' },
-    { ip: '172.16.0.89', traffic: 5100, status: 'medium' },
-    { ip: '192.168.1.203', traffic: 3800, status: 'low' },
-    { ip: '10.0.0.167', traffic: 2400, status: 'low' },
-  ];
+  // Real data - no mocks
+  const trafficData: Array<{time: string, upload: number, download: number}> = [];
+  const topThreatsData: Array<{name: string, count: number, severity: string}> = [];
+  const topIPsData: Array<{ip: string, traffic: number, status: string}> = [];
 
   useEffect(() => {
     loadData();
@@ -157,7 +135,7 @@ const Dashboard: React.FC = () => {
         return (
           <div className="widget-content">
             <div className="threats-list">
-              {topThreatsData.map((threat, idx) => (
+              {topThreatsData.length > 0 ? topThreatsData.map((threat, idx) => (
                 <div key={idx} className="threat-item">
                   <div className="threat-info">
                     <span className={`severity-badge ${threat.severity}`}>{threat.severity}</span>
@@ -165,7 +143,16 @@ const Dashboard: React.FC = () => {
                   </div>
                   <span className="threat-count">{threat.count}</span>
                 </div>
-              ))}
+              )) : (
+                <div className="empty-widget">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  <p>No threat data available</p>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -173,33 +160,42 @@ const Dashboard: React.FC = () => {
       case 'traffic':
         return (
           <div className="widget-content">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trafficData}>
-                <defs>
-                  <linearGradient id="uploadGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00c9ff" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#00c9ff" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="downloadGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#32d74b" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#32d74b" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2d3139" />
-                <XAxis dataKey="time" stroke="#8e91a0" />
-                <YAxis stroke="#8e91a0" />
-                <Tooltip 
-                  contentStyle={{ 
-                    background: '#1f2228', 
-                    border: '1px solid #2d3139',
-                    borderRadius: '8px',
-                    color: '#fff'
-                  }} 
-                />
-                <Area type="monotone" dataKey="upload" stroke="#00c9ff" fillOpacity={1} fill="url(#uploadGradient)" />
-                <Area type="monotone" dataKey="download" stroke="#32d74b" fillOpacity={1} fill="url(#downloadGradient)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {trafficData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trafficData}>
+                  <defs>
+                    <linearGradient id="uploadGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#00c9ff" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#00c9ff" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="downloadGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#32d74b" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#32d74b" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3139" />
+                  <XAxis dataKey="time" stroke="#8e91a0" />
+                  <YAxis stroke="#8e91a0" />
+                  <Tooltip
+                    contentStyle={{
+                      background: '#1f2228',
+                      border: '1px solid #2d3139',
+                      borderRadius: '8px',
+                      color: '#fff'
+                    }}
+                  />
+                  <Area type="monotone" dataKey="upload" stroke="#00c9ff" fillOpacity={1} fill="url(#uploadGradient)" />
+                  <Area type="monotone" dataKey="download" stroke="#32d74b" fillOpacity={1} fill="url(#downloadGradient)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="empty-widget">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                <p>No traffic data available</p>
+              </div>
+            )}
           </div>
         );
 
@@ -207,7 +203,7 @@ const Dashboard: React.FC = () => {
         return (
           <div className="widget-content">
             <div className="ips-list">
-              {topIPsData.map((item, idx) => (
+              {topIPsData.length > 0 ? topIPsData.map((item, idx) => (
                 <div key={idx} className="ip-item">
                   <div className="ip-info">
                     <span className="ip-rank">#{idx + 1}</span>
@@ -215,15 +211,27 @@ const Dashboard: React.FC = () => {
                   </div>
                   <div className="ip-traffic">
                     <div className="traffic-bar">
-                      <div 
-                        className={`traffic-fill ${item.status}`} 
+                      <div
+                        className={`traffic-fill ${item.status}`}
                         style={{ width: `${(item.traffic / 10000) * 100}%` }}
                       ></div>
                     </div>
                     <span className="traffic-value">{(item.traffic / 1000).toFixed(1)} GB</span>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="empty-widget">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                  <p>No IP data available</p>
+                </div>
+              )}
             </div>
           </div>
         );

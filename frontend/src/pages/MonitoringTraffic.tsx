@@ -72,61 +72,16 @@ const MonitoringTraffic: React.FC = () => {
 
     try {
       setLoading(true);
-      
+
       // TODO: Implementare API backend per recuperare statistiche traffico
-      // Per ora uso dati mock
-      const mockData = generateMockTrafficData(timeRange);
-      setTrafficData(mockData.timeSeries);
-      setProtocolStats(mockData.protocols);
-      setTopSourceIPs(mockData.topSources);
-      setTopDestIPs(mockData.topDests);
-      
+      // API call would go here when backend is ready
+      // For now, data remains empty
+
     } catch (error) {
       console.error('Error loading traffic data:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateMockTrafficData = (range: string) => {
-    const points = range === '1h' ? 12 : range === '6h' ? 24 : range === '24h' ? 48 : 168;
-    const timeSeries: TrafficData[] = [];
-    
-    for (let i = 0; i < points; i++) {
-      timeSeries.push({
-        timestamp: new Date(Date.now() - (points - i) * 300000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-        packets_in: Math.floor(Math.random() * 10000) + 5000,
-        packets_out: Math.floor(Math.random() * 8000) + 4000,
-        bytes_in: Math.floor(Math.random() * 5000000) + 1000000,
-        bytes_out: Math.floor(Math.random() * 3000000) + 500000,
-        dropped_packets: Math.floor(Math.random() * 100),
-      });
-    }
-
-    const protocols: ProtocolStats[] = [
-      { protocol: 'TCP', packets: 125430, bytes: 85432100, percentage: 65 },
-      { protocol: 'UDP', packets: 45230, bytes: 23421000, percentage: 23 },
-      { protocol: 'ICMP', packets: 12340, bytes: 5432100, percentage: 8 },
-      { protocol: 'Other', packets: 8900, bytes: 2341000, percentage: 4 },
-    ];
-
-    const topSources: TopIP[] = [
-      { ip: '192.168.1.100', packets: 45230, bytes: 23421000, last_seen: '2 minuti fa' },
-      { ip: '10.0.0.45', packets: 32100, bytes: 15234000, last_seen: '5 minuti fa' },
-      { ip: '172.16.0.89', packets: 28900, bytes: 12345000, last_seen: '8 minuti fa' },
-      { ip: '192.168.1.203', packets: 21450, bytes: 9876000, last_seen: '12 minuti fa' },
-      { ip: '10.0.0.167', packets: 18230, bytes: 7654000, last_seen: '15 minuti fa' },
-    ];
-
-    const topDests: TopIP[] = [
-      { ip: '8.8.8.8', packets: 52100, bytes: 28421000, last_seen: '1 minuto fa' },
-      { ip: '1.1.1.1', packets: 38900, bytes: 19234000, last_seen: '3 minuti fa' },
-      { ip: '151.101.1.140', packets: 25670, bytes: 14345000, last_seen: '6 minuti fa' },
-      { ip: '93.184.216.34', packets: 19230, bytes: 10876000, last_seen: '10 minuti fa' },
-      { ip: '13.107.42.14', packets: 15890, bytes: 8654000, last_seen: '14 minuti fa' },
-    ];
-
-    return { timeSeries, protocols, topSources, topDests };
   };
 
   const formatBytes = (bytes: number): string => {
