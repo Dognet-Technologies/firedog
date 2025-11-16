@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""
+FireDog Firewall Manager
+Manages iptables rules and provides firewall status information
+"""
+
+import sys
+import subprocess
+import json
+import argparse
+from datetime import datetime
+
+
+VERSION = "1.0.0"
+
+
+def execute_command(cmd):
+    """Execute shell command and return output"""
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        return result.returncode, result.stdout, result.stderr
+    except subprocess.TimeoutExpired:
+        return -1, "", "Command timeout"
+    except Exception as e:
+        return -1, "", str(e)
+
+
+def get_iptables_rules():
+    """Get current iptables rules"""
+    exit_code, stdout, stderr = execute_command("sudo iptables -L -n -v --line-numbers")
+
+    if exit_code != 0:
+        return None, stderr
+
+    return stdout, None
+
+
+def get_firewall_stats():
+    """Get firewall statistics"""
+    stats = {
+        "timestamp": datetime.now().isoformat(),
+        "version": VERSION,
+        "status": "active",
+        "rules_count": 0,
+        "chains": {}
+    }
+
+    # Get rules count
+    exit_code, stdout, stderr = execute_command("sudo iptables -L -n | grep -c '^'")
+    if exit_code == 0:
+        try:
+            stats["rules_count"] = int(stdout.strip())
+        except:
+            pass
+
+    # Get chain info
+    for chain in ["INPUT", "OUTPUT", "FORWARD"]:
+        exit_code, stdout, stderr = execute_command(
+            f"sudo iptables -L {chain} -n -v --line-numbers | tail -n +3 | wc -l"
+        )
+        if exit_code == 0:
+            try:
+                stats["chains"][chain] = int(stdout.strip())
+            except:
+                stats["chains"][chain] = 0
+
+    return stats
+
+
+def add_rule(chain, rule_spec):
+    """Add iptables rule"""
+    cmd = f"sudo iptables -A {chain} {rule_spec}"
+    exit_code, stdout, stderr = execute_command(cmd)
+
+    if exit_code != 0:
+        return False, stderr
+
+    return True, "Rule added successfully"
+
+
+def delete_rule(chain, rule_number):
+    """Delete iptables rule by number"""
+    cmd = f"sudo iptables -D {chain} {rule_number}"
+    exit_code, stdout, stderr = execute_command(cmd)
+
+    if exit_code != 0:
+        return False, stderr
+
+    return True, "Rule deleted successfully"
+
+
+def block_ip(ip_address, comment="Manual block"):
+    """Block specific IP address"""
+    rule = f'-s {ip_address} -j DROP -m comment --comment "{comment}"'
+    return add_rule("INPUT", rule)
+
+
+def unblock_ip(ip_address):
+    """Unblock specific IP address"""
+    # Find rule number for this IP
+    exit_code, stdout, stderr = execute_command(
+        f"sudo iptables -L INPUT -n --line-numbers | grep {ip_address} | awk '{{print $1}}'"
+    )
+
+    if exit_code != 0 or not stdout.strip():
+        return False, f"No rule found for IP {ip_address}"
+
+    rule_num = stdout.strip().split('\n')[0]
+    return delete_rule("INPUT", rule_num)
+
+
+def save_rules():
+    """Save current iptables rules"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_file = f"/opt/firedog/rules/iptables.{timestamp}.rules"
+
+    cmd = f"sudo iptables-save > {backup_file}"
+    exit_code, stdout, stderr = execute_command(cmd)
+
+    if exit_code != 0:
+        return False, stderr
+
+    return True, f"Rules saved to {backup_file}"
+
+
+def restore_rules(rules_file):
+    """Restore iptables rules from file"""
+    cmd = f"sudo iptables-restore < {rules_file}"
+    exit_code, stdout, stderr = execute_command(cmd)
+
+    if exit_code != 0:
+        return False, stderr
+
+    return True, "Rules restored successfully"
+
+
+def main():
+    """Main function"""
+    parser = argparse.ArgumentParser(description="FireDog Firewall Manager")
+    parser.add_argument("--version", action="version", version=f"FireDog {VERSION}")
+    parser.add_argument("--list", action="store_true", help="List all iptables rules")
+    parser.add_argument("--stats", action="store_true", help="Show firewall statistics (JSON)")
+    parser.add_argument("--block", metavar="IP", help="Block IP address")
+    parser.add_argument("--unblock", metavar="IP", help="Unblock IP address")
+    parser.add_argument("--save", action="store_true", help="Save current rules")
+    parser.add_argument("--restore", metavar="FILE", help="Restore rules from file")
+    parser.add_argument("--comment", metavar="TEXT", default="Manual block", help="Comment for block rule")
+
+    args = parser.parse_args()
+
+    # Handle actions
+    if args.list:
+        rules, error = get_iptables_rules()
+        if error:
+            print(f"Error: {error}", file=sys.stderr)
+            sys.exit(1)
+        print(rules)
+
+    elif args.stats:
+        stats = get_firewall_stats()
+        print(json.dumps(stats, indent=2))
+
+    elif args.block:
+        success, message = block_ip(args.block, args.comment)
+        if not success:
+            print(f"Error: {message}", file=sys.stderr)
+            sys.exit(1)
+        print(message)
+
+    elif args.unblock:
+        success, message = unblock_ip(args.unblock)
+        if not success:
+            print(f"Error: {message}", file=sys.stderr)
+            sys.exit(1)
+        print(message)
+
+    elif args.save:
+        success, message = save_rules()
+        if not success:
+            print(f"Error: {message}", file=sys.stderr)
+            sys.exit(1)
+        print(message)
+
+    elif args.restore:
+        success, message = restore_rules(args.restore)
+        if not success:
+            print(f"Error: {message}", file=sys.stderr)
+            sys.exit(1)
+        print(message)
+
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
