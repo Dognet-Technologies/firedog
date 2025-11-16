@@ -38,6 +38,26 @@ interface TargetGroup {
   updated_at: string;
 }
 
+// Gruppi disponibili per la selezione
+const GRUPPO_OPTIONS = [
+  { value: '', label: '-- Nessun Gruppo --' },
+  { value: 'web', label: 'Web Server' },
+  { value: 'db', label: 'Database' },
+  { value: 'dns', label: 'DNS Server' },
+  { value: 'storage', label: 'Storage' },
+  { value: 'mail', label: 'Mail Server' },
+  { value: 'backup', label: 'Backup Server' },
+  { value: 'monitoring', label: 'Monitoring' },
+  { value: 'proxy', label: 'Proxy/Load Balancer' },
+  { value: 'vpn', label: 'VPN Gateway' },
+  { value: 'firewall', label: 'Firewall' },
+  { value: 'application', label: 'Application Server' },
+  { value: 'cache', label: 'Cache Server' },
+  { value: 'queue', label: 'Message Queue' },
+  { value: 'other', label: 'Altro' },
+  { value: 'custom', label: 'Personalizzato' },
+];
+
 const Discovery: React.FC = () => {
   // State
   const [activeTab, setActiveTab] = useState<'arp-scan' | 'file' | 'manual' | 'groups'>('arp-scan');
@@ -55,7 +75,9 @@ const Discovery: React.FC = () => {
   const [manualForm, setManualForm] = useState({
     ip_address: '',
     hostname: '',
-    description: ''
+    description: '',
+    gruppo: '',
+    gruppo_custom: ''
   });
 
   // Groups state (NEW)
@@ -326,7 +348,9 @@ const Discovery: React.FC = () => {
       setManualForm({
         ip_address: '',
         hostname: '',
-        description: ''
+        description: '',
+        gruppo: '',
+        gruppo_custom: ''
       });
     } catch (error: any) {
       console.error('Error adding target:', error);
@@ -824,10 +848,38 @@ const Discovery: React.FC = () => {
                   />
                 </div>
 
+                <div className="form-group">
+                  <label htmlFor="gruppo">Gruppo Logico</label>
+                  <select
+                    id="gruppo"
+                    value={manualForm.gruppo}
+                    onChange={(e) => setManualForm({...manualForm, gruppo: e.target.value, gruppo_custom: ''})}
+                  >
+                    {GRUPPO_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <small className="form-hint">Assegna il target a un gruppo per gestione regole centralizzata</small>
+                </div>
+
+                {manualForm.gruppo === 'custom' && (
+                  <div className="form-group">
+                    <label htmlFor="gruppo_custom">Nome Gruppo Personalizzato *</label>
+                    <input
+                      type="text"
+                      id="gruppo_custom"
+                      value={manualForm.gruppo_custom}
+                      onChange={(e) => setManualForm({...manualForm, gruppo_custom: e.target.value})}
+                      placeholder="es. Backend Servers"
+                      required
+                    />
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={loading || !manualForm.ip_address}
+                  disabled={loading || !manualForm.ip_address || (manualForm.gruppo === 'custom' && !manualForm.gruppo_custom)}
                 >
                   {loading ? 'Adding...' : 'Add Target'}
                 </button>
