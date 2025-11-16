@@ -122,27 +122,30 @@ class TargetViewSet(viewsets.ModelViewSet):
         target_id = target.id
 
         try:
-            with transaction.atomic():
-                # Audit log PRIMA di eliminare
-                AuditLog.log_action(
-                    action='delete',
-                    description=f'Deleted target {target_hostname or target_ip} (IP: {target_ip})',
-                    user=request.user,
-                    content_object=target,
-                    ip_address=request.META.get('REMOTE_ADDR'),
-                    old_values={'ip_address': target_ip, 'hostname': target_hostname}
-                )
+            # Audit log PRIMA di eliminare (senza content_object per evitare problemi con FK)
+            AuditLog.log_action(
+                action='delete',
+                description=f'Deleted target {target_hostname or target_ip} (IP: {target_ip})',
+                user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR'),
+                old_values={
+                    'id': target_id,
+                    'ip_address': target_ip,
+                    'hostname': target_hostname,
+                    'status': target.status
+                }
+            )
 
-                # HARD DELETE - elimina fisicamente dal database
-                target.delete()  # Questo elimina davvero il record
+            # HARD DELETE - elimina fisicamente dal database
+            target.delete()
 
-                logger.info(f'Target deleted: {target_ip} (ID: {target_id})')
+            logger.info(f'Target deleted: {target_ip} (ID: {target_id})')
 
-                return Response({
-                    'success': True,
-                    'message': f'Target {target_ip} eliminato permanentemente',
-                    'deleted_id': target_id
-                }, status=status.HTTP_204_NO_CONTENT)
+            return Response({
+                'success': True,
+                'message': f'Target {target_ip} eliminato permanentemente',
+                'deleted_id': target_id
+            }, status=status.HTTP_204_NO_CONTENT)
 
         except Exception as e:
             logger.error(f'Error deleting target {target_ip}: {str(e)}', exc_info=True)
