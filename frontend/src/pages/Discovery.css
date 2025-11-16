@@ -649,7 +649,6 @@
 
 /* ============================================================================
    GROUPS TAB - Additional CSS
-   Aggiungi questo al tuo file Discovery.css esistente
    ============================================================================ */
 
 /* Groups Container Layout */
@@ -666,7 +665,7 @@
 
 /* Groups Sidebar */
 .groups-sidebar {
-  background: var(--card-bg, #1a1a2e);
+  background: var(--bg-secondary);
   border-radius: 8px;
   padding: 1rem;
   height: fit-content;
@@ -771,7 +770,7 @@
 
 /* Main Content Area */
 .groups-main {
-  background: var(--card-bg, #1a1a2e);
+  background: var(--bg-secondary);
   border-radius: 8px;
   padding: 1.5rem;
   min-height: 600px;
@@ -842,7 +841,7 @@
 }
 
 .target-panel {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-secondary);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 1rem;
