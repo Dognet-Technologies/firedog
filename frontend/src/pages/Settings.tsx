@@ -1027,124 +1027,123 @@ const Settings: React.FC = () => {
     }
 
     return (
-      <div className="notifications-tab">
+      <>
         <div className="settings-section">
-          <div className="section-header">
-            <h3>📧 Email Notifications</h3>
-            <button
-              className="btn-link"
-              onClick={loadSmtpInfo}
-            >
-              ℹ️ Guida configurazione SMTP
-            </button>
-          </div>
+          <h2 className="section-title">Notifiche Email</h2>
+          <p className="section-description">Configurazione notifiche tramite email</p>
+          <div className="settings-grid">
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={notificationFormData.email_enabled || false}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, email_enabled: e.target.checked })}
+                />
+                <span>Abilita notifiche email</span>
+              </label>
+            </div>
 
-          <div className="form-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={notificationFormData.email_enabled || false}
-                onChange={e => setNotificationFormData({ ...notificationFormData, email_enabled: e.target.checked })}
-              />
-              <span>Abilita notifiche email</span>
-            </label>
-          </div>
-
-          {notificationFormData.email_enabled && (
-            <>
-              <div className="form-group">
-                <label>Destinatari Email</label>
-                <div className="email-input-group">
-                  <input
-                    type="email"
-                    value={emailInput}
-                    onChange={e => setEmailInput(e.target.value)}
-                    onKeyPress={e => e.key === 'Enter' && addEmailRecipient()}
-                    placeholder="email@example.com"
-                    className="form-control"
-                  />
-                  <button
-                    type="button"
-                    onClick={addEmailRecipient}
-                    className="btn-primary"
-                  >
-                    Aggiungi
-                  </button>
-                </div>
-
-                <div className="email-chips">
-                  {(notificationFormData.email_recipients || []).map((email, index) => (
-                    <div key={index} className="chip">
-                      <span>{email}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeEmailRecipient(email)}
-                        className="chip-remove"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="form-row">
+            {notificationFormData.email_enabled && (
+              <>
                 <div className="form-group">
-                  <label>SMTP Host</label>
+                  <label>Destinatari Email</label>
+                  <div className="email-input-group">
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={e => setEmailInput(e.target.value)}
+                      onKeyPress={e => e.key === 'Enter' && addEmailRecipient()}
+                      placeholder="email@example.com"
+                      className="input"
+                    />
+                    <button
+                      type="button"
+                      onClick={addEmailRecipient}
+                      className="btn-primary"
+                    >
+                      Aggiungi
+                    </button>
+                  </div>
+                  <div className="email-chips">
+                    {(notificationFormData.email_recipients || []).map((email, index) => (
+                      <div key={index} className="chip">
+                        <span>{email}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeEmailRecipient(email)}
+                          className="chip-remove"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="smtp-host">SMTP Host</label>
                   <input
+                    id="smtp-host"
                     type="text"
                     value={notificationFormData.smtp_host || ''}
                     onChange={e => setNotificationFormData({ ...notificationFormData, smtp_host: e.target.value })}
                     placeholder="smtp.gmail.com"
-                    className="form-control"
+                    className="input"
                   />
+                  <span className="form-hint">
+                    Server SMTP per l'invio delle email - <button className="btn-link" onClick={loadSmtpInfo}>Guida configurazione</button>
+                  </span>
                 </div>
 
                 <div className="form-group">
-                  <label>SMTP Port</label>
+                  <label htmlFor="smtp-port">SMTP Port</label>
                   <input
+                    id="smtp-port"
                     type="number"
                     value={notificationFormData.smtp_port || 587}
                     onChange={e => setNotificationFormData({ ...notificationFormData, smtp_port: parseInt(e.target.value) })}
-                    className="form-control"
+                    className="input"
                   />
+                  <span className="form-hint">Porta del server SMTP (solitamente 587 o 465)</span>
                 </div>
-              </div>
 
-              <div className="form-row">
                 <div className="form-group">
-                  <label>SMTP Username</label>
+                  <label htmlFor="smtp-user">SMTP Username</label>
                   <input
+                    id="smtp-user"
                     type="text"
                     value={notificationFormData.smtp_user || ''}
                     onChange={e => setNotificationFormData({ ...notificationFormData, smtp_user: e.target.value })}
                     placeholder="microcyber"
-                    className="form-control"
+                    className="input"
                   />
+                  <span className="form-hint">Username per l'autenticazione SMTP</span>
                 </div>
 
                 <div className="form-group">
-                  <label>SMTP Password</label>
+                  <label htmlFor="smtp-password">SMTP Password</label>
                   <input
+                    id="smtp-password"
                     type="password"
                     value={notificationFormData.smtp_password || ''}
                     onChange={e => setNotificationFormData({ ...notificationFormData, smtp_password: e.target.value })}
                     placeholder="••••••••"
-                    className="form-control"
+                    className="input"
                   />
+                  <span className="form-hint">Password per l'autenticazione SMTP</span>
                 </div>
-              </div>
 
-              <div className="form-row">
                 <div className="form-group">
-                  <label>Email Mittente</label>
+                  <label htmlFor="smtp-from">Email Mittente</label>
                   <input
+                    id="smtp-from"
                     type="email"
                     value={notificationFormData.smtp_from_email || ''}
                     onChange={e => setNotificationFormData({ ...notificationFormData, smtp_from_email: e.target.value })}
                     placeholder="firedog@localhost"
-                    className="form-control"
+                    className="input"
                   />
+                  <span className="form-hint">Indirizzo email del mittente</span>
                 </div>
 
                 <div className="form-group">
@@ -1156,205 +1155,228 @@ const Settings: React.FC = () => {
                     />
                     <span>Usa TLS/STARTTLS</span>
                   </label>
+                  <span className="form-hint">Abilita crittografia TLS per connessioni sicure</span>
                 </div>
-              </div>
 
-              <div className="test-section">
                 <div className="form-group">
-                  <label>Test Email (opzionale)</label>
+                  <label htmlFor="test-email">Test Email (opzionale)</label>
                   <input
+                    id="test-email"
                     type="email"
                     value={testRecipient}
                     onChange={e => setTestRecipient(e.target.value)}
                     placeholder="test@example.com"
-                    className="form-control"
+                    className="input"
                   />
+                  <button
+                    type="button"
+                    onClick={() => handleTestNotification('email')}
+                    disabled={testingNotification === 'email'}
+                    className="btn-secondary"
+                  >
+                    {testingNotification === 'email' ? 'Invio...' : 'Invia Test Email'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleTestNotification('email')}
-                  disabled={testingNotification === 'email'}
-                  className="btn-secondary"
-                >
-                  {testingNotification === 'email' ? 'Invio...' : '📧 Invia Test Email'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="settings-section">
-          <h3>💬 Slack Notifications</h3>
-
-          <div className="form-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={notificationFormData.slack_enabled || false}
-                onChange={e => setNotificationFormData({ ...notificationFormData, slack_enabled: e.target.checked })}
-              />
-              <span>Abilita notifiche Slack</span>
-            </label>
+              </>
+            )}
           </div>
-
-          {notificationFormData.slack_enabled && (
-            <>
-              <div className="form-group">
-                <label>Webhook URL Slack</label>
-                <input
-                  type="url"
-                  value={notificationFormData.slack_webhook_url || ''}
-                  onChange={e => setNotificationFormData({ ...notificationFormData, slack_webhook_url: e.target.value })}
-                  placeholder="https://hooks.slack.com/services/..."
-                  className="form-control"
-                />
-                <small className="form-hint">
-                  Crea un webhook su: https://api.slack.com/messaging/webhooks
-                </small>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleTestNotification('slack')}
-                disabled={testingNotification === 'slack'}
-                className="btn-secondary"
-              >
-                {testingNotification === 'slack' ? 'Invio...' : '💬 Invia Test Slack'}
-              </button>
-            </>
-          )}
         </div>
 
         <div className="settings-section">
-          <h3>🎮 Discord Notifications</h3>
+          <h2 className="section-title">Notifiche Slack</h2>
+          <p className="section-description">Configurazione notifiche tramite Slack</p>
+          <div className="settings-grid">
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={notificationFormData.slack_enabled || false}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, slack_enabled: e.target.checked })}
+                />
+                <span>Abilita notifiche Slack</span>
+              </label>
+            </div>
 
-          <div className="form-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={notificationFormData.discord_enabled || false}
-                onChange={e => setNotificationFormData({ ...notificationFormData, discord_enabled: e.target.checked })}
-              />
-              <span>Abilita notifiche Discord</span>
-            </label>
+            {notificationFormData.slack_enabled && (
+              <>
+                <div className="form-group">
+                  <label htmlFor="slack-webhook">Webhook URL Slack</label>
+                  <input
+                    id="slack-webhook"
+                    type="url"
+                    value={notificationFormData.slack_webhook_url || ''}
+                    onChange={e => setNotificationFormData({ ...notificationFormData, slack_webhook_url: e.target.value })}
+                    placeholder="https://hooks.slack.com/services/..."
+                    className="input"
+                  />
+                  <span className="form-hint">
+                    Crea un webhook su: https://api.slack.com/messaging/webhooks
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <button
+                    type="button"
+                    onClick={() => handleTestNotification('slack')}
+                    disabled={testingNotification === 'slack'}
+                    className="btn-secondary"
+                  >
+                    {testingNotification === 'slack' ? 'Invio...' : 'Invia Test Slack'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-
-          {notificationFormData.discord_enabled && (
-            <>
-              <div className="form-group">
-                <label>Webhook URL Discord</label>
-                <input
-                  type="url"
-                  value={notificationFormData.discord_webhook_url || ''}
-                  onChange={e => setNotificationFormData({ ...notificationFormData, discord_webhook_url: e.target.value })}
-                  placeholder="https://discord.com/api/webhooks/..."
-                  className="form-control"
-                />
-                <small className="form-hint">
-                  Server Settings → Integrations → Webhooks → New Webhook
-                </small>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handleTestNotification('discord')}
-                disabled={testingNotification === 'discord'}
-                className="btn-secondary"
-              >
-                {testingNotification === 'discord' ? 'Invio...' : '🎮 Invia Test Discord'}
-              </button>
-            </>
-          )}
         </div>
 
         <div className="settings-section">
-          <h3>🚨 Alert Triggers</h3>
+          <h2 className="section-title">Notifiche Discord</h2>
+          <p className="section-description">Configurazione notifiche tramite Discord</p>
+          <div className="settings-grid">
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={notificationFormData.discord_enabled || false}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, discord_enabled: e.target.checked })}
+                />
+                <span>Abilita notifiche Discord</span>
+              </label>
+            </div>
+
+            {notificationFormData.discord_enabled && (
+              <>
+                <div className="form-group">
+                  <label htmlFor="discord-webhook">Webhook URL Discord</label>
+                  <input
+                    id="discord-webhook"
+                    type="url"
+                    value={notificationFormData.discord_webhook_url || ''}
+                    onChange={e => setNotificationFormData({ ...notificationFormData, discord_webhook_url: e.target.value })}
+                    placeholder="https://discord.com/api/webhooks/..."
+                    className="input"
+                  />
+                  <span className="form-hint">
+                    Server Settings → Integrations → Webhooks → New Webhook
+                  </span>
+                </div>
+
+                <div className="form-group">
+                  <button
+                    type="button"
+                    onClick={() => handleTestNotification('discord')}
+                    disabled={testingNotification === 'discord'}
+                    className="btn-secondary"
+                  >
+                    {testingNotification === 'discord' ? 'Invio...' : 'Invia Test Discord'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h2 className="section-title">Trigger Notifiche</h2>
           <p className="section-description">
             Configura quando ricevere notifiche. Gli alert si basano sulla soglia minaccia configurata nelle impostazioni di monitoraggio.
           </p>
 
-          <div className="triggers-grid">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={notificationFormData.alert_on_critical_threat || false}
-                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_critical_threat: e.target.checked })}
-              />
-              <span>🔴 Minacce critiche</span>
-            </label>
-
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={notificationFormData.alert_on_high_threat || false}
-                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_high_threat: e.target.checked })}
-              />
-              <span>🟠 Minacce high</span>
-            </label>
-
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={notificationFormData.alert_on_target_offline || false}
-                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_target_offline: e.target.checked })}
-              />
-              <span>📡 Target offline</span>
-            </label>
-
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={notificationFormData.alert_on_ssh_error || false}
-                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_ssh_error: e.target.checked })}
-              />
-              <span>🔒 Errori SSH</span>
-            </label>
-
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={notificationFormData.alert_on_install_success || false}
-                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_install_success: e.target.checked })}
-              />
-              <span>✅ Installazione completata</span>
-            </label>
-
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={notificationFormData.alert_on_install_failed || false}
-                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_install_failed: e.target.checked })}
-              />
-              <span>❌ Installazione fallita</span>
-            </label>
-          </div>
-
-          <div className="form-row">
+          <div className="settings-grid">
             <div className="form-group">
-              <label>Soglia Target Offline (minuti)</label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={notificationFormData.alert_on_critical_threat || false}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_critical_threat: e.target.checked })}
+                />
+                <span>Minacce critiche</span>
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={notificationFormData.alert_on_high_threat || false}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_high_threat: e.target.checked })}
+                />
+                <span>Minacce high</span>
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={notificationFormData.alert_on_target_offline || false}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_target_offline: e.target.checked })}
+                />
+                <span>Target offline</span>
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={notificationFormData.alert_on_ssh_error || false}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_ssh_error: e.target.checked })}
+                />
+                <span>Errori SSH</span>
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={notificationFormData.alert_on_install_success || false}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_install_success: e.target.checked })}
+                />
+                <span>Installazione completata</span>
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={notificationFormData.alert_on_install_failed || false}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_install_failed: e.target.checked })}
+                />
+                <span>Installazione fallita</span>
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="offline-threshold">Soglia Target Offline (minuti)</label>
               <input
+                id="offline-threshold"
                 type="number"
                 min="1"
                 max="60"
                 value={notificationFormData.target_offline_threshold_minutes || 5}
                 onChange={e => setNotificationFormData({ ...notificationFormData, target_offline_threshold_minutes: parseInt(e.target.value) })}
-                className="form-control"
+                className="input"
               />
+              <span className="form-hint">Tempo prima di considerare un target offline</span>
             </div>
 
             <div className="form-group">
-              <label>Cooldown Notifiche (minuti)</label>
+              <label htmlFor="cooldown">Cooldown Notifiche (minuti)</label>
               <input
+                id="cooldown"
                 type="number"
                 min="5"
                 max="1440"
                 value={notificationFormData.cooldown_minutes || 60}
                 onChange={e => setNotificationFormData({ ...notificationFormData, cooldown_minutes: parseInt(e.target.value) })}
-                className="form-control"
+                className="input"
               />
-              <small className="form-hint">
+              <span className="form-hint">
                 Intervallo minimo tra notifiche dello stesso tipo
-              </small>
+              </span>
             </div>
           </div>
         </div>
@@ -1366,7 +1388,7 @@ const Settings: React.FC = () => {
             disabled={savingNotifications}
             className="btn-primary"
           >
-            {savingNotifications ? 'Salvataggio...' : '💾 Salva Configurazione'}
+            {savingNotifications ? 'Salvataggio...' : 'Salva Configurazione'}
           </button>
         </div>
 
@@ -1410,8 +1432,8 @@ const Settings: React.FC = () => {
                 <div className="troubleshooting-list">
                   {smtpInfo.troubleshooting.map((item, index) => (
                     <div key={index} className="troubleshooting-item">
-                      <strong>❌ {item.problem}</strong>
-                      <p>✅ {item.solution}</p>
+                      <strong>Problema: {item.problem}</strong>
+                      <p>Soluzione: {item.solution}</p>
                     </div>
                   ))}
                 </div>
@@ -1431,61 +1453,61 @@ const Settings: React.FC = () => {
   const renderSecuritySettings = () => {
     if (loadingSecurity) {
       return (
-        <div className="settings-tab">
-          <div className="loading-spinner">Caricamento...</div>
+        <div className="loading-container">
+          <div className="spinner"></div>
+          <p>Caricamento configurazione...</p>
         </div>
       );
     }
 
     if (!userProfile) {
       return (
-        <div className="settings-tab">
-          <div className="error-message">Errore nel caricamento del profilo</div>
+        <div className="settings-section">
+          <p className="error-message">Errore nel caricamento del profilo</p>
         </div>
       );
     }
 
     return (
-      <div className="settings-tab security-tab">
+      <>
         {/* User Info */}
         <div className="settings-section">
-          <div className="section-header">
-            <h3>👤 Informazioni Utente</h3>
-          </div>
+          <h2 className="section-title">Informazioni Utente</h2>
+          <p className="section-description">Dettagli dell'account corrente</p>
 
-          <div className="user-info-grid">
-            <div className="info-item">
+          <div className="settings-grid">
+            <div className="form-group">
               <label>Username</label>
-              <span className="info-value">{userProfile.username}</span>
+              <div className="info-value">{userProfile.username}</div>
             </div>
 
             {userProfile.email && (
-              <div className="info-item">
+              <div className="form-group">
                 <label>Email</label>
-                <span className="info-value">{userProfile.email}</span>
+                <div className="info-value">{userProfile.email}</div>
               </div>
             )}
 
-            <div className="info-item">
+            <div className="form-group">
               <label>Ruolo</label>
-              <span className="info-value">
-                {userProfile.is_superuser ? '🔑 Superuser' : userProfile.is_staff ? '👨‍💼 Staff' : '👤 Utente'}
-              </span>
+              <div className="info-value">
+                {userProfile.is_superuser ? 'Superuser' : userProfile.is_staff ? 'Staff' : 'Utente'}
+              </div>
             </div>
 
-            <div className="info-item">
+            <div className="form-group">
               <label>Data Registrazione</label>
-              <span className="info-value">
+              <div className="info-value">
                 {new Date(userProfile.date_joined).toLocaleDateString('it-IT')}
-              </span>
+              </div>
             </div>
 
             {userProfile.last_login && (
-              <div className="info-item">
+              <div className="form-group">
                 <label>Ultimo Accesso</label>
-                <span className="info-value">
+                <div className="info-value">
                   {new Date(userProfile.last_login).toLocaleString('it-IT')}
-                </span>
+                </div>
               </div>
             )}
           </div>
@@ -1493,45 +1515,41 @@ const Settings: React.FC = () => {
 
         {/* Change Username */}
         <div className="settings-section">
-          <div className="section-header">
-            <h3>✏️ Cambia Username</h3>
-            <p className="section-description">
-              Modifica il tuo nome utente per il login
-            </p>
-          </div>
+          <h2 className="section-title">Cambia Username</h2>
+          <p className="section-description">Modifica il tuo nome utente per il login</p>
 
-          <div className="form-group">
-            <label>Nuovo Username</label>
-            <div className="username-input-group">
-              <input
-                type="text"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                placeholder="Nuovo username"
-                disabled={changingUsername}
-              />
-              <button
-                className="btn-primary"
-                onClick={handleChangeUsername}
-                disabled={changingUsername || newUsername === userProfile.username || !newUsername}
-              >
-                {changingUsername ? '⏳ Salvataggio...' : '✏️ Cambia Username'}
-              </button>
+          <div className="settings-grid">
+            <div className="form-group">
+              <label htmlFor="new-username">Nuovo Username</label>
+              <div className="username-input-group">
+                <input
+                  id="new-username"
+                  type="text"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  placeholder="Nuovo username"
+                  disabled={changingUsername}
+                  className="input"
+                />
+                <button
+                  className="btn-primary"
+                  onClick={handleChangeUsername}
+                  disabled={changingUsername || newUsername === userProfile.username || !newUsername}
+                >
+                  {changingUsername ? 'Salvataggio...' : 'Cambia Username'}
+                </button>
+              </div>
+              <span className="form-hint">
+                Username può contenere lettere, numeri, underscore (_) e trattini (-)
+              </span>
             </div>
-            <small className="form-hint">
-              Username può contenere lettere, numeri, underscore (_) e trattini (-)
-            </small>
           </div>
         </div>
 
         {/* Change Password */}
         <div className="settings-section">
-          <div className="section-header">
-            <h3>🔒 Cambia Password</h3>
-            <p className="section-description">
-              Aggiorna la tua password di accesso
-            </p>
-          </div>
+          <h2 className="section-title">Cambia Password</h2>
+          <p className="section-description">Aggiorna la tua password di accesso</p>
 
           <div className="password-requirements-box">
             <h4>Requisiti Password:</h4>
@@ -1544,102 +1562,113 @@ const Settings: React.FC = () => {
             </ul>
           </div>
 
-          <div className="form-group">
-            <label>Password Attuale</label>
-            <div className="password-input-group">
-              <input
-                type={showPasswords.current ? "text" : "password"}
-                value={passwordForm.current_password}
-                onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
-                placeholder="Inserisci password attuale"
-                disabled={changingPassword}
-              />
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={() => togglePasswordVisibility('current')}
-              >
-                {showPasswords.current ? '👁️' : '👁️‍🗨️'}
-              </button>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Nuova Password</label>
-            <div className="password-input-group">
-              <input
-                type={showPasswords.new ? "text" : "password"}
-                value={passwordForm.new_password}
-                onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
-                placeholder="Inserisci nuova password"
-                disabled={changingPassword}
-              />
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={() => togglePasswordVisibility('new')}
-              >
-                {showPasswords.new ? '👁️' : '👁️‍🗨️'}
-              </button>
-            </div>
-
-            {/* Password Strength Indicator */}
-            {passwordForm.new_password && (
-              <div className="password-strength">
-                <div className="strength-bar">
-                  <div
-                    className="strength-fill"
-                    style={{
-                      width: `${(passwordStrength.score / 6) * 100}%`,
-                      backgroundColor: passwordStrength.color
-                    }}
-                  />
-                </div>
-                <span className="strength-label" style={{ color: passwordStrength.color }}>
-                  Sicurezza: {passwordStrength.label}
-                </span>
+          <div className="settings-grid">
+            <div className="form-group">
+              <label htmlFor="current-password">Password Attuale</label>
+              <div className="password-input-group">
+                <input
+                  id="current-password"
+                  type={showPasswords.current ? "text" : "password"}
+                  value={passwordForm.current_password}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
+                  placeholder="Inserisci password attuale"
+                  disabled={changingPassword}
+                  className="input"
+                />
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => togglePasswordVisibility('current')}
+                  title={showPasswords.current ? "Nascondi password" : "Mostra password"}
+                >
+                  {showPasswords.current ? '●' : '○'}
+                </button>
               </div>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label>Conferma Nuova Password</label>
-            <div className="password-input-group">
-              <input
-                type={showPasswords.confirm ? "text" : "password"}
-                value={passwordForm.confirm_password}
-                onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
-                placeholder="Conferma nuova password"
-                disabled={changingPassword}
-              />
-              <button
-                type="button"
-                className="btn-icon"
-                onClick={() => togglePasswordVisibility('confirm')}
-              >
-                {showPasswords.confirm ? '👁️' : '👁️‍🗨️'}
-              </button>
             </div>
 
-            {/* Match indicator */}
-            {passwordForm.new_password && passwordForm.confirm_password && (
-              <small className={`form-hint ${passwordForm.new_password === passwordForm.confirm_password ? 'text-success' : 'text-error'}`}>
-                {passwordForm.new_password === passwordForm.confirm_password ? '✓ Le password corrispondono' : '✗ Le password non corrispondono'}
-              </small>
-            )}
-          </div>
+            <div className="form-group">
+              <label htmlFor="new-password">Nuova Password</label>
+              <div className="password-input-group">
+                <input
+                  id="new-password"
+                  type={showPasswords.new ? "text" : "password"}
+                  value={passwordForm.new_password}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+                  placeholder="Inserisci nuova password"
+                  disabled={changingPassword}
+                  className="input"
+                />
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => togglePasswordVisibility('new')}
+                  title={showPasswords.new ? "Nascondi password" : "Mostra password"}
+                >
+                  {showPasswords.new ? '●' : '○'}
+                </button>
+              </div>
 
-          <div className="form-actions">
-            <button
-              className="btn-primary btn-large"
-              onClick={handleChangePassword}
-              disabled={changingPassword || !passwordForm.current_password || !passwordForm.new_password || !passwordForm.confirm_password}
-            >
-              {changingPassword ? '⏳ Salvataggio...' : '🔒 Cambia Password'}
-            </button>
+              {/* Password Strength Indicator */}
+              {passwordForm.new_password && (
+                <div className="password-strength">
+                  <div className="strength-bar">
+                    <div
+                      className="strength-fill"
+                      style={{
+                        width: `${(passwordStrength.score / 6) * 100}%`,
+                        backgroundColor: passwordStrength.color
+                      }}
+                    />
+                  </div>
+                  <span className="strength-label" style={{ color: passwordStrength.color }}>
+                    Sicurezza: {passwordStrength.label}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="confirm-password">Conferma Nuova Password</label>
+              <div className="password-input-group">
+                <input
+                  id="confirm-password"
+                  type={showPasswords.confirm ? "text" : "password"}
+                  value={passwordForm.confirm_password}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
+                  placeholder="Conferma nuova password"
+                  disabled={changingPassword}
+                  className="input"
+                />
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => togglePasswordVisibility('confirm')}
+                  title={showPasswords.confirm ? "Nascondi password" : "Mostra password"}
+                >
+                  {showPasswords.confirm ? '●' : '○'}
+                </button>
+              </div>
+
+              {/* Match indicator */}
+              {passwordForm.new_password && passwordForm.confirm_password && (
+                <span className={`form-hint ${passwordForm.new_password === passwordForm.confirm_password ? 'text-success' : 'text-error'}`}>
+                  {passwordForm.new_password === passwordForm.confirm_password ? 'Le password corrispondono' : 'Le password non corrispondono'}
+                </span>
+              )}
+            </div>
+
+            <div className="form-group">
+              <button
+                className="btn-primary"
+                onClick={handleChangePassword}
+                disabled={changingPassword || !passwordForm.current_password || !passwordForm.new_password || !passwordForm.confirm_password}
+              >
+                {changingPassword ? 'Salvataggio...' : 'Cambia Password'}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   };
 
