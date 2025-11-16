@@ -21,10 +21,13 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const isMountedRef = useRef(true);
 
   // Inizializza terminale xterm.js
   useEffect(() => {
     if (!terminalRef.current) return;
+
+    isMountedRef.current = true;
 
     // Crea istanza terminale
     const term = new Terminal({
@@ -64,21 +67,25 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
 
     // Monta terminale nel DOM
     term.open(terminalRef.current);
-    
+
     // Aspetta che il renderer sia pronto prima di chiamare fit()
-    setTimeout(() => {
-      try {
-        fit.fit();
-      } catch (e) {
-        console.warn('Error fitting terminal:', e);
+    // Usa requestAnimationFrame per garantire che il DOM sia completamente renderizzato
+    requestAnimationFrame(() => {
+      if (isMountedRef.current && terminalRef.current) {
+        try {
+          fit.fit();
+        } catch (e) {
+          console.warn('Error fitting terminal:', e);
+        }
       }
-    }, 0);
+    });
 
     setTerminal(term);
     setFitAddon(fit);
 
     // Cleanup
     return () => {
+      isMountedRef.current = false;
       term.dispose();
     };
   }, []);
@@ -88,24 +95,30 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
     if (!fitAddon || !terminal || !ws || !isConnected) return;
 
     const handleResize = () => {
-      try {
-        fitAddon.fit();
-        
-        // Invia nuovo dimensionamento al backend
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'resize',
-            width: terminal.cols,
-            height: terminal.rows
-          }));
+      if (!isMountedRef.current) return;
+
+      requestAnimationFrame(() => {
+        if (!isMountedRef.current || !terminalRef.current) return;
+
+        try {
+          fitAddon.fit();
+
+          // Invia nuovo dimensionamento al backend
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'resize',
+              width: terminal.cols,
+              height: terminal.rows
+            }));
+          }
+        } catch (e) {
+          console.warn('Error resizing terminal:', e);
         }
-      } catch (e) {
-        console.warn('Error resizing terminal:', e);
-      }
+      });
     };
 
     window.addEventListener('resize', handleResize);
-    
+
     return () => {
       window.removeEventListener('resize', handleResize);
     };
