@@ -14,6 +14,7 @@ from integrity.views import FileIntegrityViewSet
 from discovery.views import DiscoveredHostViewSet
 from audit.views import AuditLogViewSet
 from targets.views import WhitelistEntryViewSet, BlockedIPViewSet, TargetViewSet
+from settings.views import SystemSettingsViewSet, SSHKeyViewSet, DatabaseManagementViewSet, NotificationViewSet, UserManagementViewSet
 
 # Import Log Views
 from api.views import LogAPIView, LogSourcesAPIView
@@ -57,6 +58,5 @@ urlpatterns = [
 #    path('api/settings/', include('settings.urls')),
 
     # API endpoints
-    path('api/', include('router.urls')),
-
-    ]
+    path('api/', include(router.urls)),
+]
