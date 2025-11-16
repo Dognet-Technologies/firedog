@@ -6,6 +6,8 @@ import React, { useState, useEffect } from 'react';
 import './Settings.css';
 import api from '../services/api';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useAuth } from '../contexts/AuthContext';
+import type { NotificationConfig, SmtpInfo } from '../types';
 
 interface SettingsData {
   // General Settings
@@ -70,11 +72,24 @@ interface DBStats {
   connection_status: 'connected' | 'error';
 }
 
+interface UserProfile {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  is_staff: boolean;
+  is_superuser: boolean;
+  date_joined: string;
+  last_login: string;
+}
+
 type TabType = 'general' | 'appearance' | 'notifications' | 'security' | 'monitoring' | 'ssh' | 'database';
 
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('general');
-  const { showToast } = useNotifications();
+  const { showToast, showConfirm } = useNotifications();
+  const { user } = useAuth();
   
   const [settings, setSettings] = useState<SettingsData>({
     systemName: 'FireDog Security',
@@ -112,6 +127,60 @@ const Settings: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTargets, setSelectedTargets] = useState<number[]>([]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Notifications State
+  const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [savingNotifications, setSavingNotifications] = useState(false);
+  const [testingNotification, setTestingNotification] = useState<string | null>(null);
+  const [showSmtpInfo, setShowSmtpInfo] = useState(false);
+  const [smtpInfo, setSmtpInfo] = useState<SmtpInfo | null>(null);
+  const [notificationFormData, setNotificationFormData] = useState<Partial<NotificationConfig>>({
+    email_enabled: false,
+    email_recipients: [],
+    smtp_host: 'localhost',
+    smtp_port: 587,
+    smtp_user: 'microcyber',
+    smtp_password: '',
+    smtp_use_tls: true,
+    smtp_from_email: 'firedog@localhost',
+    slack_enabled: false,
+    slack_webhook_url: '',
+    discord_enabled: false,
+    discord_webhook_url: '',
+    alert_on_critical_threat: true,
+    alert_on_high_threat: true,
+    alert_on_target_offline: true,
+    target_offline_threshold_minutes: 5,
+    alert_on_ssh_error: true,
+    alert_on_install_success: false,
+    alert_on_install_failed: true,
+    cooldown_minutes: 60,
+  });
+  const [emailInput, setEmailInput] = useState('');
+  const [testRecipient, setTestRecipient] = useState('');
+
+  // Security State
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loadingSecurity, setLoadingSecurity] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [changingUsername, setChangingUsername] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false
+  });
+  const [passwordStrength, setPasswordStrength] = useState({
+    score: 0,
+    label: '',
+    color: ''
+  });
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -151,8 +220,21 @@ const Settings: React.FC = () => {
       loadSSHKeys();
     } else if (activeTab === 'database') {
       loadDBData();
+    } else if (activeTab === 'notifications') {
+      loadNotificationConfig();
+    } else if (activeTab === 'security') {
+      loadUserProfile();
     }
   }, [activeTab]);
+
+  // Password strength checker
+  useEffect(() => {
+    if (passwordForm.new_password) {
+      checkPasswordStrength(passwordForm.new_password);
+    } else {
+      setPasswordStrength({ score: 0, label: '', color: '' });
+    }
+  }, [passwordForm.new_password]);
 
   // Apply CSS variables
   useEffect(() => {
@@ -409,6 +491,405 @@ const Settings: React.FC = () => {
   );
 
   // ============================================================================
+  // NOTIFICATIONS MANAGEMENT
+  // ============================================================================
+
+  const loadNotificationConfig = async () => {
+    try {
+      setLoadingNotifications(true);
+      const data = await api.getNotificationConfig();
+      setNotificationConfig(data);
+      setNotificationFormData(data);
+    } catch (error: any) {
+      console.error('Error loading notification config:', error);
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile caricare configurazione notifiche'
+      });
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const handleSaveNotifications = async () => {
+    try {
+      setSavingNotifications(true);
+
+      // Validazione
+      if (notificationFormData.email_enabled) {
+        if (!notificationFormData.email_recipients || notificationFormData.email_recipients.length === 0) {
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: 'Inserisci almeno un indirizzo email'
+          });
+          return;
+        }
+
+        if (!notificationFormData.smtp_host || !notificationFormData.smtp_user) {
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: 'Configurazione SMTP incompleta'
+          });
+          return;
+        }
+      }
+
+      if (notificationFormData.slack_enabled && !notificationFormData.slack_webhook_url) {
+        showToast({
+          type: 'error',
+          title: 'Errore',
+          message: 'Inserisci webhook URL Slack'
+        });
+        return;
+      }
+
+      if (notificationFormData.discord_enabled && !notificationFormData.discord_webhook_url) {
+        showToast({
+          type: 'error',
+          title: 'Errore',
+          message: 'Inserisci webhook URL Discord'
+        });
+        return;
+      }
+
+      const updated = await api.updateNotificationConfig(notificationFormData);
+      setNotificationConfig(updated);
+      setNotificationFormData(updated);
+
+      showToast({
+        type: 'success',
+        title: 'Successo',
+        message: 'Configurazione notifiche salvata'
+      });
+    } catch (error: any) {
+      console.error('Error saving notification config:', error);
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: error.response?.data?.message || 'Errore salvataggio configurazione'
+      });
+    } finally {
+      setSavingNotifications(false);
+    }
+  };
+
+  const handleTestNotification = async (type: 'email' | 'slack' | 'discord') => {
+    try {
+      setTestingNotification(type);
+
+      const data: any = { notification_type: type };
+
+      if (type === 'email' && testRecipient) {
+        data.test_recipient = testRecipient;
+      }
+
+      const result = await api.testNotification(data);
+
+      if (result.success) {
+        showToast({
+          type: 'success',
+          title: 'Test riuscito',
+          message: `Notifica ${type} inviata con successo!`
+        });
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Test fallito',
+          message: result.error || 'Errore invio test'
+        });
+      }
+    } catch (error: any) {
+      console.error(`Test ${type} error:`, error);
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: error.response?.data?.error || `Errore test ${type}`
+      });
+    } finally {
+      setTestingNotification(null);
+    }
+  };
+
+  const addEmailRecipient = () => {
+    if (!emailInput.trim()) return;
+
+    // Validazione email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailInput)) {
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Email non valida'
+      });
+      return;
+    }
+
+    const recipients = notificationFormData.email_recipients || [];
+
+    if (recipients.includes(emailInput)) {
+      showToast({
+        type: 'warning',
+        title: 'Attenzione',
+        message: 'Email già presente'
+      });
+      return;
+    }
+
+    setNotificationFormData({
+      ...notificationFormData,
+      email_recipients: [...recipients, emailInput]
+    });
+
+    setEmailInput('');
+  };
+
+  const removeEmailRecipient = (email: string) => {
+    setNotificationFormData({
+      ...notificationFormData,
+      email_recipients: (notificationFormData.email_recipients || []).filter(e => e !== email)
+    });
+  };
+
+  const loadSmtpInfo = async () => {
+    try {
+      const data = await api.getSmtpInfo();
+      setSmtpInfo(data);
+      setShowSmtpInfo(true);
+    } catch (error) {
+      console.error('Error loading SMTP info:', error);
+    }
+  };
+
+  // ============================================================================
+  // SECURITY / USER PROFILE MANAGEMENT
+  // ============================================================================
+
+  const loadUserProfile = async () => {
+    try {
+      setLoadingSecurity(true);
+      const data = await api.getUserProfile();
+      setUserProfile(data);
+      setNewUsername(data.username);
+    } catch (error: any) {
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile caricare profilo utente'
+      });
+    } finally {
+      setLoadingSecurity(false);
+    }
+  };
+
+  const checkPasswordStrength = (password: string) => {
+    let score = 0;
+
+    // Lunghezza
+    if (password.length >= 9) score += 1;
+    if (password.length >= 12) score += 1;
+
+    // Maiuscole
+    const uppercase = password.match(/[A-Z]/g);
+    if (uppercase && uppercase.length >= 2) score += 1;
+
+    // Minuscole
+    const lowercase = password.match(/[a-z]/g);
+    if (lowercase && lowercase.length >= 2) score += 1;
+
+    // Numeri
+    const numbers = password.match(/[0-9]/g);
+    if (numbers && numbers.length >= 2) score += 1;
+
+    // Caratteri speciali
+    const special = password.match(/[^a-zA-Z0-9]/g);
+    if (special && special.length >= 2) score += 1;
+
+    // Determina label e colore
+    let label = '';
+    let color = '';
+
+    if (score < 3) {
+      label = 'Debole';
+      color = '#ef4444'; // red
+    } else if (score < 5) {
+      label = 'Media';
+      color = '#f59e0b'; // orange
+    } else if (score < 6) {
+      label = 'Buona';
+      color = '#10b981'; // green
+    } else {
+      label = 'Eccellente';
+      color = '#06b6d4'; // cyan
+    }
+
+    setPasswordStrength({ score, label, color });
+  };
+
+  const handleChangeUsername = async () => {
+    if (!newUsername || newUsername === userProfile?.username) {
+      return;
+    }
+
+    showConfirm({
+      title: 'Conferma Cambio Username',
+      message: `Vuoi cambiare il tuo username da "${userProfile?.username}" a "${newUsername}"?`,
+      confirmText: 'Cambia Username',
+      type: 'warning',
+      onConfirm: async () => {
+        try {
+          setChangingUsername(true);
+          await api.changeUsername(newUsername);
+
+          showToast({
+            type: 'success',
+            title: 'Username Aggiornato',
+            message: `Il tuo username è stato cambiato in "${newUsername}"`
+          });
+
+          // Ricarica profilo
+          await loadUserProfile();
+        } catch (error: any) {
+          const errorMsg = error.response?.data?.new_username?.[0] ||
+                          error.response?.data?.detail ||
+                          'Errore durante il cambio username';
+
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: errorMsg
+          });
+
+          // Ripristina username originale
+          setNewUsername(userProfile?.username || '');
+        } finally {
+          setChangingUsername(false);
+        }
+      }
+    });
+  };
+
+  const handleChangePassword = async () => {
+    // Validazione form
+    if (!passwordForm.current_password) {
+      showToast({
+        type: 'error',
+        title: 'Campo obbligatorio',
+        message: 'Inserisci la password attuale'
+      });
+      return;
+    }
+
+    if (!passwordForm.new_password) {
+      showToast({
+        type: 'error',
+        title: 'Campo obbligatorio',
+        message: 'Inserisci la nuova password'
+      });
+      return;
+    }
+
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      showToast({
+        type: 'error',
+        title: 'Password non corrispondono',
+        message: 'La nuova password e la conferma non corrispondono'
+      });
+      return;
+    }
+
+    // Validazione requisiti password
+    const validationErrors = validatePassword(passwordForm.new_password);
+    if (validationErrors.length > 0) {
+      showToast({
+        type: 'error',
+        title: 'Password non valida',
+        message: validationErrors.join('\n')
+      });
+      return;
+    }
+
+    showConfirm({
+      title: 'Conferma Cambio Password',
+      message: 'Sei sicuro di voler cambiare la tua password?',
+      confirmText: 'Cambia Password',
+      type: 'warning',
+      onConfirm: async () => {
+        try {
+          setChangingPassword(true);
+          await api.changePassword(passwordForm);
+
+          showToast({
+            type: 'success',
+            title: 'Password Aggiornata',
+            message: 'La tua password è stata cambiata con successo'
+          });
+
+          // Reset form
+          setPasswordForm({
+            current_password: '',
+            new_password: '',
+            confirm_password: ''
+          });
+        } catch (error: any) {
+          const errorMsg = error.response?.data?.current_password?.[0] ||
+                          error.response?.data?.new_password?.[0] ||
+                          error.response?.data?.confirm_password?.[0] ||
+                          error.response?.data?.detail ||
+                          'Errore durante il cambio password';
+
+          showToast({
+            type: 'error',
+            title: 'Errore',
+            message: errorMsg
+          });
+        } finally {
+          setChangingPassword(false);
+        }
+      }
+    });
+  };
+
+  const validatePassword = (password: string): string[] => {
+    const errors: string[] = [];
+
+    if (password.length < 9) {
+      errors.push('• Minimo 9 caratteri');
+    }
+
+    const uppercase = password.match(/[A-Z]/g);
+    if (!uppercase || uppercase.length < 2) {
+      errors.push('• Almeno 2 lettere maiuscole');
+    }
+
+    const lowercase = password.match(/[a-z]/g);
+    if (!lowercase || lowercase.length < 2) {
+      errors.push('• Almeno 2 lettere minuscole');
+    }
+
+    const numbers = password.match(/[0-9]/g);
+    if (!numbers || numbers.length < 2) {
+      errors.push('• Almeno 2 numeri');
+    }
+
+    const special = password.match(/[^a-zA-Z0-9]/g);
+    if (!special || special.length < 2) {
+      errors.push('• Almeno 2 caratteri speciali (!@#$%^&*...)');
+    }
+
+    return errors;
+  };
+
+  const togglePasswordVisibility = (field: 'current' | 'new' | 'confirm') => {
+    setShowPasswords({
+      ...showPasswords,
+      [field]: !showPasswords[field]
+    });
+  };
+
+  // ============================================================================
   // RENDER FUNCTIONS FOR EACH TAB
   // ============================================================================
 
@@ -535,127 +1016,632 @@ const Settings: React.FC = () => {
     </div>
   );
 
-  const renderNotificationSettings = () => (
-    <div className="settings-section">
-      <h2 className="section-title">Notifiche</h2>
-      <p className="section-description">Configura le notifiche del sistema</p>
-
-      <div className="settings-grid">
-        <div className="form-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={settings.emailNotifications}
-              onChange={(e) => handleInputChange('emailNotifications', e.target.checked)}
-            />
-            <span>Notifiche Email</span>
-          </label>
-          <span className="form-hint">Ricevi alert via email</span>
+  const renderNotificationSettings = () => {
+    if (loadingNotifications) {
+      return (
+        <div className="loading-container">
+          <div className="spinner"></div>
+          <p>Caricamento configurazione...</p>
         </div>
+      );
+    }
 
-        {settings.emailNotifications && (
-          <div className="form-group">
-            <label htmlFor="notificationEmail">Email per Notifiche</label>
-            <input
-              id="notificationEmail"
-              type="email"
-              className="input"
-              placeholder="admin@example.com"
-              value={settings.notificationEmail}
-              onChange={(e) => handleInputChange('notificationEmail', e.target.value)}
-            />
+    return (
+      <div className="notifications-tab">
+        <div className="settings-section">
+          <div className="section-header">
+            <h3>📧 Email Notifications</h3>
+            <button
+              className="btn-link"
+              onClick={loadSmtpInfo}
+            >
+              ℹ️ Guida configurazione SMTP
+            </button>
           </div>
-        )}
 
-        <div className="form-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={settings.slackNotifications}
-              onChange={(e) => handleInputChange('slackNotifications', e.target.checked)}
-            />
-            <span>Notifiche Slack</span>
-          </label>
-          <span className="form-hint">Invia alert a Slack</span>
-        </div>
-
-        <div className="form-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={settings.discordNotifications}
-              onChange={(e) => handleInputChange('discordNotifications', e.target.checked)}
-            />
-            <span>Notifiche Discord</span>
-          </label>
-          <span className="form-hint">Invia alert a Discord</span>
-        </div>
-
-        {(settings.slackNotifications || settings.discordNotifications) && (
           <div className="form-group">
-            <label htmlFor="notificationWebhook">Webhook URL</label>
-            <input
-              id="notificationWebhook"
-              type="url"
-              className="input"
-              placeholder="https://hooks.slack.com/..."
-              value={settings.notificationWebhook}
-              onChange={(e) => handleInputChange('notificationWebhook', e.target.value)}
-            />
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={notificationFormData.email_enabled || false}
+                onChange={e => setNotificationFormData({ ...notificationFormData, email_enabled: e.target.checked })}
+              />
+              <span>Abilita notifiche email</span>
+            </label>
+          </div>
+
+          {notificationFormData.email_enabled && (
+            <>
+              <div className="form-group">
+                <label>Destinatari Email</label>
+                <div className="email-input-group">
+                  <input
+                    type="email"
+                    value={emailInput}
+                    onChange={e => setEmailInput(e.target.value)}
+                    onKeyPress={e => e.key === 'Enter' && addEmailRecipient()}
+                    placeholder="email@example.com"
+                    className="form-control"
+                  />
+                  <button
+                    type="button"
+                    onClick={addEmailRecipient}
+                    className="btn-primary"
+                  >
+                    Aggiungi
+                  </button>
+                </div>
+
+                <div className="email-chips">
+                  {(notificationFormData.email_recipients || []).map((email, index) => (
+                    <div key={index} className="chip">
+                      <span>{email}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeEmailRecipient(email)}
+                        className="chip-remove"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>SMTP Host</label>
+                  <input
+                    type="text"
+                    value={notificationFormData.smtp_host || ''}
+                    onChange={e => setNotificationFormData({ ...notificationFormData, smtp_host: e.target.value })}
+                    placeholder="smtp.gmail.com"
+                    className="form-control"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>SMTP Port</label>
+                  <input
+                    type="number"
+                    value={notificationFormData.smtp_port || 587}
+                    onChange={e => setNotificationFormData({ ...notificationFormData, smtp_port: parseInt(e.target.value) })}
+                    className="form-control"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>SMTP Username</label>
+                  <input
+                    type="text"
+                    value={notificationFormData.smtp_user || ''}
+                    onChange={e => setNotificationFormData({ ...notificationFormData, smtp_user: e.target.value })}
+                    placeholder="microcyber"
+                    className="form-control"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>SMTP Password</label>
+                  <input
+                    type="password"
+                    value={notificationFormData.smtp_password || ''}
+                    onChange={e => setNotificationFormData({ ...notificationFormData, smtp_password: e.target.value })}
+                    placeholder="••••••••"
+                    className="form-control"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Email Mittente</label>
+                  <input
+                    type="email"
+                    value={notificationFormData.smtp_from_email || ''}
+                    onChange={e => setNotificationFormData({ ...notificationFormData, smtp_from_email: e.target.value })}
+                    placeholder="firedog@localhost"
+                    className="form-control"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={notificationFormData.smtp_use_tls || false}
+                      onChange={e => setNotificationFormData({ ...notificationFormData, smtp_use_tls: e.target.checked })}
+                    />
+                    <span>Usa TLS/STARTTLS</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="test-section">
+                <div className="form-group">
+                  <label>Test Email (opzionale)</label>
+                  <input
+                    type="email"
+                    value={testRecipient}
+                    onChange={e => setTestRecipient(e.target.value)}
+                    placeholder="test@example.com"
+                    className="form-control"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleTestNotification('email')}
+                  disabled={testingNotification === 'email'}
+                  className="btn-secondary"
+                >
+                  {testingNotification === 'email' ? 'Invio...' : '📧 Invia Test Email'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="settings-section">
+          <h3>💬 Slack Notifications</h3>
+
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={notificationFormData.slack_enabled || false}
+                onChange={e => setNotificationFormData({ ...notificationFormData, slack_enabled: e.target.checked })}
+              />
+              <span>Abilita notifiche Slack</span>
+            </label>
+          </div>
+
+          {notificationFormData.slack_enabled && (
+            <>
+              <div className="form-group">
+                <label>Webhook URL Slack</label>
+                <input
+                  type="url"
+                  value={notificationFormData.slack_webhook_url || ''}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, slack_webhook_url: e.target.value })}
+                  placeholder="https://hooks.slack.com/services/..."
+                  className="form-control"
+                />
+                <small className="form-hint">
+                  Crea un webhook su: https://api.slack.com/messaging/webhooks
+                </small>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleTestNotification('slack')}
+                disabled={testingNotification === 'slack'}
+                className="btn-secondary"
+              >
+                {testingNotification === 'slack' ? 'Invio...' : '💬 Invia Test Slack'}
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="settings-section">
+          <h3>🎮 Discord Notifications</h3>
+
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={notificationFormData.discord_enabled || false}
+                onChange={e => setNotificationFormData({ ...notificationFormData, discord_enabled: e.target.checked })}
+              />
+              <span>Abilita notifiche Discord</span>
+            </label>
+          </div>
+
+          {notificationFormData.discord_enabled && (
+            <>
+              <div className="form-group">
+                <label>Webhook URL Discord</label>
+                <input
+                  type="url"
+                  value={notificationFormData.discord_webhook_url || ''}
+                  onChange={e => setNotificationFormData({ ...notificationFormData, discord_webhook_url: e.target.value })}
+                  placeholder="https://discord.com/api/webhooks/..."
+                  className="form-control"
+                />
+                <small className="form-hint">
+                  Server Settings → Integrations → Webhooks → New Webhook
+                </small>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleTestNotification('discord')}
+                disabled={testingNotification === 'discord'}
+                className="btn-secondary"
+              >
+                {testingNotification === 'discord' ? 'Invio...' : '🎮 Invia Test Discord'}
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="settings-section">
+          <h3>🚨 Alert Triggers</h3>
+          <p className="section-description">
+            Configura quando ricevere notifiche. Gli alert si basano sulla soglia minaccia configurata nelle impostazioni di monitoraggio.
+          </p>
+
+          <div className="triggers-grid">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={notificationFormData.alert_on_critical_threat || false}
+                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_critical_threat: e.target.checked })}
+              />
+              <span>🔴 Minacce critiche</span>
+            </label>
+
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={notificationFormData.alert_on_high_threat || false}
+                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_high_threat: e.target.checked })}
+              />
+              <span>🟠 Minacce high</span>
+            </label>
+
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={notificationFormData.alert_on_target_offline || false}
+                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_target_offline: e.target.checked })}
+              />
+              <span>📡 Target offline</span>
+            </label>
+
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={notificationFormData.alert_on_ssh_error || false}
+                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_ssh_error: e.target.checked })}
+              />
+              <span>🔒 Errori SSH</span>
+            </label>
+
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={notificationFormData.alert_on_install_success || false}
+                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_install_success: e.target.checked })}
+              />
+              <span>✅ Installazione completata</span>
+            </label>
+
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={notificationFormData.alert_on_install_failed || false}
+                onChange={e => setNotificationFormData({ ...notificationFormData, alert_on_install_failed: e.target.checked })}
+              />
+              <span>❌ Installazione fallita</span>
+            </label>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Soglia Target Offline (minuti)</label>
+              <input
+                type="number"
+                min="1"
+                max="60"
+                value={notificationFormData.target_offline_threshold_minutes || 5}
+                onChange={e => setNotificationFormData({ ...notificationFormData, target_offline_threshold_minutes: parseInt(e.target.value) })}
+                className="form-control"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Cooldown Notifiche (minuti)</label>
+              <input
+                type="number"
+                min="5"
+                max="1440"
+                value={notificationFormData.cooldown_minutes || 60}
+                onChange={e => setNotificationFormData({ ...notificationFormData, cooldown_minutes: parseInt(e.target.value) })}
+                className="form-control"
+              />
+              <small className="form-hint">
+                Intervallo minimo tra notifiche dello stesso tipo
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <div className="settings-actions">
+          <button
+            type="button"
+            onClick={handleSaveNotifications}
+            disabled={savingNotifications}
+            className="btn-primary"
+          >
+            {savingNotifications ? 'Salvataggio...' : '💾 Salva Configurazione'}
+          </button>
+        </div>
+
+        {/* Modal SMTP Info */}
+        {showSmtpInfo && smtpInfo && (
+          <div className="modal-overlay" onClick={() => setShowSmtpInfo(false)}>
+            <div className="modal-content modal-large" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>{smtpInfo.title}</h3>
+                <button className="modal-close" onClick={() => setShowSmtpInfo(false)}>×</button>
+              </div>
+              <div className="modal-body">
+                <p>{smtpInfo.description}</p>
+
+                <h4>Guida Installazione Postfix</h4>
+                {smtpInfo.steps.map(step => (
+                  <div key={step.step} className="smtp-step">
+                    <h5>Step {step.step}: {step.title}</h5>
+                    <code className="code-block">{step.command}</code>
+                    <p>{step.description}</p>
+                  </div>
+                ))}
+
+                <h4>Configurazioni Comuni</h4>
+                <div className="smtp-configs-grid">
+                  {Object.entries(smtpInfo.common_configs).map(([key, cfg]) => (
+                    <div key={key} className="smtp-config-card">
+                      <h5>{key}</h5>
+                      <p className="config-description">{cfg.description}</p>
+                      <ul>
+                        <li><strong>Host:</strong> {cfg.smtp_host}</li>
+                        <li><strong>Port:</strong> {cfg.smtp_port}</li>
+                        <li><strong>User:</strong> {cfg.smtp_user}</li>
+                        <li><strong>TLS:</strong> {cfg.smtp_use_tls ? 'Sì' : 'No'}</li>
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+
+                <h4>Troubleshooting</h4>
+                <div className="troubleshooting-list">
+                  {smtpInfo.troubleshooting.map((item, index) => (
+                    <div key={index} className="troubleshooting-item">
+                      <strong>❌ {item.problem}</strong>
+                      <p>✅ {item.solution}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn-primary" onClick={() => setShowSmtpInfo(false)}>
+                  Chiudi
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
-    </div>
-  );
+    );
+  };
 
-  const renderSecuritySettings = () => (
-    <div className="settings-section">
-      <h2 className="section-title">Sicurezza</h2>
-      <p className="section-description">Configura le impostazioni di sicurezza</p>
+  const renderSecuritySettings = () => {
+    if (loadingSecurity) {
+      return (
+        <div className="settings-tab">
+          <div className="loading-spinner">Caricamento...</div>
+        </div>
+      );
+    }
 
-      <div className="settings-grid">
-        <div className="form-group">
-          <label htmlFor="sessionTimeout">Timeout Sessione (minuti)</label>
-          <input
-            id="sessionTimeout"
-            type="number"
-            className="input"
-            min="5"
-            max="120"
-            value={settings.sessionTimeout}
-            onChange={(e) => handleInputChange('sessionTimeout', parseInt(e.target.value))}
-          />
-          <span className="form-hint">Tempo di inattività prima del logout automatico</span>
+    if (!userProfile) {
+      return (
+        <div className="settings-tab">
+          <div className="error-message">Errore nel caricamento del profilo</div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="settings-tab security-tab">
+        {/* User Info */}
+        <div className="settings-section">
+          <div className="section-header">
+            <h3>👤 Informazioni Utente</h3>
+          </div>
+
+          <div className="user-info-grid">
+            <div className="info-item">
+              <label>Username</label>
+              <span className="info-value">{userProfile.username}</span>
+            </div>
+
+            {userProfile.email && (
+              <div className="info-item">
+                <label>Email</label>
+                <span className="info-value">{userProfile.email}</span>
+              </div>
+            )}
+
+            <div className="info-item">
+              <label>Ruolo</label>
+              <span className="info-value">
+                {userProfile.is_superuser ? '🔑 Superuser' : userProfile.is_staff ? '👨‍💼 Staff' : '👤 Utente'}
+              </span>
+            </div>
+
+            <div className="info-item">
+              <label>Data Registrazione</label>
+              <span className="info-value">
+                {new Date(userProfile.date_joined).toLocaleDateString('it-IT')}
+              </span>
+            </div>
+
+            {userProfile.last_login && (
+              <div className="info-item">
+                <label>Ultimo Accesso</label>
+                <span className="info-value">
+                  {new Date(userProfile.last_login).toLocaleString('it-IT')}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="maxLoginAttempts">Max Tentativi Login</label>
-          <input
-            id="maxLoginAttempts"
-            type="number"
-            className="input"
-            min="3"
-            max="10"
-            value={settings.maxLoginAttempts}
-            onChange={(e) => handleInputChange('maxLoginAttempts', parseInt(e.target.value))}
-          />
-          <span className="form-hint">Numero massimo di tentativi prima del blocco</span>
+        {/* Change Username */}
+        <div className="settings-section">
+          <div className="section-header">
+            <h3>✏️ Cambia Username</h3>
+            <p className="section-description">
+              Modifica il tuo nome utente per il login
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label>Nuovo Username</label>
+            <div className="username-input-group">
+              <input
+                type="text"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                placeholder="Nuovo username"
+                disabled={changingUsername}
+              />
+              <button
+                className="btn-primary"
+                onClick={handleChangeUsername}
+                disabled={changingUsername || newUsername === userProfile.username || !newUsername}
+              >
+                {changingUsername ? '⏳ Salvataggio...' : '✏️ Cambia Username'}
+              </button>
+            </div>
+            <small className="form-hint">
+              Username può contenere lettere, numeri, underscore (_) e trattini (-)
+            </small>
+          </div>
         </div>
 
-        <div className="form-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={settings.enableMFA}
-              onChange={(e) => handleInputChange('enableMFA', e.target.checked)}
-            />
-            <span>Abilita Autenticazione a Due Fattori (MFA)</span>
-          </label>
-          <span className="form-hint">Richiede un codice aggiuntivo per il login</span>
+        {/* Change Password */}
+        <div className="settings-section">
+          <div className="section-header">
+            <h3>🔒 Cambia Password</h3>
+            <p className="section-description">
+              Aggiorna la tua password di accesso
+            </p>
+          </div>
+
+          <div className="password-requirements-box">
+            <h4>Requisiti Password:</h4>
+            <ul>
+              <li>Minimo 9 caratteri</li>
+              <li>Almeno 2 lettere maiuscole</li>
+              <li>Almeno 2 lettere minuscole</li>
+              <li>Almeno 2 numeri</li>
+              <li>Almeno 2 caratteri speciali (!@#$%^&*...)</li>
+            </ul>
+          </div>
+
+          <div className="form-group">
+            <label>Password Attuale</label>
+            <div className="password-input-group">
+              <input
+                type={showPasswords.current ? "text" : "password"}
+                value={passwordForm.current_password}
+                onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
+                placeholder="Inserisci password attuale"
+                disabled={changingPassword}
+              />
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => togglePasswordVisibility('current')}
+              >
+                {showPasswords.current ? '👁️' : '👁️‍🗨️'}
+              </button>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Nuova Password</label>
+            <div className="password-input-group">
+              <input
+                type={showPasswords.new ? "text" : "password"}
+                value={passwordForm.new_password}
+                onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+                placeholder="Inserisci nuova password"
+                disabled={changingPassword}
+              />
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => togglePasswordVisibility('new')}
+              >
+                {showPasswords.new ? '👁️' : '👁️‍🗨️'}
+              </button>
+            </div>
+
+            {/* Password Strength Indicator */}
+            {passwordForm.new_password && (
+              <div className="password-strength">
+                <div className="strength-bar">
+                  <div
+                    className="strength-fill"
+                    style={{
+                      width: `${(passwordStrength.score / 6) * 100}%`,
+                      backgroundColor: passwordStrength.color
+                    }}
+                  />
+                </div>
+                <span className="strength-label" style={{ color: passwordStrength.color }}>
+                  Sicurezza: {passwordStrength.label}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label>Conferma Nuova Password</label>
+            <div className="password-input-group">
+              <input
+                type={showPasswords.confirm ? "text" : "password"}
+                value={passwordForm.confirm_password}
+                onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
+                placeholder="Conferma nuova password"
+                disabled={changingPassword}
+              />
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => togglePasswordVisibility('confirm')}
+              >
+                {showPasswords.confirm ? '👁️' : '👁️‍🗨️'}
+              </button>
+            </div>
+
+            {/* Match indicator */}
+            {passwordForm.new_password && passwordForm.confirm_password && (
+              <small className={`form-hint ${passwordForm.new_password === passwordForm.confirm_password ? 'text-success' : 'text-error'}`}>
+                {passwordForm.new_password === passwordForm.confirm_password ? '✓ Le password corrispondono' : '✗ Le password non corrispondono'}
+              </small>
+            )}
+          </div>
+
+          <div className="form-actions">
+            <button
+              className="btn-primary btn-large"
+              onClick={handleChangePassword}
+              disabled={changingPassword || !passwordForm.current_password || !passwordForm.new_password || !passwordForm.confirm_password}
+            >
+              {changingPassword ? '⏳ Salvataggio...' : '🔒 Cambia Password'}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderMonitoringSettings = () => (
     <div className="settings-section">
