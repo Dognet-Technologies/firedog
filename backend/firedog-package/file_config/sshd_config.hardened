@@ -1,0 +1,104 @@
+# FireDog Hardened SSH Configuration
+# File: /etc/ssh/sshd_config
+#
+# This is a security-hardened SSH configuration for FireDog targets
+# Install: sudo cp sshd_config.hardened /etc/ssh/sshd_config && sudo systemctl restart sshd
+#
+# IMPORTANT: Ensure SSH key authentication is working BEFORE applying this config
+# Test: ssh -i /opt/firedog/ssh/id_ed25519 microcyber@target-ip
+
+# ========== BASIC SETTINGS ==========
+Port 22
+Protocol 2
+ListenAddress 0.0.0.0
+
+# ========== AUTHENTICATION ==========
+# DISABLE password authentication - KEY ONLY
+PasswordAuthentication no
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+
+# ENABLE public key authentication
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Disable unused authentication methods
+PermitRootLogin no
+HostbasedAuthentication no
+IgnoreRhosts yes
+KerberosAuthentication no
+GSSAPIAuthentication no
+
+# ========== SECURITY HARDENING ==========
+# Limit login attempts
+MaxAuthTries 3
+MaxSessions 10
+
+# Connection timeouts
+LoginGraceTime 60
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# Disable X11 forwarding (not needed)
+X11Forwarding no
+
+# Disable TCP forwarding (can enable if needed)
+AllowTcpForwarding no
+AllowStreamLocalForwarding no
+GatewayPorts no
+
+# Disable agent forwarding
+AllowAgentForwarding no
+
+# Disable tunneling
+PermitTunnel no
+
+# ========== USER RESTRICTIONS ==========
+# Only allow specific user (microcyber)
+AllowUsers microcyber
+
+# Deny root and other privileged users
+DenyUsers root admin administrator
+
+# ========== LOGGING ==========
+# Increase logging for security monitoring
+SyslogFacility AUTH
+LogLevel VERBOSE
+
+# ========== CRYPTO SETTINGS ==========
+# Use only strong ciphers
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+
+# Use only strong MACs
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+
+# Use only strong key exchange algorithms
+KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
+
+# Use only strong host key algorithms
+HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
+
+# ========== BANNER (Optional) ==========
+# Banner /etc/ssh/banner.txt
+PrintMotd no
+PrintLastLog yes
+
+# ========== SUBSYSTEMS ==========
+# SFTP subsystem (needed for file transfers)
+Subsystem sftp /usr/lib/openssh/sftp-server
+
+# ========== ADDITIONAL HARDENING ==========
+# Prevent users from setting environment options
+PermitUserEnvironment no
+
+# Use PAM for additional security (if available)
+UsePAM yes
+
+# Use privilege separation
+UsePrivilegeSeparation sandbox
+
+# Strict mode checking
+StrictModes yes
+
+# Compression (disabled for security)
+Compression no
