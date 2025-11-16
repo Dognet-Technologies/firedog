@@ -6,12 +6,19 @@ Questo pacchetto contiene gli strumenti per il monitoring e la gestione del fire
 
 ```
 firedog-package/
-├── install.sh              # Script principale di installazione
+├── install.sh                      # Script principale di installazione
 ├── bin/
-│   ├── firewall-manager    # Gestione regole iptables
-│   └── traffic-analyzer    # Analisi traffico e anomalie
+│   ├── firewall-manager            # Gestione regole iptables
+│   └── traffic-analyzer            # Analisi traffico e anomalie
 ├── config/
-│   └── firedog.service     # Systemd service unit
+│   └── firedog.service             # Systemd service unit
+├── file_config/                    # Template di configurazione
+│   ├── sudoers-microcyber          # Sudoers con NOPASSWD per microcyber
+│   ├── sshd_config.hardened        # SSH config hardened
+│   ├── firedog-cron                # Cron jobs per task periodici
+│   ├── ssh-copy-id.sh              # Helper per copiare chiave SSH
+│   ├── preconfigure-target.sh      # Script pre-configurazione completa
+│   └── README-file_config.md       # Documentazione dettagliata
 └── README.md
 ```
 
@@ -100,21 +107,38 @@ ANALYSIS_INTERVAL=300
 - iptables
 - tcpdump
 - net-tools o iproute2
-- Accesso sudo per utente microcyber
+- Utente `microcyber` con accesso sudo
+
+## Pre-configurazione Target (Consigliata)
+
+Prima di installare FireDog, è consigliato pre-configurare il target per installazione senza password:
+
+```bash
+# 1. Genera chiavi SSH (sul sistema web console)
+sudo -u microcyber ssh-keygen -t ed25519 -f /opt/firedog/ssh/id_ed25519 -N ""
+
+# 2. Pre-configura target (tutto automatico)
+cd /opt/firedog/file_config
+./preconfigure-target.sh 192.168.1.100 all
+
+# 3. Verifica configurazione
+./preconfigure-target.sh 192.168.1.100 check
+```
+
+Vedi `file_config/README-file_config.md` per documentazione completa.
 
 ## Permessi Sudo Richiesti
 
-```
-microcyber ALL=(ALL) NOPASSWD: /usr/sbin/iptables
-microcyber ALL=(ALL) NOPASSWD: /usr/sbin/ip6tables
-microcyber ALL=(ALL) NOPASSWD: /usr/sbin/iptables-save
-microcyber ALL=(ALL) NOPASSWD: /usr/sbin/iptables-restore
-microcyber ALL=(ALL) NOPASSWD: /usr/local/bin/firewall-manager
-microcyber ALL=(ALL) NOPASSWD: /usr/local/bin/traffic-analyzer
-microcyber ALL=(ALL) NOPASSWD: /bin/systemctl restart firedog
-microcyber ALL=(ALL) NOPASSWD: /bin/systemctl status firedog
-microcyber ALL=(ALL) NOPASSWD: /bin/cat /var/log/firedog/*
-```
+File template: `file_config/sudoers-microcyber`
+
+Permessi principali:
+- Gestione iptables (iptables, iptables-save, iptables-restore)
+- Esecuzione binari FireDog
+- Gestione servizio systemd
+- Lettura log e analisi network
+- Controllo integrità file
+
+Vedi file template per lista completa.
 
 ## Service Systemd
 
@@ -132,9 +156,52 @@ sudo systemctl status firedog
 sudo systemctl enable firedog
 ```
 
+## Deployment Sistema Web Console
+
+Sul sistema production (web console FireDog):
+
+```bash
+# 1. Copia pacchetto
+sudo mkdir -p /opt/firedog
+sudo cp -r backend/firedog-package/* /opt/firedog/
+sudo chown -R microcyber:microcyber /opt/firedog
+
+# 2. Genera chiavi SSH
+sudo -u microcyber mkdir -p /opt/firedog/ssh
+sudo -u microcyber ssh-keygen -t ed25519 -f /opt/firedog/ssh/id_ed25519 -N ""
+sudo chmod 700 /opt/firedog/ssh
+sudo chmod 600 /opt/firedog/ssh/id_ed25519
+sudo chmod 644 /opt/firedog/ssh/id_ed25519.pub
+
+# 3. Configura environment
+echo "SSH_KEY_PATH=/opt/firedog/ssh/id_ed25519" >> .env
+echo "FIREDOG_FILE_CONFIG_PATH=/opt/firedog/file_config" >> .env
+```
+
+## File Monitorati (Integrity Page)
+
+I seguenti file configurazione sono monitorati via hash per rilevare modifiche:
+
+**Sul web console** (`/opt/firedog/file_config/`):
+- `sudoers-microcyber` - Template sudoers
+- `sshd_config.hardened` - Template SSH hardened
+- `firedog-cron` - Template cron jobs
+
+**Sui target** (dopo installazione):
+- `/etc/sudoers.d/microcyber`
+- `/etc/ssh/sshd_config`
+- `/etc/cron.d/firedog`
+- `/usr/local/bin/firewall-manager`
+- `/usr/local/bin/traffic-analyzer`
+
+Gli hash sono calcolati con SHA256 e verificati periodicamente.
+
 ## Note
 
+- Tutti i file appartengono a `microcyber:microcyber`
 - I binari sono installati in `/usr/local/bin/`
-- Le regole iptables vengono backuppate automaticamente prima di modifiche
+- Le chiavi SSH in `/opt/firedog/ssh/`
+- I template configurazione in `/opt/firedog/file_config/`
+- Le regole iptables backuppate in `/opt/firedog/rules/`
 - I log sono ruotati automaticamente se > MAX_LOG_SIZE
 - L'analisi traffico viene eseguita ogni ANALYSIS_INTERVAL secondi

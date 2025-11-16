@@ -400,19 +400,193 @@ class InstallConsumer(AsyncWebsocketConsumer):
             return None
 
     async def configure_ssh_key(self):
-        """Configura chiave SSH pubblica sul target"""
-        # TODO: Implementare ssh-copy-id o equivalente
-        pass
+        """
+        Configura chiave SSH pubblica sul target
+        Copia la chiave pubblica in ~/.ssh/authorized_keys
+        """
+        try:
+            from pathlib import Path
+
+            # Path chiave pubblica
+            pub_key_path = f"{settings.FIREDOG_SSH_KEY_PATH}.pub"
+
+            if not Path(pub_key_path).exists():
+                await self.send_error(f"Public key not found: {pub_key_path}")
+                return False
+
+            # Leggi chiave pubblica
+            with open(pub_key_path, 'r') as f:
+                pub_key = f.read().strip()
+
+            await self.send_output("Configuring SSH key authentication...")
+
+            # Crea directory .ssh
+            await self.execute_command("mkdir -p ~/.ssh && chmod 700 ~/.ssh", stream_output=False)
+
+            # Aggiungi chiave a authorized_keys
+            cmd = f'echo "{pub_key}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
+            exit_code, stdout, stderr = await self.execute_command(cmd, stream_output=False)
+
+            if exit_code != 0:
+                await self.send_error(f"Failed to configure SSH key: {stderr}")
+                return False
+
+            await self.send_output("✓ SSH key configured")
+            return True
+
+        except Exception as e:
+            logger.exception(f"Error configuring SSH key: {e}")
+            await self.send_error(f"SSH key configuration failed: {str(e)}")
+            return False
 
     async def configure_sudoers(self):
-        """Configura sudoers per NOPASSWD"""
-        # TODO: Implementare configurazione sudoers
-        pass
+        """
+        Configura sudoers per NOPASSWD usando template
+        Copia file da /opt/firedog/file_config/sudoers-microcyber
+        """
+        try:
+            from pathlib import Path
+
+            # Path file template sudoers
+            sudoers_template = Path(settings.FIREDOG_FILE_CONFIG_PATH) / "sudoers-microcyber"
+
+            if not sudoers_template.exists():
+                await self.send_error(f"Sudoers template not found: {sudoers_template}")
+                return False
+
+            await self.send_output("Configuring sudoers for NOPASSWD...")
+
+            # Upload file sudoers temporaneo
+            from core.ssh_manager import SSHManager
+
+            ssh = SSHManager(
+                host=self.target.ip_address,
+                port=self.target.ssh_port,
+                username=self.target.ssh_user
+            )
+
+            await sync_to_async(ssh.connect)()
+
+            # Upload file
+            success, message = await sync_to_async(ssh.upload_file)(
+                str(sudoers_template),
+                f"/tmp/sudoers-{self.target.ssh_user}"
+            )
+
+            if not success:
+                await self.send_error(f"Failed to upload sudoers: {message}")
+                await sync_to_async(ssh.disconnect)()
+                return False
+
+            # Installa file sudoers (richiede password sudo)
+            if self.password:
+                # Usa password per sudo
+                cmd = f'echo "{self.password}" | sudo -S mv /tmp/sudoers-{self.target.ssh_user} /etc/sudoers.d/{self.target.ssh_user}'
+            else:
+                # Prova senza password (se già configurato)
+                cmd = f'sudo mv /tmp/sudoers-{self.target.ssh_user} /etc/sudoers.d/{self.target.ssh_user}'
+
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(cmd)
+
+            if exit_code != 0:
+                await self.send_error(f"Failed to install sudoers: {stderr}")
+                await sync_to_async(ssh.disconnect)()
+                return False
+
+            # Imposta permessi
+            cmd = f'sudo chmod 440 /etc/sudoers.d/{self.target.ssh_user}'
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(cmd)
+
+            await sync_to_async(ssh.disconnect)()
+
+            if exit_code != 0:
+                await self.send_error(f"Failed to set sudoers permissions: {stderr}")
+                return False
+
+            await self.send_output("✓ Sudoers configured")
+            return True
+
+        except Exception as e:
+            logger.exception(f"Error configuring sudoers: {e}")
+            await self.send_error(f"Sudoers configuration failed: {str(e)}")
+            return False
 
     async def harden_ssh(self):
-        """Applica hardening SSH (disable password auth)"""
-        # TODO: Implementare SSH hardening
-        pass
+        """
+        Applica hardening SSH usando template
+        Copia file da /opt/firedog/file_config/sshd_config.hardened
+        """
+        try:
+            from pathlib import Path
+
+            # Path file template sshd_config
+            sshd_template = Path(settings.FIREDOG_FILE_CONFIG_PATH) / "sshd_config.hardened"
+
+            if not sshd_template.exists():
+                await self.send_error(f"SSHD template not found: {sshd_template}")
+                return False
+
+            await self.send_output("Applying SSH hardening configuration...")
+
+            # Upload file sshd_config
+            from core.ssh_manager import SSHManager
+
+            ssh = SSHManager(
+                host=self.target.ip_address,
+                port=self.target.ssh_port,
+                username=self.target.ssh_user
+            )
+
+            await sync_to_async(ssh.connect)()
+
+            # Backup sshd_config originale
+            backup_cmd = 'sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)'
+            await sync_to_async(ssh.execute_command)(backup_cmd)
+
+            # Upload nuovo config
+            success, message = await sync_to_async(ssh.upload_file)(
+                str(sshd_template),
+                "/tmp/sshd_config.hardened"
+            )
+
+            if not success:
+                await self.send_error(f"Failed to upload sshd_config: {message}")
+                await sync_to_async(ssh.disconnect)()
+                return False
+
+            # Test configurazione
+            test_cmd = 'sudo sshd -t -f /tmp/sshd_config.hardened'
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(test_cmd)
+
+            if exit_code != 0:
+                await self.send_error(f"SSHD config validation failed: {stderr}")
+                await sync_to_async(ssh.disconnect)()
+                return False
+
+            # Applica configurazione
+            apply_cmd = 'sudo mv /tmp/sshd_config.hardened /etc/ssh/sshd_config'
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(apply_cmd)
+
+            if exit_code != 0:
+                await self.send_error(f"Failed to apply sshd_config: {stderr}")
+                await sync_to_async(ssh.disconnect)()
+                return False
+
+            # Riavvia SSH daemon
+            restart_cmd = 'sudo systemctl restart sshd || sudo service ssh restart'
+            await sync_to_async(ssh.execute_command)(restart_cmd)
+
+            await sync_to_async(ssh.disconnect)()
+
+            await self.send_output("✓ SSH hardening applied")
+            await self.send_output("⚠ Password authentication is now DISABLED")
+
+            return True
+
+        except Exception as e:
+            logger.exception(f"Error hardening SSH: {e}")
+            await self.send_error(f"SSH hardening failed: {str(e)}")
+            return False
 
     # Helper methods per inviare messaggi al client
 
