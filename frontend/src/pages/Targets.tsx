@@ -50,9 +50,33 @@ const Targets: React.FC = () => {
     gruppo_custom: '',
   });
 
+  // Group installation state
+  const [groupInstallQueue, setGroupInstallQueue] = useState<number[]>([]);
+  const [currentGroupInstallIndex, setCurrentGroupInstallIndex] = useState(0);
+  const [isGroupInstalling, setIsGroupInstalling] = useState(false);
+
   useEffect(() => {
     loadTargets();
   }, []);
+
+  // Gestisce la coda di installazione di gruppo
+  useEffect(() => {
+    if (isGroupInstalling && groupInstallQueue.length > 0 && currentGroupInstallIndex < groupInstallQueue.length) {
+      const currentTargetId = groupInstallQueue[currentGroupInstallIndex];
+      setTerminalTargetId(currentTargetId);
+      setShowTerminal(true);
+    } else if (isGroupInstalling && currentGroupInstallIndex >= groupInstallQueue.length) {
+      // Installazione gruppo completata
+      setIsGroupInstalling(false);
+      setGroupInstallQueue([]);
+      setCurrentGroupInstallIndex(0);
+      showToast({
+        type: 'success',
+        title: 'Installazione Gruppo Completata',
+        message: `FireDog è stato installato su tutti i ${groupInstallQueue.length} target del gruppo`
+      });
+    }
+  }, [isGroupInstalling, currentGroupInstallIndex, groupInstallQueue]);
 
   const loadTargets = async () => {
     try {
@@ -140,10 +164,10 @@ const Targets: React.FC = () => {
   const handleInstall = async (id: number) => {
     const target = targets.find(t => t.id === id);
     const isReinstall = target?.firedog_version != null;
-    
+
     showConfirm({
       title: isReinstall ? 'Conferma Reinstallazione' : 'Conferma Installazione',
-      message: isReinstall 
+      message: isReinstall
         ? 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse.'
         : 'Vuoi installare FireDog su questo target? Assicurati di avere la password sudo del target.',
       confirmText: 'Apri Terminale',
@@ -153,6 +177,52 @@ const Targets: React.FC = () => {
         setShowTerminal(true);
       }
     });
+  };
+
+  const handleInstallGroup = () => {
+    const groupTargets = filteredAndSortedTargets.filter(t => t.gruppo === filterGruppo);
+
+    if (groupTargets.length === 0) {
+      showToast({
+        type: 'warning',
+        title: 'Nessun Target',
+        message: 'Nessun target trovato in questo gruppo'
+      });
+      return;
+    }
+
+    const targetIds = groupTargets.map(t => t.id);
+    const gruppoLabel = GRUPPO_OPTIONS.find(g => g.value === filterGruppo)?.label || filterGruppo;
+
+    // Alert se > 5 target
+    if (groupTargets.length > 5) {
+      showConfirm({
+        title: 'Installazione su Gruppo',
+        message: `Stai per installare FireDog su ${groupTargets.length} target del gruppo "${gruppoLabel}".\n\n⚠️ CONSIGLIO: Per accelerare l'installazione, configura prima l'accesso sudo NOPASSWD su tutti i target.\n\nSenza questa configurazione, dovrai inserire la password manualmente per ogni target (installazione sequenziale).\n\nVuoi procedere comunque?`,
+        confirmText: 'Procedi con Installazione',
+        cancelText: 'Annulla',
+        type: 'warning',
+        onConfirm: () => {
+          setGroupInstallQueue(targetIds);
+          setCurrentGroupInstallIndex(0);
+          setIsGroupInstalling(true);
+          // Il terminale verrà aperto dal useEffect
+        }
+      });
+    } else {
+      // ≤ 5 target: procedi direttamente
+      showConfirm({
+        title: 'Installazione su Gruppo',
+        message: `Vuoi installare FireDog su ${groupTargets.length} target del gruppo "${gruppoLabel}"?\n\nL'installazione procederà in sequenza con terminale interattivo per ogni target.`,
+        confirmText: 'Inizia Installazione',
+        cancelText: 'Annulla',
+        onConfirm: () => {
+          setGroupInstallQueue(targetIds);
+          setCurrentGroupInstallIndex(0);
+          setIsGroupInstalling(true);
+        }
+      });
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -338,11 +408,11 @@ const Targets: React.FC = () => {
             className="filter-input"
           />
         </div>
-        
+
         <div className="filter-group">
           <label>Gruppo</label>
-          <select 
-            value={filterGruppo} 
+          <select
+            value={filterGruppo}
             onChange={(e) => setFilterGruppo(e.target.value)}
             className="filter-select"
           >
@@ -355,6 +425,24 @@ const Targets: React.FC = () => {
         <div className="filter-stats">
           <span>Visualizzati: <strong>{filteredAndSortedTargets.length}</strong></span>
         </div>
+
+        {/* Install on Group Button */}
+        {filterGruppo && filteredAndSortedTargets.length > 0 && (
+          <button
+            onClick={handleInstallGroup}
+            className="btn-primary btn-install-group"
+            disabled={isGroupInstalling}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {isGroupInstalling
+              ? `Installing ${currentGroupInstallIndex + 1}/${groupInstallQueue.length}...`
+              : `Install on Group (${filteredAndSortedTargets.length})`}
+          </button>
+        )}
       </div>
 
       {/* Targets Table */}
@@ -549,16 +637,44 @@ const Targets: React.FC = () => {
           onClose={() => {
             setShowTerminal(false);
             setTerminalTargetId(null);
+            if (isGroupInstalling) {
+              // Annulla installazione gruppo
+              setIsGroupInstalling(false);
+              setGroupInstallQueue([]);
+              setCurrentGroupInstallIndex(0);
+            }
           }}
           onInstallComplete={() => {
             loadTargets();
-            setShowTerminal(false);
-            setTerminalTargetId(null);
-            showToast({
-              type: 'success',
-              title: 'Installazione completata',
-              message: 'FireDog è stato installato con successo sul target'
-            });
+
+            if (isGroupInstalling) {
+              // Installazione di gruppo: passa al prossimo target
+              const nextIndex = currentGroupInstallIndex + 1;
+              const currentTarget = targets.find(t => t.id === terminalTargetId);
+
+              showToast({
+                type: 'success',
+                title: `Target ${nextIndex}/${groupInstallQueue.length} Completato`,
+                message: `${currentTarget?.hostname || currentTarget?.ip_address} installato con successo`
+              });
+
+              setShowTerminal(false);
+              setTerminalTargetId(null);
+
+              // Passa al prossimo dopo un breve delay
+              setTimeout(() => {
+                setCurrentGroupInstallIndex(nextIndex);
+              }, 500);
+            } else {
+              // Installazione singola: chiudi normalmente
+              setShowTerminal(false);
+              setTerminalTargetId(null);
+              showToast({
+                type: 'success',
+                title: 'Installazione completata',
+                message: 'FireDog è stato installato con successo sul target'
+              });
+            }
           }}
         />
       )}
