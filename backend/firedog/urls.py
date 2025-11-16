@@ -58,6 +58,5 @@ urlpatterns = [
 #    path('api/settings/', include('settings.urls')),
 
     # API endpoints
-    path('api/', include('router.urls')),
-
-    ]
+    path('api/', include(router.urls)),
+]
