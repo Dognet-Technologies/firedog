@@ -68,25 +68,34 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
     // Monta terminale nel DOM
     term.open(terminalRef.current);
 
-    // Aspetta che il renderer sia pronto prima di chiamare fit()
-    // Usa requestAnimationFrame per garantire che il DOM sia completamente renderizzato
-    requestAnimationFrame(() => {
+    // Aspetta che il renderer sia completamente inizializzato
+    // Usa un delay leggermente più lungo per garantire che xterm sia pronto
+    const fitTimer = setTimeout(() => {
       if (isMountedRef.current && terminalRef.current) {
         try {
-          fit.fit();
+          // Verifica che il terminale abbia il renderer inizializzato
+          if ((term as any)._core?.viewport) {
+            fit.fit();
+          }
         } catch (e) {
-          console.warn('Error fitting terminal:', e);
+          // Ignora silenziosamente - il terminale potrebbe essere stato smontato
         }
       }
-    });
+    }, 100);
 
     setTerminal(term);
     setFitAddon(fit);
 
     // Cleanup
     return () => {
+      clearTimeout(fitTimer);
       isMountedRef.current = false;
-      term.dispose();
+      // Dispose terminale in modo sicuro
+      try {
+        term.dispose();
+      } catch (e) {
+        // Ignora errori durante cleanup
+      }
     };
   }, []);
 
@@ -97,24 +106,27 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
     const handleResize = () => {
       if (!isMountedRef.current) return;
 
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         if (!isMountedRef.current || !terminalRef.current) return;
 
         try {
-          fitAddon.fit();
+          // Verifica che il renderer esista prima di chiamare fit()
+          if ((terminal as any)._core?.viewport && fitAddon) {
+            fitAddon.fit();
 
-          // Invia nuovo dimensionamento al backend
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              type: 'resize',
-              width: terminal.cols,
-              height: terminal.rows
-            }));
+            // Invia nuovo dimensionamento al backend
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'resize',
+                width: terminal.cols,
+                height: terminal.rows
+              }));
+            }
           }
         } catch (e) {
-          console.warn('Error resizing terminal:', e);
+          // Ignora silenziosamente errori di resize
         }
-      });
+      }, 50);
     };
 
     window.addEventListener('resize', handleResize);
