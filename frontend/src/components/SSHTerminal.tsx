@@ -21,10 +21,13 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const isMountedRef = useRef(true);
 
   // Inizializza terminale xterm.js
   useEffect(() => {
     if (!terminalRef.current) return;
+
+    isMountedRef.current = true;
 
     // Crea istanza terminale
     const term = new Terminal({
@@ -64,22 +67,35 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
 
     // Monta terminale nel DOM
     term.open(terminalRef.current);
-    
-    // Aspetta che il renderer sia pronto prima di chiamare fit()
-    setTimeout(() => {
-      try {
-        fit.fit();
-      } catch (e) {
-        console.warn('Error fitting terminal:', e);
+
+    // Aspetta che il renderer sia completamente inizializzato
+    // Usa un delay leggermente più lungo per garantire che xterm sia pronto
+    const fitTimer = setTimeout(() => {
+      if (isMountedRef.current && terminalRef.current) {
+        try {
+          // Verifica che il terminale abbia il renderer inizializzato
+          if ((term as any)._core?.viewport) {
+            fit.fit();
+          }
+        } catch (e) {
+          // Ignora silenziosamente - il terminale potrebbe essere stato smontato
+        }
       }
-    }, 0);
+    }, 100);
 
     setTerminal(term);
     setFitAddon(fit);
 
     // Cleanup
     return () => {
-      term.dispose();
+      clearTimeout(fitTimer);
+      isMountedRef.current = false;
+      // Dispose terminale in modo sicuro
+      try {
+        term.dispose();
+      } catch (e) {
+        // Ignora errori durante cleanup
+      }
     };
   }, []);
 
@@ -88,24 +104,33 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
     if (!fitAddon || !terminal || !ws || !isConnected) return;
 
     const handleResize = () => {
-      try {
-        fitAddon.fit();
-        
-        // Invia nuovo dimensionamento al backend
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'resize',
-            width: terminal.cols,
-            height: terminal.rows
-          }));
+      if (!isMountedRef.current) return;
+
+      setTimeout(() => {
+        if (!isMountedRef.current || !terminalRef.current) return;
+
+        try {
+          // Verifica che il renderer esista prima di chiamare fit()
+          if ((terminal as any)._core?.viewport && fitAddon) {
+            fitAddon.fit();
+
+            // Invia nuovo dimensionamento al backend
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'resize',
+                width: terminal.cols,
+                height: terminal.rows
+              }));
+            }
+          }
+        } catch (e) {
+          // Ignora silenziosamente errori di resize
         }
-      } catch (e) {
-        console.warn('Error resizing terminal:', e);
-      }
+      }, 50);
     };
 
     window.addEventListener('resize', handleResize);
-    
+
     return () => {
       window.removeEventListener('resize', handleResize);
     };

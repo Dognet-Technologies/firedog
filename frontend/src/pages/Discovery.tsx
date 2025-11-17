@@ -325,12 +325,22 @@ const Discovery: React.FC = () => {
   
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!manualForm.ip_address) {
       showToast({
         type: 'error',
         title: 'Validation Error',
         message: 'IP address is required'
+      });
+      return;
+    }
+
+    // Validazione gruppo custom
+    if (manualForm.gruppo === 'custom' && !manualForm.gruppo_custom?.trim()) {
+      showToast({
+        type: 'warning',
+        title: 'Attenzione',
+        message: 'Specifica il nome del gruppo personalizzato'
       });
       return;
     }
