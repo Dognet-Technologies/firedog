@@ -173,11 +173,12 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
         Usa terminale PTY interattivo per permettere input password sudo
 
         Args:
-            message: Dict con target_id, width, height
+            message: Dict con target_id, width, height, password (optional)
         """
         target_id = message.get('target_id')
         width = message.get('width', 80)
         height = message.get('height', 24)
+        ssh_password = message.get('password')  # Password SSH per prima installazione
 
         if not target_id:
             await self.send_error("Target ID mancante")
@@ -196,20 +197,27 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
             await self.send_output("\x1b[1;36m║\x1b[0m    \x1b[1;33mFireDog Installation Wizard\x1b[0m                        \x1b[1;36m║\x1b[0m\r\n")
             await self.send_output("\x1b[1;36m╚══════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n")
             await self.send_output(f"Target: \x1b[1m{self.target.hostname or self.target.ip_address}\x1b[0m ({self.target.ip_address})\r\n")
-            await self.send_output(f"User: \x1b[1m{self.target.ssh_user}\x1b[0m\r\n\r\n")
+            await self.send_output(f"User: \x1b[1m{self.target.ssh_user}\x1b[0m\r\n")
+
+            # Mostra metodo autenticazione
+            if ssh_password:
+                await self.send_output(f"Auth: \x1b[1;33mPassword\x1b[0m (prima installazione)\r\n\r\n")
+            else:
+                await self.send_output(f"Auth: \x1b[1;32mPublic Key\x1b[0m\r\n\r\n")
 
             # Aggiorna status del target
             await self.update_target_status('installing', 'Starting installation...')
 
             # STEP 1: Connessione SSH con terminale PTY interattivo
-            await self.send_output("\x1b[1;34m[1/7]\x1b[0m Connessione SSH al target...\r\n")
+            await self.send_output("\x1b[1;34m[1/8]\x1b[0m Connessione SSH al target...\r\n")
 
             from core.ssh_terminal_manager import SSHTerminalManager
 
             self.ssh_manager = SSHTerminalManager(
                 host=self.target.ip_address,
                 port=self.target.ssh_port,
-                username=self.target.ssh_user
+                username=self.target.ssh_user,
+                password=ssh_password  # Usa password se fornita, altrimenti chiave pubblica
             )
 
             # Tenta connessione
@@ -245,12 +253,28 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
             # Attendi che il prompt sia pronto
             await asyncio.sleep(1.0)
 
-            # STEP 2: Verifica prerequisiti e upload pacchetto
-            await self.send_output("\r\n\x1b[1;34m[2/7]\x1b[0m Preparazione installazione...\r\n")
+            # STEP 2: Configurazione chiave SSH (se autenticazione con password)
+            if ssh_password:
+                await self.send_output("\r\n\x1b[1;34m[2/8]\x1b[0m Configurazione chiave SSH pubblica...\r\n")
+                await self.send_output("\x1b[33m🔑 Configurando autenticazione con chiave pubblica per futuri accessi...\x1b[0m\r\n")
+
+                # Configura chiave SSH pubblica
+                key_configured = await self.configure_ssh_key()
+
+                if key_configured:
+                    await self.send_output("\x1b[32m  ✓ Chiave SSH configurata con successo\x1b[0m\r\n")
+                    await self.send_output("\x1b[32m  ✓ Prossime connessioni useranno la chiave pubblica\x1b[0m\r\n\r\n")
+                else:
+                    await self.send_output("\x1b[33m  ⚠ Configurazione chiave SSH fallita, continuo con password\x1b[0m\r\n\r\n")
+            else:
+                await self.send_output("\r\n\x1b[1;34m[2/8]\x1b[0m Chiave SSH già configurata, skip...\r\n\r\n")
+
+            # STEP 3: Verifica prerequisiti e upload pacchetto
+            await self.send_output("\x1b[1;34m[3/8]\x1b[0m Preparazione installazione...\r\n")
             await self.send_output("\x1b[33m💡 L'installazione richiederà la tua password sudo. Preparati a inserirla quando richiesto.\x1b[0m\r\n\r\n")
 
-            # STEP 3: Upload pacchetto FireDog (usa SSHManager separato per SFTP)
-            await self.send_output("\x1b[1;34m[3/7]\x1b[0m Upload pacchetto FireDog...\r\n")
+            # STEP 4: Upload pacchetto FireDog (usa SSHManager separato per SFTP)
+            await self.send_output("\x1b[1;34m[4/8]\x1b[0m Upload pacchetto FireDog...\r\n")
 
             from django.conf import settings
             from core.ssh_manager import SSHManager
@@ -258,11 +282,12 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
             package_local_path = '/opt/firedog/firedog-package'
             package_remote_path = '/tmp/firedog-package'
 
-            # Crea connessione separata per SFTP
+            # Crea connessione separata per SFTP (usa chiave se configurata, altrimenti password)
             sftp_ssh = SSHManager(
                 host=self.target.ip_address,
                 port=self.target.ssh_port,
-                username=self.target.ssh_user
+                username=self.target.ssh_user,
+                password=ssh_password if ssh_password else None
             )
 
             try:
@@ -287,20 +312,20 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
                 await self.update_target_status('error', f'Upload failed: {str(e)}')
                 return
 
-            # STEP 4: Configura permessi esecuzione
-            await self.send_output("\x1b[1;34m[4/7]\x1b[0m Configurazione permessi...\r\n")
+            # STEP 5: Configura permessi esecuzione
+            await self.send_output("\x1b[1;34m[5/8]\x1b[0m Configurazione permessi...\r\n")
             await sync_to_async(self.ssh_manager.send_data)(f"chmod +x {package_remote_path}/*.sh {package_remote_path}/bin/* 2>&1\n")
             await asyncio.sleep(0.5)
             await self.send_output("\x1b[32m  ✓ Permessi configurati\x1b[0m\r\n\r\n")
 
-            # STEP 5: Informazioni pre-installazione
-            await self.send_output("\x1b[1;34m[5/7]\x1b[0m Preparazione script di installazione...\r\n")
+            # STEP 6: Informazioni pre-installazione
+            await self.send_output("\x1b[1;34m[6/8]\x1b[0m Preparazione script di installazione...\r\n")
             await self.send_output("\x1b[33m⚠️  ATTENZIONE: Tra poco verrà richiesta la password sudo\x1b[0m\r\n")
             await self.send_output("\x1b[33m⚠️  La password NON verrà visualizzata mentre la digiti (è normale)\x1b[0m\r\n\r\n")
             await asyncio.sleep(2.0)
 
-            # STEP 6: Esecuzione install.sh INTERATTIVO
-            await self.send_output("\x1b[1;34m[6/7]\x1b[0m Esecuzione script di installazione...\x1b[0m\r\n")
+            # STEP 7: Esecuzione install.sh INTERATTIVO
+            await self.send_output("\x1b[1;34m[7/8]\x1b[0m Esecuzione script di installazione...\x1b[0m\r\n")
             await self.send_output("\x1b[2m" + "─" * 60 + "\x1b[0m\r\n\r\n")
 
             # Invia comando install.sh - L'utente potrà interagire tramite il terminale
@@ -491,19 +516,63 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
             'message': error_message
         }))
     
+    async def configure_ssh_key(self) -> bool:
+        """
+        Configura chiave SSH pubblica sul target per autenticazione passwordless
+
+        Returns:
+            bool: True se configurazione riuscita
+        """
+        try:
+            from django.conf import settings
+            from pathlib import Path
+
+            # Path chiave pubblica
+            pub_key_path = f"{settings.FIREDOG_SSH_KEY_PATH}.pub"
+
+            if not Path(pub_key_path).exists():
+                logger.error(f"Chiave pubblica non trovata: {pub_key_path}")
+                return False
+
+            # Leggi chiave pubblica
+            with open(pub_key_path, 'r') as f:
+                pub_key = f.read().strip()
+
+            # Crea directory .ssh e authorized_keys tramite terminale interattivo
+            # STEP 1: Crea directory .ssh
+            await sync_to_async(self.ssh_manager.send_data)("mkdir -p ~/.ssh && chmod 700 ~/.ssh\n")
+            await asyncio.sleep(0.5)
+
+            # STEP 2: Aggiungi chiave a authorized_keys (se non già presente)
+            # Usa grep per verificare se chiave è già presente
+            cmd = f"grep -q '{pub_key[:50]}' ~/.ssh/authorized_keys 2>/dev/null || echo '{pub_key}' >> ~/.ssh/authorized_keys\n"
+            await sync_to_async(self.ssh_manager.send_data)(cmd)
+            await asyncio.sleep(0.5)
+
+            # STEP 3: Imposta permessi corretti
+            await sync_to_async(self.ssh_manager.send_data)("chmod 600 ~/.ssh/authorized_keys\n")
+            await asyncio.sleep(0.5)
+
+            logger.info(f"Chiave SSH configurata su {self.target.ip_address}")
+            return True
+
+        except Exception as e:
+            logger.exception(f"Errore configurazione chiave SSH: {e}")
+            return False
+
     @database_sync_to_async
     def get_target(self, target_id: int):
         """
         Carica target dal database (async wrapper)
-        
+
         Args:
             target_id: ID del target
-            
+
         Returns:
             Target instance o None
         """
         from targets.models import Target
-        
+
         try:
             return Target.objects.get(id=target_id)
         except Target.DoesNotExist:

@@ -10,11 +10,12 @@ import './SSHTerminal.css';
 
 interface SSHTerminalProps {
   targetId: number;
+  sshPassword?: string;
   onClose: () => void;
   onInstallComplete?: () => void;
 }
 
-const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallComplete }) => {
+const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, sshPassword, onClose, onInstallComplete }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [terminal, setTerminal] = useState<Terminal | null>(null);
   const [fitAddon, setFitAddon] = useState<FitAddon | null>(null);
@@ -179,12 +180,19 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
 
       // Invia richiesta installazione FireDog sul target
       // Questo trigger l'installazione automatica invece di aprire solo una shell
-      websocket.send(JSON.stringify({
+      const installMessage: any = {
         type: 'install_firedog',
         target_id: targetId,
         width: terminal.cols,
         height: terminal.rows
-      }));
+      };
+
+      // Aggiungi password SSH se fornita (per prima installazione)
+      if (sshPassword) {
+        installMessage.password = sshPassword;
+      }
+
+      websocket.send(JSON.stringify(installMessage));
     };
 
     websocket.onmessage = (event) => {

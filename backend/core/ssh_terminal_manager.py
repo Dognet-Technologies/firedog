@@ -19,20 +19,23 @@ class SSHTerminalManager:
     """
     
     def __init__(self, host: str, port: int = 22, username: str = 'microcyber',
-                 key_path: Optional[str] = None, timeout: int = 30):
+                 key_path: Optional[str] = None, password: Optional[str] = None,
+                 timeout: int = 30):
         """
         Inizializza SSH Terminal Manager
-        
+
         Args:
             host: IP o hostname del target
             port: Porta SSH (default 22)
             username: Username SSH (default 'microcyber')
             key_path: Path chiave privata (default da settings)
+            password: Password SSH per prima installazione (optional)
             timeout: Timeout connessione
         """
         self.host = host
         self.port = port
         self.username = username
+        self.password = password
         self.timeout = timeout
         self.key_path = key_path or settings.FIREDOG_SSH_KEY_PATH
         self.client: Optional[paramiko.SSHClient] = None
@@ -41,37 +44,52 @@ class SSHTerminalManager:
     def connect(self) -> bool:
         """
         Stabilisce connessione SSH
-        
+        Supporta autenticazione con password (per prima installazione) o chiave pubblica
+
         Returns:
             bool: True se connessione riuscita
         """
         try:
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            
-            # Carica chiave privata
-            try:
-                private_key = paramiko.Ed25519Key.from_private_key_file(self.key_path)
-            except Exception as e:
-                logger.error(f"Errore caricamento chiave: {e}")
-                return False
-            
-            # Connetti
-            logger.info(f"Connessione terminale SSH a {self.username}@{self.host}:{self.port}")
-            self.client.connect(
-                hostname=self.host,
-                port=self.port,
-                username=self.username,
-                pkey=private_key,
-                timeout=self.timeout,
-                allow_agent=False,
-                look_for_keys=False,
-                compress=True
-            )
-            
+
+            # Determina metodo autenticazione
+            if self.password:
+                # Autenticazione con password (prima installazione)
+                logger.info(f"Connessione terminale SSH a {self.username}@{self.host}:{self.port} (password auth)")
+                self.client.connect(
+                    hostname=self.host,
+                    port=self.port,
+                    username=self.username,
+                    password=self.password,
+                    timeout=self.timeout,
+                    allow_agent=False,
+                    look_for_keys=False,
+                    compress=True
+                )
+            else:
+                # Autenticazione con chiave pubblica (normale)
+                try:
+                    private_key = paramiko.Ed25519Key.from_private_key_file(self.key_path)
+                except Exception as e:
+                    logger.error(f"Errore caricamento chiave: {e}")
+                    return False
+
+                logger.info(f"Connessione terminale SSH a {self.username}@{self.host}:{self.port} (key auth)")
+                self.client.connect(
+                    hostname=self.host,
+                    port=self.port,
+                    username=self.username,
+                    pkey=private_key,
+                    timeout=self.timeout,
+                    allow_agent=False,
+                    look_for_keys=False,
+                    compress=True
+                )
+
             logger.info(f"Connessione terminale stabilita con {self.host}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Errore connessione terminale: {e}")
             return False

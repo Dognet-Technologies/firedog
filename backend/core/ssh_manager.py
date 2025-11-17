@@ -38,79 +38,98 @@ class SSHManager:
     """
     
     def __init__(self, host: str, port: int = 22, username: str = 'microcyber',
-                 key_path: Optional[str] = None, timeout: int = 30):
+                 key_path: Optional[str] = None, password: Optional[str] = None,
+                 timeout: int = 30):
         """
         Inizializza SSHManager
-        
+
         Args:
             host: Hostname o IP del target
             port: Porta SSH (default 22)
             username: Username SSH (default 'microcyber')
             key_path: Path alla chiave privata SSH (default da settings)
+            password: Password SSH per prima installazione (optional)
             timeout: Timeout connessione in secondi
         """
         self.host = host
         self.port = port
         self.username = username
+        self.password = password
         self.timeout = timeout
         self.key_path = key_path or settings.FIREDOG_SSH_KEY_PATH
         self.client: Optional[paramiko.SSHClient] = None
         self.sftp: Optional[paramiko.SFTPClient] = None
-        
+
         # Validazione parametri
         if not self.host:
             raise ValueError("Host non può essere vuoto")
-        
-        if not os.path.exists(self.key_path):
-            raise FileNotFoundError(f"Chiave SSH non trovata: {self.key_path}")
+
+        # Valida che almeno uno tra password e chiave sia presente
+        if not self.password and not os.path.exists(self.key_path):
+            raise FileNotFoundError(f"Chiave SSH non trovata e nessuna password fornita: {self.key_path}")
     
     def connect(self) -> bool:
         """
         Stabilisce connessione SSH
-        
+        Supporta autenticazione con password (per prima installazione) o chiave pubblica
+
         Returns:
             bool: True se connessione riuscita
-            
+
         Raises:
             SSHConnectionError: Se connessione fallisce
         """
         try:
             # Crea client SSH
             self.client = paramiko.SSHClient()
-            
+
             # Carica chiavi host conosciute (se esistono)
             known_hosts_path = os.path.expanduser('~/.ssh/known_hosts')
             if os.path.exists(known_hosts_path):
                 self.client.load_host_keys(known_hosts_path)
-            
+
             # Policy per chiavi host sconosciute
             # In produzione: usare RejectPolicy e gestire known_hosts
             # Per sviluppo: AutoAddPolicy
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            
-            # Carica chiave privata
-            try:
-                private_key = paramiko.Ed25519Key.from_private_key_file(self.key_path)
-            except Exception as e:
-                logger.error(f"Errore caricamento chiave SSH: {e}")
-                raise SSHConnectionError(f"Impossibile caricare chiave SSH: {e}")
-            
-            # Connessione
-            logger.info(f"Connessione a {self.username}@{self.host}:{self.port}")
-            self.client.connect(
-                hostname=self.host,
-                port=self.port,
-                username=self.username,
-                pkey=private_key,
-                timeout=self.timeout,
-                allow_agent=False,  # Sicurezza: non usare SSH agent
-                look_for_keys=False,  # Sicurezza: usa solo la chiave specificata
-                compress=True
-            )
-            
+
+            # Determina metodo autenticazione
+            if self.password:
+                # Autenticazione con password (prima installazione)
+                logger.info(f"Connessione a {self.username}@{self.host}:{self.port} (password auth)")
+                self.client.connect(
+                    hostname=self.host,
+                    port=self.port,
+                    username=self.username,
+                    password=self.password,
+                    timeout=self.timeout,
+                    allow_agent=False,
+                    look_for_keys=False,
+                    compress=True
+                )
+            else:
+                # Autenticazione con chiave pubblica (normale)
+                try:
+                    private_key = paramiko.Ed25519Key.from_private_key_file(self.key_path)
+                except Exception as e:
+                    logger.error(f"Errore caricamento chiave SSH: {e}")
+                    raise SSHConnectionError(f"Impossibile caricare chiave SSH: {e}")
+
+                logger.info(f"Connessione a {self.username}@{self.host}:{self.port} (key auth)")
+                self.client.connect(
+                    hostname=self.host,
+                    port=self.port,
+                    username=self.username,
+                    pkey=private_key,
+                    timeout=self.timeout,
+                    allow_agent=False,
+                    look_for_keys=False,
+                    compress=True
+                )
+
             logger.info(f"Connessione stabilita con {self.host}")
             return True
-            
+
         except paramiko.AuthenticationException as e:
             logger.error(f"Autenticazione fallita per {self.host}: {e}")
             raise SSHConnectionError(f"Autenticazione fallita: {e}")

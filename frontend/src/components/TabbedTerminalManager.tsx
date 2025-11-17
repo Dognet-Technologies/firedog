@@ -13,6 +13,7 @@ export interface TerminalOperation {
   type: 'install' | 'reinstall' | 'test';
   status: 'running' | 'waiting_input' | 'completed' | 'error';
   requiresFocus: boolean;
+  sshPassword?: string; // Password SSH per prima installazione
 }
 
 interface TabbedTerminalManagerProps {
@@ -140,6 +141,7 @@ const TabbedTerminalManager: React.FC<TabbedTerminalManagerProps> = ({
           >
             <SSHTerminal
               targetId={operation.target.id}
+              sshPassword={operation.sshPassword}
               onClose={() => onCloseOperation(operation.id)}
               onInstallComplete={() => {
                 onUpdateOperation(operation.id, { status: 'completed' });

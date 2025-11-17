@@ -170,6 +170,7 @@ const Targets: React.FC = () => {
     if (!target) return;
 
     const isReinstall = target.firedog_version != null;
+    const isFirstInstall = !isReinstall;
 
     // Check if we can add more operations
     if (terminalOperations.length >= 5) {
@@ -181,32 +182,69 @@ const Targets: React.FC = () => {
       return;
     }
 
-    showConfirm({
-      title: isReinstall ? 'Conferma Reinstallazione' : 'Conferma Installazione',
-      message: isReinstall
-        ? 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse.'
-        : 'Vuoi installare FireDog su questo target? Assicurati di avere la password sudo del target.',
-      confirmText: 'Avvia Installazione',
-      cancelText: 'Annulla',
-      onConfirm: () => {
-        const newOperation: TerminalOperation = {
-          id: `op-${Date.now()}-${Math.random()}`,
-          target,
-          type: isReinstall ? 'reinstall' : 'install',
-          status: 'running',
-          requiresFocus: false
-        };
+    // Per prima installazione, chiedi password SSH
+    if (isFirstInstall) {
+      const password = prompt(
+        `🔐 Password SSH per ${target.hostname || target.ip_address}\n\n` +
+        `Inserisci la password SSH dell'utente ${target.ssh_user}.\n` +
+        `Questa password verrà usata solo per la connessione iniziale.\n` +
+        `FireDog configurerà automaticamente l'autenticazione con chiave pubblica.`
+      );
 
-        setTerminalOperations(prev => [...prev, newOperation]);
-        setIsPanelOpen(true);
-
+      if (!password) {
         showToast({
-          type: 'info',
-          title: 'Installazione Avviata',
-          message: `Installazione su ${target.hostname || target.ip_address} avviata`
+          type: 'warning',
+          title: 'Installazione annullata',
+          message: 'Password SSH richiesta per la prima installazione'
         });
+        return;
       }
-    });
+
+      // Avvia installazione con password
+      const newOperation: TerminalOperation = {
+        id: `op-${Date.now()}-${Math.random()}`,
+        target,
+        type: 'install',
+        status: 'running',
+        requiresFocus: false,
+        sshPassword: password
+      };
+
+      setTerminalOperations(prev => [...prev, newOperation]);
+      setIsPanelOpen(true);
+
+      showToast({
+        type: 'info',
+        title: 'Installazione Avviata',
+        message: `Installazione su ${target.hostname || target.ip_address} avviata`
+      });
+    } else {
+      // Reinstallazione: usa chiave pubblica già configurata
+      showConfirm({
+        title: 'Conferma Reinstallazione',
+        message: 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse.',
+        confirmText: 'Avvia Reinstallazione',
+        cancelText: 'Annulla',
+        onConfirm: () => {
+          const newOperation: TerminalOperation = {
+            id: `op-${Date.now()}-${Math.random()}`,
+            target,
+            type: 'reinstall',
+            status: 'running',
+            requiresFocus: false
+          };
+
+          setTerminalOperations(prev => [...prev, newOperation]);
+          setIsPanelOpen(true);
+
+          showToast({
+            type: 'info',
+            title: 'Reinstallazione Avviata',
+            message: `Reinstallazione su ${target.hostname || target.ip_address} avviata`
+          });
+        }
+      });
+    }
   };
 
   const handleInstallGroup = () => {
