@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db import transaction
 import logging
 
 from .models import Target
@@ -118,29 +119,36 @@ class TargetViewSet(viewsets.ModelViewSet):
         target = self.get_object()
         target_ip = target.ip_address
         target_hostname = target.hostname
-        
+        target_id = target.id
+
         try:
-            with transaction.atomic():
-                # Audit log PRIMA di eliminare
-                from targets.models import AuditLog
-                AuditLog.objects.create(
-                    user=request.user,
-                    action='target_deleted',
-                    target=None,  # Target verrà eliminato
-                    details=f'Deleted target {target_hostname or target_ip} (IP: {target_ip})'
-                )
-                
-                # HARD DELETE - elimina fisicamente dal database
-                target_id = target.id
-                target.delete()  # Questo elimina davvero il record
-                
-                return Response({
-                    'success': True,
-                    'message': f'Target {target_ip} eliminato permanentemente',
-                    'deleted_id': target_id
-                }, status=status.HTTP_204_NO_CONTENT)
-                
+            # Audit log PRIMA di eliminare (senza content_object per evitare problemi con FK)
+            AuditLog.log_action(
+                action='delete',
+                description=f'Deleted target {target_hostname or target_ip} (IP: {target_ip})',
+                user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR'),
+                old_values={
+                    'id': target_id,
+                    'ip_address': target_ip,
+                    'hostname': target_hostname,
+                    'status': target.status
+                }
+            )
+
+            # HARD DELETE - elimina fisicamente dal database
+            target.delete()
+
+            logger.info(f'Target deleted: {target_ip} (ID: {target_id})')
+
+            return Response({
+                'success': True,
+                'message': f'Target {target_ip} eliminato permanentemente',
+                'deleted_id': target_id
+            }, status=status.HTTP_204_NO_CONTENT)
+
         except Exception as e:
+            logger.error(f'Error deleting target {target_ip}: {str(e)}', exc_info=True)
             return Response({
                 'success': False,
                 'error': str(e)

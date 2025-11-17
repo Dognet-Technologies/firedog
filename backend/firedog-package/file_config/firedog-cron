@@ -1,0 +1,48 @@
+# FireDog Cron Jobs
+# File: /etc/cron.d/firedog
+#
+# Scheduled tasks for FireDog monitoring and maintenance
+# Install: sudo cp firedog-cron /etc/cron.d/firedog && sudo chmod 644 /etc/cron.d/firedog
+
+# ========== TRAFFIC ANALYSIS ==========
+# Run full traffic analysis every 5 minutes
+*/5 * * * * microcyber /usr/local/bin/traffic-analyzer --full > /opt/firedog/data/traffic-$(date +\%Y\%m\%d-\%H\%M).json 2>&1
+
+# ========== FIREWALL STATISTICS ==========
+# Collect firewall statistics every 10 minutes
+*/10 * * * * microcyber /usr/local/bin/firewall-manager --stats > /opt/firedog/data/firewall-stats-$(date +\%Y\%m\%d-\%H\%M).json 2>&1
+
+# ========== PORT SCAN DETECTION ==========
+# Check for port scanning every 15 minutes
+*/15 * * * * microcyber /usr/local/bin/traffic-analyzer --scan-detect > /opt/firedog/data/scan-detect-$(date +\%Y\%m\%d-\%H\%M).json 2>&1
+
+# ========== LOG ROTATION ==========
+# Clean old analysis files (older than 7 days) daily at 2 AM
+0 2 * * * microcyber find /opt/firedog/data -name "*.json" -mtime +7 -delete 2>&1
+0 2 * * * microcyber find /opt/firedog/logs -name "*.log" -mtime +7 -delete 2>&1
+0 2 * * * microcyber find /opt/firedog/pcap -name "*.pcap" -mtime +3 -delete 2>&1
+
+# ========== BACKUP IPTABLES RULES ==========
+# Backup iptables rules daily at 3 AM
+0 3 * * * microcyber sudo /usr/sbin/iptables-save > /opt/firedog/rules/iptables.backup-$(date +\%Y\%m\%d).rules 2>&1
+
+# Clean old rule backups (older than 30 days)
+0 3 * * * microcyber find /opt/firedog/rules -name "iptables.backup-*.rules" -mtime +30 -delete 2>&1
+
+# ========== HEALTH CHECK ==========
+# Check service status every hour
+0 * * * * microcyber sudo systemctl is-active firedog > /opt/firedog/logs/health-check.log 2>&1
+
+# ========== INTERFACE STATISTICS ==========
+# Collect network interface statistics hourly
+0 * * * * microcyber /usr/local/bin/traffic-analyzer --interfaces > /opt/firedog/data/interfaces-$(date +\%Y\%m\%d-\%H00).json 2>&1
+
+# ========== WEEKLY REPORTS ==========
+# Generate weekly summary report (every Sunday at midnight)
+0 0 * * 0 microcyber /usr/local/bin/generate-weekly-report.sh > /opt/firedog/reports/weekly-$(date +\%Y\%W).txt 2>&1
+
+# ========== NOTES ==========
+# - All jobs run as 'microcyber' user
+# - Ensure microcyber has sudo NOPASSWD permissions for required commands (see sudoers-microcyber)
+# - Adjust frequency based on your monitoring requirements
+# - Monitor cron execution: sudo grep CRON /var/log/syslog

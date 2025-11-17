@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""
+FireDog Traffic Analyzer
+Analyzes network traffic and detects anomalies
+"""
+
+import sys
+import subprocess
+import json
+import argparse
+from datetime import datetime
+from collections import defaultdict
+
+
+VERSION = "1.0.0"
+
+
+def execute_command(cmd):
+    """Execute shell command and return output"""
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        return result.returncode, result.stdout, result.stderr
+    except subprocess.TimeoutExpired:
+        return -1, "", "Command timeout"
+    except Exception as e:
+        return -1, "", str(e)
+
+
+def analyze_connections():
+    """Analyze active network connections"""
+    connections = {
+        "timestamp": datetime.now().isoformat(),
+        "total": 0,
+        "by_state": defaultdict(int),
+        "by_port": defaultdict(int),
+        "top_ips": []
+    }
+
+    # Get active connections
+    exit_code, stdout, stderr = execute_command("netstat -tan | tail -n +3")
+
+    if exit_code != 0:
+        return None, stderr
+
+    lines = stdout.strip().split('\n')
+    ip_counter = defaultdict(int)
+
+    for line in lines:
+        if not line.strip():
+            continue
+
+        parts = line.split()
+        if len(parts) < 6:
+            continue
+
+        connections["total"] += 1
+
+        # Parse state
+        state = parts[5] if len(parts) > 5 else "UNKNOWN"
+        connections["by_state"][state] += 1
+
+        # Parse local address and port
+        try:
+            local = parts[3]
+            if ':' in local:
+                port = local.split(':')[-1]
+                connections["by_port"][port] += 1
+        except:
+            pass
+
+        # Parse remote address
+        try:
+            remote = parts[4]
+            if ':' in remote:
+                remote_ip = remote.split(':')[0]
+                if remote_ip not in ['0.0.0.0', '127.0.0.1', '*']:
+                    ip_counter[remote_ip] += 1
+        except:
+            pass
+
+    # Get top IPs
+    top_ips = sorted(ip_counter.items(), key=lambda x: x[1], reverse=True)[:10]
+    connections["top_ips"] = [{"ip": ip, "count": count} for ip, count in top_ips]
+
+    # Convert defaultdicts to regular dicts for JSON
+    connections["by_state"] = dict(connections["by_state"])
+    connections["by_port"] = dict(connections["by_port"])
+
+    return connections, None
+
+
+def get_interface_stats():
+    """Get network interface statistics"""
+    stats = {
+        "timestamp": datetime.now().isoformat(),
+        "interfaces": []
+    }
+
+    # Get interface stats from /proc/net/dev
+    exit_code, stdout, stderr = execute_command("cat /proc/net/dev")
+
+    if exit_code != 0:
+        return None, stderr
+
+    lines = stdout.strip().split('\n')[2:]  # Skip header lines
+
+    for line in lines:
+        if not line.strip():
+            continue
+
+        parts = line.split(':')
+        if len(parts) != 2:
+            continue
+
+        iface = parts[0].strip()
+        values = parts[1].split()
+
+        if len(values) >= 16:
+            stats["interfaces"].append({
+                "name": iface,
+                "rx_bytes": int(values[0]),
+                "rx_packets": int(values[1]),
+                "rx_errors": int(values[2]),
+                "rx_dropped": int(values[3]),
+                "tx_bytes": int(values[8]),
+                "tx_packets": int(values[9]),
+                "tx_errors": int(values[10]),
+                "tx_dropped": int(values[11])
+            })
+
+    return stats, None
+
+
+def analyze_dropped_packets():
+    """Analyze dropped packets from iptables"""
+    dropped = {
+        "timestamp": datetime.now().isoformat(),
+        "total_dropped": 0,
+        "by_chain": {}
+    }
+
+    # Get iptables statistics
+    for chain in ["INPUT", "OUTPUT", "FORWARD"]:
+        exit_code, stdout, stderr = execute_command(
+            f"sudo iptables -L {chain} -n -v -x | awk '{{sum+=$2}} END {{print sum}}'"
+        )
+
+        if exit_code == 0 and stdout.strip():
+            try:
+                count = int(stdout.strip())
+                dropped["by_chain"][chain] = count
+                dropped["total_dropped"] += count
+            except:
+                dropped["by_chain"][chain] = 0
+
+    return dropped
+
+
+def detect_port_scan():
+    """Detect potential port scanning activity"""
+    # Check for excessive SYN packets from single IPs
+    exit_code, stdout, stderr = execute_command(
+        "sudo iptables -L INPUT -n -v | grep SYN | awk '{print $8}' | sort | uniq -c | sort -rn | head -5"
+    )
+
+    scans = []
+    if exit_code == 0 and stdout.strip():
+        for line in stdout.strip().split('\n'):
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                scans.append({
+                    "ip": parts[1],
+                    "syn_count": int(parts[0])
+                })
+
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "potential_scans": scans
+    }
+
+
+def get_full_analysis():
+    """Get complete traffic analysis"""
+    analysis = {
+        "timestamp": datetime.now().isoformat(),
+        "version": VERSION
+    }
+
+    # Get connections
+    connections, error = analyze_connections()
+    if not error:
+        analysis["connections"] = connections
+
+    # Get interface stats
+    iface_stats, error = get_interface_stats()
+    if not error:
+        analysis["interface_stats"] = iface_stats
+
+    # Get dropped packets
+    analysis["dropped_packets"] = analyze_dropped_packets()
+
+    # Detect port scans
+    analysis["port_scan_detection"] = detect_port_scan()
+
+    return analysis
+
+
+def main():
+    """Main function"""
+    parser = argparse.ArgumentParser(description="FireDog Traffic Analyzer")
+    parser.add_argument("--version", action="version", version=f"FireDog {VERSION}")
+    parser.add_argument("--connections", action="store_true", help="Analyze active connections")
+    parser.add_argument("--interfaces", action="store_true", help="Show interface statistics")
+    parser.add_argument("--dropped", action="store_true", help="Analyze dropped packets")
+    parser.add_argument("--scan-detect", action="store_true", help="Detect port scanning")
+    parser.add_argument("--full", action="store_true", help="Full analysis (all options)")
+
+    args = parser.parse_args()
+
+    if args.connections:
+        result, error = analyze_connections()
+        if error:
+            print(f"Error: {error}", file=sys.stderr)
+            sys.exit(1)
+        print(json.dumps(result, indent=2))
+
+    elif args.interfaces:
+        result, error = get_interface_stats()
+        if error:
+            print(f"Error: {error}", file=sys.stderr)
+            sys.exit(1)
+        print(json.dumps(result, indent=2))
+
+    elif args.dropped:
+        result = analyze_dropped_packets()
+        print(json.dumps(result, indent=2))
+
+    elif args.scan_detect:
+        result = detect_port_scan()
+        print(json.dumps(result, indent=2))
+
+    elif args.full:
+        result = get_full_analysis()
+        print(json.dumps(result, indent=2))
+
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
