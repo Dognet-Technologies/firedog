@@ -46,7 +46,11 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         """Gestisce disconnessione WebSocket"""
         logger.info(f"WebSocket disconnesso: {self.channel_name}, code: {close_code}")
-        
+
+        # Se c'era un'installazione in corso, verifica il risultato finale
+        if self.target and self.target.status == 'installing':
+            await self.verify_installation_result()
+
         # Ferma task di lettura
         if self.read_task:
             self.read_task.cancel()
@@ -54,7 +58,7 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
                 await self.read_task
             except asyncio.CancelledError:
                 pass
-        
+
         # Chiudi connessione SSH
         if self.ssh_manager:
             await sync_to_async(self.ssh_manager.disconnect)()
@@ -166,12 +170,14 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
     async def handle_install_firedog(self, message):
         """
         Gestisce installazione automatica di FireDog sul target
-        Mostra output in tempo reale nel terminale
+        Usa terminale PTY interattivo per permettere input password sudo
 
         Args:
-            message: Dict con target_id
+            message: Dict con target_id, width, height
         """
         target_id = message.get('target_id')
+        width = message.get('width', 80)
+        height = message.get('height', 24)
 
         if not target_id:
             await self.send_error("Target ID mancante")
@@ -195,11 +201,12 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
             # Aggiorna status del target
             await self.update_target_status('installing', 'Starting installation...')
 
-            # STEP 1: Connessione SSH
+            # STEP 1: Connessione SSH con terminale PTY interattivo
             await self.send_output("\x1b[1;34m[1/7]\x1b[0m Connessione SSH al target...\r\n")
 
-            from core.ssh_manager import SSHManager
-            ssh = SSHManager(
+            from core.ssh_terminal_manager import SSHTerminalManager
+
+            self.ssh_manager = SSHTerminalManager(
                 host=self.target.ip_address,
                 port=self.target.ssh_port,
                 username=self.target.ssh_user
@@ -207,132 +214,114 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
 
             # Tenta connessione
             try:
-                await sync_to_async(ssh.connect)()
+                connected = await sync_to_async(self.ssh_manager.connect)()
+                if not connected:
+                    await self.send_error("Connessione SSH fallita")
+                    await self.update_target_status('error', 'Connection failed')
+                    return
+
                 await self.send_output("\x1b[32m  ✓ Connessione SSH stabilita\x1b[0m\r\n\r\n")
             except Exception as e:
                 await self.send_error(f"Connessione SSH fallita: {str(e)}")
                 await self.update_target_status('error', f'Connection failed: {str(e)}')
                 return
 
-            # STEP 2: Verifica prerequisiti
-            await self.send_output("\x1b[1;34m[2/7]\x1b[0m Verifica prerequisiti...\r\n")
+            # Avvia shell interattiva PTY
+            shell_started = await sync_to_async(
+                self.ssh_manager.start_shell
+            )(width=width, height=height)
 
-            # Controlla se utente esiste
-            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(f"id {self.target.ssh_user}")
-            if exit_code != 0:
-                await self.send_error(f"User {self.target.ssh_user} not found on target")
-                await sync_to_async(ssh.disconnect)()
-                await self.update_target_status('error', 'User not found')
+            if not shell_started:
+                await self.send_error("Avvio shell interattiva fallito")
+                await sync_to_async(self.ssh_manager.disconnect)()
+                await self.update_target_status('error', 'Shell start failed')
                 return
 
-            await self.send_output(f"\x1b[32m  ✓ User {self.target.ssh_user} exists\x1b[0m\r\n")
+            self.is_connected = True
 
-            # Controlla sudo
-            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)("sudo -n true 2>&1")
-            has_nopasswd_sudo = (exit_code == 0)
+            # Avvia task di lettura output in tempo reale
+            self.read_task = asyncio.create_task(self.read_ssh_output())
 
-            if has_nopasswd_sudo:
-                await self.send_output("\x1b[32m  ✓ Sudo NOPASSWD configurato\x1b[0m\r\n\r\n")
-            else:
-                await self.send_output("\x1b[33m  ⚠ Sudo richiede password (installazione potrebbe fallire)\x1b[0m\r\n\r\n")
+            # Attendi che il prompt sia pronto
+            await asyncio.sleep(1.0)
 
-            # STEP 3: Upload pacchetto FireDog
+            # STEP 2: Verifica prerequisiti e upload pacchetto
+            await self.send_output("\r\n\x1b[1;34m[2/7]\x1b[0m Preparazione installazione...\r\n")
+            await self.send_output("\x1b[33m💡 L'installazione richiederà la tua password sudo. Preparati a inserirla quando richiesto.\x1b[0m\r\n\r\n")
+
+            # STEP 3: Upload pacchetto FireDog (usa SSHManager separato per SFTP)
             await self.send_output("\x1b[1;34m[3/7]\x1b[0m Upload pacchetto FireDog...\r\n")
 
             from django.conf import settings
+            from core.ssh_manager import SSHManager
+
             package_local_path = '/opt/firedog/firedog-package'
             package_remote_path = '/tmp/firedog-package'
 
-            # Crea directory remota
-            await sync_to_async(ssh.execute_command)(f"mkdir -p {package_remote_path}")
+            # Crea connessione separata per SFTP
+            sftp_ssh = SSHManager(
+                host=self.target.ip_address,
+                port=self.target.ssh_port,
+                username=self.target.ssh_user
+            )
 
-            # Upload package
-            success, message = await sync_to_async(ssh.upload_directory)(package_local_path, package_remote_path)
+            try:
+                await sync_to_async(sftp_ssh.connect)()
 
-            if not success:
-                await self.send_error(f"Upload fallito: {message}")
-                await sync_to_async(ssh.disconnect)()
-                await self.update_target_status('error', 'Upload failed')
+                # Crea directory remota
+                await sync_to_async(sftp_ssh.execute_command)(f"mkdir -p {package_remote_path}")
+
+                # Upload package
+                success, message = await sync_to_async(sftp_ssh.upload_directory)(package_local_path, package_remote_path)
+
+                await sync_to_async(sftp_ssh.disconnect)()
+
+                if not success:
+                    await self.send_error(f"Upload fallito: {message}")
+                    await self.update_target_status('error', 'Upload failed')
+                    return
+
+                await self.send_output("\x1b[32m  ✓ Pacchetto caricato con successo\x1b[0m\r\n\r\n")
+            except Exception as e:
+                await self.send_error(f"Errore upload: {str(e)}")
+                await self.update_target_status('error', f'Upload failed: {str(e)}')
                 return
-
-            await self.send_output("\x1b[32m  ✓ Pacchetto caricato\x1b[0m\r\n\r\n")
 
             # STEP 4: Configura permessi esecuzione
             await self.send_output("\x1b[1;34m[4/7]\x1b[0m Configurazione permessi...\r\n")
+            await sync_to_async(self.ssh_manager.send_data)(f"chmod +x {package_remote_path}/*.sh {package_remote_path}/bin/* 2>&1\n")
+            await asyncio.sleep(0.5)
+            await self.send_output("\x1b[32m  ✓ Permessi configurati\x1b[0m\r\n\r\n")
 
-            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(
-                f"chmod +x {package_remote_path}/*.sh {package_remote_path}/bin/* 2>&1"
+            # STEP 5: Informazioni pre-installazione
+            await self.send_output("\x1b[1;34m[5/7]\x1b[0m Preparazione script di installazione...\r\n")
+            await self.send_output("\x1b[33m⚠️  ATTENZIONE: Tra poco verrà richiesta la password sudo\x1b[0m\r\n")
+            await self.send_output("\x1b[33m⚠️  La password NON verrà visualizzata mentre la digiti (è normale)\x1b[0m\r\n\r\n")
+            await asyncio.sleep(2.0)
+
+            # STEP 6: Esecuzione install.sh INTERATTIVO
+            await self.send_output("\x1b[1;34m[6/7]\x1b[0m Esecuzione script di installazione...\x1b[0m\r\n")
+            await self.send_output("\x1b[2m" + "─" * 60 + "\x1b[0m\r\n\r\n")
+
+            # Invia comando install.sh - L'utente potrà interagire tramite il terminale
+            await sync_to_async(self.ssh_manager.send_data)(
+                f"cd {package_remote_path} && sudo bash install.sh\n"
             )
 
-            if exit_code == 0:
-                await self.send_output("\x1b[32m  ✓ Permessi configurati\x1b[0m\r\n\r\n")
-            else:
-                await self.send_output(f"\x1b[33m  ⚠ Warning: {stderr}\x1b[0m\r\n\r\n")
+            # Informazione per l'utente
+            await self.send_output("\r\n\x1b[1;33m>>> Script di installazione avviato <<<\x1b[0m\r\n")
+            await self.send_output("\x1b[33m>>> Se richiesto, inserisci la password sudo e premi INVIO <<<\x1b[0m\r\n\r\n")
 
-            # STEP 5: Configurazione sudoers (se necessario)
-            if not has_nopasswd_sudo:
-                await self.send_output("\x1b[1;34m[5/7]\x1b[0m Configurazione sudoers...\r\n")
-                await self.send_output("\x1b[33m  ⚠ Sudo richiede password - skip configurazione automatica\x1b[0m\r\n")
-                await self.send_output("\x1b[33m  💡 Configura manualmente sudo NOPASSWD per questo utente\x1b[0m\r\n\r\n")
-            else:
-                await self.send_output("\x1b[1;34m[5/7]\x1b[0m Configurazione sudoers...\r\n")
-                await self.send_output("\x1b[32m  ✓ Sudoers già configurato\x1b[0m\r\n\r\n")
+            # Da questo punto in poi, l'utente può interagire liberamente con il terminale
+            # Il task read_ssh_output() continuerà a streamare l'output
+            # L'utente può digitare la password quando richiesta tramite handle_input()
 
-            # STEP 6: Esecuzione install.sh
-            await self.send_output("\x1b[1;34m[6/7]\x1b[0m Esecuzione script di installazione...\r\n")
-            await self.send_output("\x1b[2m" + "─" * 60 + "\x1b[0m\r\n")
+            logger.info(f"Installation script started for target {target_id} - waiting for user interaction")
 
-            # Esegui install.sh con output streaming
-            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(
-                f"cd {package_remote_path} && sudo bash install.sh 2>&1",
-                timeout=300
-            )
-
-            # Mostra output
-            if stdout:
-                for line in stdout.split('\n'):
-                    await self.send_output(f"{line}\r\n")
-
-            await self.send_output("\x1b[2m" + "─" * 60 + "\x1b[0m\r\n")
-
-            if exit_code != 0:
-                await self.send_error(f"Installazione fallita (exit code: {exit_code})")
-                if stderr:
-                    await self.send_output(f"\x1b[31mError: {stderr}\x1b[0m\r\n")
-                await sync_to_async(ssh.disconnect)()
-                await self.update_target_status('error', 'Installation script failed')
-                return
-
-            await self.send_output("\x1b[32m  ✓ Installazione completata\x1b[0m\r\n\r\n")
-
-            # STEP 7: Verifica installazione
-            await self.send_output("\x1b[1;34m[7/7]\x1b[0m Verifica installazione...\r\n")
-
-            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(
-                "/usr/local/bin/firewall-manager --version 2>&1 || echo '1.0.0'"
-            )
-
-            version = stdout.strip() or '1.0.0'
-            await self.send_output(f"\x1b[32m  ✓ FireDog v{version} installato correttamente\x1b[0m\r\n\r\n")
-
-            # Chiudi connessione SSH
-            await sync_to_async(ssh.disconnect)()
-
-            # Aggiorna target nel database
-            await self.update_target_status('online', 'Installation completed', version)
-
-            # Messaggio di successo finale
-            await self.send_output("\r\n\x1b[1;32m╔══════════════════════════════════════════════════════════╗\x1b[0m\r\n")
-            await self.send_output("\x1b[1;32m║\x1b[0m    \x1b[1;37m✓ Installazione completata con successo!\x1b[0m            \x1b[1;32m║\x1b[0m\r\n")
-            await self.send_output("\x1b[1;32m╚══════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n")
-
-            # Invia messaggio di disconnessione
-            await self.send(text_data=json.dumps({
-                'type': 'disconnected',
-                'message': 'Installation completed successfully'
-            }))
-
-            logger.info(f"Installation completed successfully for target {target_id}")
+        except asyncio.CancelledError:
+            logger.info(f"Installation cancelled for target {target_id}")
+            await self.update_target_status('error', 'Installation cancelled')
+            raise
 
         except Exception as e:
             logger.exception(f"Errore durante installazione target {target_id}: {e}")
@@ -359,6 +348,43 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
                 from django.utils.timezone import now
                 self.target.last_seen = now()
             self.target.save()
+
+    async def verify_installation_result(self):
+        """Verifica se l'installazione di FireDog è andata a buon fine"""
+        try:
+            from core.ssh_manager import SSHManager
+
+            logger.info(f"Verifying installation result for target {self.target.id}")
+
+            # Crea nuova connessione SSH per verifica
+            ssh = SSHManager(
+                host=self.target.ip_address,
+                port=self.target.ssh_port,
+                username=self.target.ssh_user
+            )
+
+            await sync_to_async(ssh.connect)()
+
+            # Verifica se firewall-manager è installato
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(
+                "/usr/local/bin/firewall-manager --version 2>&1 || echo 'NOT_INSTALLED'"
+            )
+
+            await sync_to_async(ssh.disconnect)()
+
+            if exit_code == 0 and 'NOT_INSTALLED' not in stdout:
+                # Installazione completata con successo
+                version = stdout.strip() or '1.0.0'
+                await self.update_target_status('online', 'Installation completed', version)
+                logger.info(f"Installation verified successfully for target {self.target.id}: v{version}")
+            else:
+                # Installazione non completata o fallita
+                await self.update_target_status('error', 'Installation incomplete or failed')
+                logger.warning(f"Installation verification failed for target {self.target.id}")
+
+        except Exception as e:
+            logger.exception(f"Error verifying installation for target {self.target.id}: {e}")
+            await self.update_target_status('error', f'Verification failed: {str(e)}')
 
     async def handle_input(self, message):
         """
