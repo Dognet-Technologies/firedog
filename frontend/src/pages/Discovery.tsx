@@ -96,7 +96,7 @@ const Discovery: React.FC = () => {
   // Load data on mount
   useEffect(() => {
     loadDiscoveredHosts();
-    loadGroups();
+    loadAvailableGroups();
   }, []);
 
   // Load groups when tab changes
@@ -143,7 +143,7 @@ const Discovery: React.FC = () => {
     }
   };
 
-  const loadGroups = async () => {
+  const loadAvailableGroups = async () => {
     try {
       const groupsData = await apiService.getGroups();
       setAvailableGroups(groupsData);
