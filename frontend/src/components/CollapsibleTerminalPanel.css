@@ -1,27 +1,31 @@
 /**
- * Collapsible Terminal Panel Styles
+ * Collapsible Terminal Panel Styles - Right Sidebar
  */
 
 .collapsible-terminal-panel {
-  position: sticky;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--card-bg, #1e1e1e);
-  border-top: 2px solid var(--border-color, #333);
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+  border-left: 2px solid var(--border-color, #333);
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
   z-index: 900;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  margin-top: 2rem;
-  border-radius: 12px 12px 0 0;
+  border-radius: 12px 0 0 12px;
+  width: 700px;
+  min-width: 700px;
+  max-width: 700px;
+  height: 100%;
+  overflow: hidden;
 }
 
 .collapsible-terminal-panel.expanded {
-  max-height: 600px;
+  width: 700px;
+  min-width: 700px;
 }
 
 .collapsible-terminal-panel.collapsed {
-  max-height: 50px;
+  width: 60px;
+  min-width: 60px;
 }
 
 /* Header */
@@ -32,8 +36,24 @@
   padding: 0.75rem 1.5rem;
   background: linear-gradient(135deg, #2a2a2a 0%, #1e1e1e 100%);
   border-bottom: 1px solid var(--border-color, #333);
-  border-radius: 12px 12px 0 0;
+  border-radius: 12px 0 0 0;
   user-select: none;
+  flex-shrink: 0;
+}
+
+.collapsible-terminal-panel.collapsed .panel-header {
+  padding: 0.75rem 0.5rem;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.collapsible-terminal-panel.collapsed .panel-title {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.collapsible-terminal-panel.collapsed .panel-title h3 {
+  font-size: 0.8rem;
 }
 
 .panel-title {
@@ -108,29 +128,64 @@
 
 /* Content */
 .panel-content {
-  overflow: visible;
+  flex: 1;
+  min-height: 0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-content.visible {
-  max-height: 550px;
   opacity: 1;
 }
 
 .panel-content.hidden {
-  max-height: 0;
   opacity: 0;
+  width: 0;
   overflow: hidden;
 }
 
 /* Responsive */
-@media (max-width: 768px) {
-  .collapsible-terminal-panel.expanded {
-    max-height: 75vh;
+@media (max-width: 1400px) {
+  .collapsible-terminal-panel {
+    width: 600px;
+    min-width: 600px;
   }
 
-  .panel-content.visible {
-    max-height: calc(75vh - 50px);
+  .collapsible-terminal-panel.expanded {
+    width: 600px;
+    min-width: 600px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .collapsible-terminal-panel {
+    width: 500px;
+    min-width: 500px;
+  }
+
+  .collapsible-terminal-panel.expanded {
+    width: 500px;
+    min-width: 500px;
+  }
+}
+
+@media (max-width: 768px) {
+  .collapsible-terminal-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+    z-index: 1000;
+  }
+
+  .collapsible-terminal-panel.collapsed {
+    width: 60px;
+    min-width: 60px;
   }
 
   .panel-header {

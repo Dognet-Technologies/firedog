@@ -540,8 +540,11 @@ const Targets: React.FC = () => {
         </button>
       </div>
 
-      {/* Filtri */}
-      <div className="filters-section">
+      {/* Main content with split layout */}
+      <div className={`targets-content-wrapper ${isPanelOpen ? 'panel-open' : ''}`}>
+        <div className="targets-main-content">
+          {/* Filtri */}
+          <div className="filters-section">
         <div className="filter-group">
           <label>Cerca</label>
           <input
@@ -590,8 +593,8 @@ const Targets: React.FC = () => {
         )}
       </div>
 
-      {/* Targets Table */}
-      <div className="targets-table-container">
+          {/* Targets Table */}
+          <div className="targets-table-container">
         <table className="targets-table">
           <thead>
             <tr>
@@ -699,7 +702,24 @@ const Targets: React.FC = () => {
               ))
             )}
           </tbody>
-        </table>
+            </table>
+          </div>
+        </div>
+
+        {/* Collapsible Terminal Panel - Right Sidebar */}
+        <CollapsibleTerminalPanel
+          isOpen={isPanelOpen}
+          onClose={handleClosePanel}
+          title={`Installation Progress ${queuedTargets.length > 0 ? `(${queuedTargets.length} in queue)` : ''}`}
+        >
+          <TabbedTerminalManager
+            operations={terminalOperations}
+            onOperationComplete={handleOperationComplete}
+            onOperationError={handleOperationError}
+            onCloseOperation={handleCloseOperation}
+            onUpdateOperation={handleUpdateOperation}
+          />
+        </CollapsibleTerminalPanel>
       </div>
 
       {/* Add Target Modal */}
@@ -768,21 +788,6 @@ const Targets: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Collapsible Terminal Panel */}
-      <CollapsibleTerminalPanel
-        isOpen={isPanelOpen}
-        onClose={handleClosePanel}
-        title={`Installation Progress ${queuedTargets.length > 0 ? `(${queuedTargets.length} in queue)` : ''}`}
-      >
-        <TabbedTerminalManager
-          operations={terminalOperations}
-          onOperationComplete={handleOperationComplete}
-          onOperationError={handleOperationError}
-          onCloseOperation={handleCloseOperation}
-          onUpdateOperation={handleUpdateOperation}
-        />
-      </CollapsibleTerminalPanel>
     </div>
   );
 };

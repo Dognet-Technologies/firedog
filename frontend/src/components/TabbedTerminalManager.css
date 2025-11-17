@@ -6,6 +6,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  flex: 1;
+  min-height: 0;
   background: var(--card-bg, #1e1e1e);
 }
 
@@ -197,7 +199,7 @@
   flex: 1;
   position: relative;
   overflow: hidden;
-  height: 480px; /* Fixed height for terminal area */
+  min-height: 0;
 }
 
 .terminal-tab-content {
@@ -265,9 +267,5 @@
 
   .max-tabs-warning {
     display: none; /* Hide on mobile to save space */
-  }
-
-  .terminals-content {
-    height: 420px;
   }
 }
