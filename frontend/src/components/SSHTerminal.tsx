@@ -29,6 +29,24 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
 
     isMountedRef.current = true;
 
+    // Sopprimi temporaneamente errori xterm durante l'inizializzazione
+    const originalError = console.error;
+    console.error = (...args: any[]) => {
+      // Filtra errori xterm comuni durante l'inizializzazione
+      const message = args[0]?.toString() || '';
+      if (
+        message.includes('xterm') ||
+        message.includes('renderer') ||
+        message.includes('viewport') ||
+        message.includes('fitAddon')
+      ) {
+        // Ignora silenziosamente questi errori
+        return;
+      }
+      // Tutti gli altri errori vengono loggati normalmente
+      originalError.apply(console, args);
+    };
+
     // Crea istanza terminale
     const term = new Terminal({
       cursorBlink: true,
@@ -86,10 +104,17 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
     setTerminal(term);
     setFitAddon(fit);
 
+    // Ripristina console.error dopo un breve delay
+    setTimeout(() => {
+      console.error = originalError;
+    }, 200);
+
     // Cleanup
     return () => {
       clearTimeout(fitTimer);
       isMountedRef.current = false;
+      // Ripristina console.error nel caso non fosse già stato fatto
+      console.error = originalError;
       // Dispose terminale in modo sicuro
       try {
         term.dispose();
