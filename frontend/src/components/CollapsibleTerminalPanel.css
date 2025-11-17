@@ -1,0 +1,140 @@
+/**
+ * Collapsible Terminal Panel Styles
+ */
+
+.collapsible-terminal-panel {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--card-bg, #1e1e1e);
+  border-top: 2px solid var(--border-color, #333);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+  z-index: 900;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-top: 2rem;
+}
+
+.collapsible-terminal-panel.expanded {
+  max-height: 500px;
+}
+
+.collapsible-terminal-panel.collapsed {
+  max-height: 50px;
+}
+
+/* Header */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #2a2a2a 0%, #1e1e1e 100%);
+  border-bottom: 1px solid var(--border-color, #333);
+  user-select: none;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.expand-toggle {
+  background: transparent;
+  border: none;
+  padding: 0.25rem;
+  cursor: pointer;
+  color: var(--text-secondary, #888);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.expand-toggle:hover {
+  color: var(--text-primary, #fff);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.expand-icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+  transition: transform 0.3s;
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.terminal-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--primary-color, #4a9eff);
+  stroke-width: 2;
+}
+
+.panel-title h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.panel-close {
+  background: transparent;
+  border: none;
+  padding: 0.5rem;
+  cursor: pointer;
+  color: var(--text-secondary, #888);
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+
+.panel-close:hover {
+  color: var(--danger-color, #f44336);
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.panel-close svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+
+/* Content */
+.panel-content {
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.panel-content.visible {
+  max-height: 450px;
+  opacity: 1;
+}
+
+.panel-content.hidden {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .collapsible-terminal-panel.expanded {
+    max-height: 70vh;
+  }
+
+  .panel-content.visible {
+    max-height: calc(70vh - 50px);
+  }
+
+  .panel-header {
+    padding: 0.5rem 1rem;
+  }
+
+  .panel-title h3 {
+    font-size: 0.9rem;
+  }
+}

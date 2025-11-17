@@ -6,7 +6,8 @@ import apiService from '../services/api';
 import type { Target, TargetCreate } from '../types';
 import './Targets.css';
 import { useNotifications } from '../contexts/NotificationContext';
-import SSHTerminal from '../components/SSHTerminal';
+import CollapsibleTerminalPanel from '../components/CollapsibleTerminalPanel';
+import TabbedTerminalManager, { TerminalOperation } from '../components/TabbedTerminalManager';
 
 type SortField = 'ip_address' | 'hostname' | 'firedog_version' | 'last_seen' | 'status' | 'gruppo';
 type SortDirection = 'asc' | 'desc';
@@ -36,8 +37,6 @@ const Targets: React.FC = () => {
   const { showToast, showConfirm } = useNotifications();
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [showTerminal, setShowTerminal] = useState(false);
-  const [terminalTargetId, setTerminalTargetId] = useState<number | null>(null);
   const [sortField, setSortField] = useState<SortField>('ip_address');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [filterGruppo, setFilterGruppo] = useState<string>('');
@@ -50,34 +49,35 @@ const Targets: React.FC = () => {
     group_ids: [],
   });
 
-  // Group installation state
-  const [groupInstallQueue, setGroupInstallQueue] = useState<number[]>([]);
-  const [currentGroupInstallIndex, setCurrentGroupInstallIndex] = useState(0);
-  const [isGroupInstalling, setIsGroupInstalling] = useState(false);
+  // Terminal operations state (max 5 parallel)
+  const [terminalOperations, setTerminalOperations] = useState<TerminalOperation[]>([]);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [queuedTargets, setQueuedTargets] = useState<Target[]>([]);
 
   useEffect(() => {
     loadTargets();
     loadGroups();
   }, []);
 
-  // Gestisce la coda di installazione di gruppo
+  // Auto-fill slots when operations complete and queue has items
   useEffect(() => {
-    if (isGroupInstalling && groupInstallQueue.length > 0 && currentGroupInstallIndex < groupInstallQueue.length) {
-      const currentTargetId = groupInstallQueue[currentGroupInstallIndex];
-      setTerminalTargetId(currentTargetId);
-      setShowTerminal(true);
-    } else if (isGroupInstalling && currentGroupInstallIndex >= groupInstallQueue.length) {
-      // Installazione gruppo completata
-      setIsGroupInstalling(false);
-      setGroupInstallQueue([]);
-      setCurrentGroupInstallIndex(0);
-      showToast({
-        type: 'success',
-        title: 'Installazione Gruppo Completata',
-        message: `FireDog è stato installato su tutti i ${groupInstallQueue.length} target del gruppo`
-      });
+    if (queuedTargets.length > 0 && terminalOperations.length < 5) {
+      const slotsAvailable = 5 - terminalOperations.length;
+      const targetsToAdd = queuedTargets.slice(0, slotsAvailable);
+      const remainingQueue = queuedTargets.slice(slotsAvailable);
+
+      const newOperations: TerminalOperation[] = targetsToAdd.map(target => ({
+        id: `op-${Date.now()}-${Math.random()}`,
+        target,
+        type: target.firedog_version ? 'reinstall' : 'install',
+        status: 'running',
+        requiresFocus: false
+      }));
+
+      setTerminalOperations(prev => [...prev, ...newOperations]);
+      setQueuedTargets(remainingQueue);
     }
-  }, [isGroupInstalling, currentGroupInstallIndex, groupInstallQueue]);
+  }, [queuedTargets, terminalOperations]);
 
   const loadTargets = async () => {
     try {
@@ -167,18 +167,44 @@ const Targets: React.FC = () => {
 
   const handleInstall = async (id: number) => {
     const target = targets.find(t => t.id === id);
-    const isReinstall = target?.firedog_version != null;
+    if (!target) return;
+
+    const isReinstall = target.firedog_version != null;
+
+    // Check if we can add more operations
+    if (terminalOperations.length >= 5) {
+      showToast({
+        type: 'warning',
+        title: 'Troppi Operazioni',
+        message: 'Max 5 installazioni parallele. Completa o chiudi alcune operazioni prima di procedere.'
+      });
+      return;
+    }
 
     showConfirm({
       title: isReinstall ? 'Conferma Reinstallazione' : 'Conferma Installazione',
       message: isReinstall
         ? 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse.'
         : 'Vuoi installare FireDog su questo target? Assicurati di avere la password sudo del target.',
-      confirmText: 'Apri Terminale',
+      confirmText: 'Avvia Installazione',
       cancelText: 'Annulla',
       onConfirm: () => {
-        setTerminalTargetId(id);
-        setShowTerminal(true);
+        const newOperation: TerminalOperation = {
+          id: `op-${Date.now()}-${Math.random()}`,
+          target,
+          type: isReinstall ? 'reinstall' : 'install',
+          status: 'running',
+          requiresFocus: false
+        };
+
+        setTerminalOperations(prev => [...prev, newOperation]);
+        setIsPanelOpen(true);
+
+        showToast({
+          type: 'info',
+          title: 'Installazione Avviata',
+          message: `Installazione su ${target.hostname || target.ip_address} avviata`
+        });
       }
     });
   };
@@ -197,35 +223,64 @@ const Targets: React.FC = () => {
       return;
     }
 
-    const targetIds = groupTargets.map(t => t.id);
-    const gruppoLabel = filterGruppo; // filterGruppo contiene già il nome del gruppo
+    const gruppoLabel = filterGruppo;
 
     // Alert se > 5 target
     if (groupTargets.length > 5) {
       showConfirm({
         title: 'Installazione su Gruppo',
-        message: `Stai per installare FireDog su ${groupTargets.length} target del gruppo "${gruppoLabel}".\n\n⚠️ CONSIGLIO: Per accelerare l'installazione, configura prima l'accesso sudo NOPASSWD su tutti i target.\n\nSenza questa configurazione, dovrai inserire la password manualmente per ogni target (installazione sequenziale).\n\nVuoi procedere comunque?`,
+        message: `Stai per installare FireDog su ${groupTargets.length} target del gruppo "${gruppoLabel}".\n\n✓ Verranno eseguite max 5 installazioni in parallelo\n⚠️ CONSIGLIO: Configura sudo NOPASSWD per accelerare il processo\n\nVuoi procedere?`,
         confirmText: 'Procedi con Installazione',
         cancelText: 'Annulla',
         type: 'warning',
         onConfirm: () => {
-          setGroupInstallQueue(targetIds);
-          setCurrentGroupInstallIndex(0);
-          setIsGroupInstalling(true);
-          // Il terminale verrà aperto dal useEffect
+          // Primi 5 vanno subito nelle operazioni attive
+          const batch = groupTargets.slice(0, 5);
+          const queued = groupTargets.slice(5);
+
+          const newOperations: TerminalOperation[] = batch.map(target => ({
+            id: `op-${Date.now()}-${Math.random()}`,
+            target,
+            type: target.firedog_version ? 'reinstall' : 'install',
+            status: 'running',
+            requiresFocus: false
+          }));
+
+          setTerminalOperations(newOperations);
+          setQueuedTargets(queued);
+          setIsPanelOpen(true);
+
+          showToast({
+            type: 'info',
+            title: 'Installazione Gruppo Avviata',
+            message: `Installazione su ${batch.length} target in parallelo. ${queued.length} in coda.`
+          });
         }
       });
     } else {
-      // ≤ 5 target: procedi direttamente
+      // ≤ 5 target: tutti in parallelo
       showConfirm({
         title: 'Installazione su Gruppo',
-        message: `Vuoi installare FireDog su ${groupTargets.length} target del gruppo "${gruppoLabel}"?\n\nL'installazione procederà in sequenza con terminale interattivo per ogni target.`,
+        message: `Vuoi installare FireDog su ${groupTargets.length} target del gruppo "${gruppoLabel}"?\n\nTutti i target verranno processati in parallelo.`,
         confirmText: 'Inizia Installazione',
         cancelText: 'Annulla',
         onConfirm: () => {
-          setGroupInstallQueue(targetIds);
-          setCurrentGroupInstallIndex(0);
-          setIsGroupInstalling(true);
+          const newOperations: TerminalOperation[] = groupTargets.map(target => ({
+            id: `op-${Date.now()}-${Math.random()}`,
+            target,
+            type: target.firedog_version ? 'reinstall' : 'install',
+            status: 'running',
+            requiresFocus: false
+          }));
+
+          setTerminalOperations(newOperations);
+          setIsPanelOpen(true);
+
+          showToast({
+            type: 'info',
+            title: 'Installazione Gruppo Avviata',
+            message: `Installazione su ${groupTargets.length} target in parallelo`
+          });
         }
       });
     }
@@ -256,6 +311,76 @@ const Targets: React.FC = () => {
         }
       }
     });
+  };
+
+  // Terminal operation handlers
+  const handleOperationComplete = (operationId: string) => {
+    const operation = terminalOperations.find(op => op.id === operationId);
+
+    if (operation) {
+      showToast({
+        type: 'success',
+        title: 'Installazione Completata',
+        message: `${operation.target.hostname || operation.target.ip_address} installato con successo`
+      });
+    }
+
+    // Rimuovi l'operazione completata
+    setTerminalOperations(prev => prev.filter(op => op.id !== operationId));
+    loadTargets();
+
+    // Se non ci sono più operazioni e la coda è vuota, chiudi il panel
+    if (terminalOperations.length === 1 && queuedTargets.length === 0) {
+      setTimeout(() => setIsPanelOpen(false), 1000);
+    }
+  };
+
+  const handleOperationError = (operationId: string) => {
+    const operation = terminalOperations.find(op => op.id === operationId);
+
+    if (operation) {
+      showToast({
+        type: 'error',
+        title: 'Errore Installazione',
+        message: `Errore su ${operation.target.hostname || operation.target.ip_address}`
+      });
+    }
+  };
+
+  const handleCloseOperation = (operationId: string) => {
+    setTerminalOperations(prev => prev.filter(op => op.id !== operationId));
+
+    // Se non ci sono più operazioni, chiudi il panel
+    if (terminalOperations.length === 1 && queuedTargets.length === 0) {
+      setIsPanelOpen(false);
+      setQueuedTargets([]); // Clear queue
+    }
+  };
+
+  const handleUpdateOperation = (operationId: string, updates: Partial<TerminalOperation>) => {
+    setTerminalOperations(prev =>
+      prev.map(op => (op.id === operationId ? { ...op, ...updates } : op))
+    );
+  };
+
+  const handleClosePanel = () => {
+    if (terminalOperations.length > 0) {
+      showConfirm({
+        title: 'Chiudi Panel',
+        message: 'Ci sono operazioni in corso. Sei sicuro di voler chiudere? Le operazioni verranno interrotte.',
+        confirmText: 'Chiudi',
+        cancelText: 'Annulla',
+        type: 'warning',
+        onConfirm: () => {
+          setTerminalOperations([]);
+          setQueuedTargets([]);
+          setIsPanelOpen(false);
+        }
+      });
+    } else {
+      setIsPanelOpen(false);
+      setQueuedTargets([]);
+    }
   };
 
   // Funzione ordinamento
@@ -451,15 +576,15 @@ const Targets: React.FC = () => {
           <button
             onClick={handleInstallGroup}
             className="btn-primary btn-install-group"
-            disabled={isGroupInstalling}
+            disabled={terminalOperations.length >= 5}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            {isGroupInstalling
-              ? `Installing ${currentGroupInstallIndex + 1}/${groupInstallQueue.length}...`
+            {terminalOperations.length > 0
+              ? `Installing (${terminalOperations.length} active)...`
               : `Install on Group (${filteredAndSortedTargets.length})`}
           </button>
         )}
@@ -644,54 +769,20 @@ const Targets: React.FC = () => {
         </div>
       )}
 
-      {/* SSH Terminal Modal */}
-      {showTerminal && terminalTargetId && (
-        <SSHTerminal
-          targetId={terminalTargetId}
-          onClose={() => {
-            setShowTerminal(false);
-            setTerminalTargetId(null);
-            if (isGroupInstalling) {
-              // Annulla installazione gruppo
-              setIsGroupInstalling(false);
-              setGroupInstallQueue([]);
-              setCurrentGroupInstallIndex(0);
-            }
-          }}
-          onInstallComplete={() => {
-            loadTargets();
-
-            if (isGroupInstalling) {
-              // Installazione di gruppo: passa al prossimo target
-              const nextIndex = currentGroupInstallIndex + 1;
-              const currentTarget = targets.find(t => t.id === terminalTargetId);
-
-              showToast({
-                type: 'success',
-                title: `Target ${nextIndex}/${groupInstallQueue.length} Completato`,
-                message: `${currentTarget?.hostname || currentTarget?.ip_address} installato con successo`
-              });
-
-              setShowTerminal(false);
-              setTerminalTargetId(null);
-
-              // Passa al prossimo dopo un breve delay
-              setTimeout(() => {
-                setCurrentGroupInstallIndex(nextIndex);
-              }, 500);
-            } else {
-              // Installazione singola: chiudi normalmente
-              setShowTerminal(false);
-              setTerminalTargetId(null);
-              showToast({
-                type: 'success',
-                title: 'Installazione completata',
-                message: 'FireDog è stato installato con successo sul target'
-              });
-            }
-          }}
+      {/* Collapsible Terminal Panel */}
+      <CollapsibleTerminalPanel
+        isOpen={isPanelOpen}
+        onClose={handleClosePanel}
+        title={`Installation Progress ${queuedTargets.length > 0 ? `(${queuedTargets.length} in queue)` : ''}`}
+      >
+        <TabbedTerminalManager
+          operations={terminalOperations}
+          onOperationComplete={handleOperationComplete}
+          onOperationError={handleOperationError}
+          onCloseOperation={handleCloseOperation}
+          onUpdateOperation={handleUpdateOperation}
         />
-      )}
+      </CollapsibleTerminalPanel>
     </div>
   );
 };
