@@ -29,24 +29,6 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
 
     isMountedRef.current = true;
 
-    // Sopprimi temporaneamente errori xterm durante l'inizializzazione
-    const originalError = console.error;
-    console.error = (...args: any[]) => {
-      // Filtra errori xterm comuni durante l'inizializzazione
-      const message = args[0]?.toString() || '';
-      if (
-        message.includes('xterm') ||
-        message.includes('renderer') ||
-        message.includes('viewport') ||
-        message.includes('fitAddon')
-      ) {
-        // Ignora silenziosamente questi errori
-        return;
-      }
-      // Tutti gli altri errori vengono loggati normalmente
-      originalError.apply(console, args);
-    };
-
     // Crea istanza terminale
     const term = new Terminal({
       cursorBlink: true,
@@ -87,34 +69,50 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
     term.open(terminalRef.current);
 
     // Aspetta che il renderer sia completamente inizializzato
-    // Usa un delay leggermente più lungo per garantire che xterm sia pronto
-    const fitTimer = setTimeout(() => {
-      if (isMountedRef.current && terminalRef.current) {
-        try {
-          // Verifica che il terminale abbia il renderer inizializzato
-          if ((term as any)._core?.viewport) {
-            fit.fit();
-          }
-        } catch (e) {
-          // Ignora silenziosamente - il terminale potrebbe essere stato smontato
+    // Usa un approccio con retry per garantire che xterm sia pronto
+    let fitTimer: NodeJS.Timeout | null = null;
+    let attempts = 0;
+    const maxAttempts = 20; // Max 2 secondi (20 * 100ms)
+
+    const tryFit = () => {
+      if (!isMountedRef.current || !terminalRef.current) return;
+
+      attempts++;
+
+      try {
+        // Verifica che TUTTO sia inizializzato: renderer, viewport, e dimensions
+        const core = (term as any)._core;
+        const hasRenderer = core?._renderService?._renderer?.value;
+        const hasViewport = core?.viewport;
+
+        if (hasRenderer && hasViewport) {
+          // Tutto pronto, possiamo fare fit
+          fit.fit();
+        } else if (attempts < maxAttempts) {
+          // Non ancora pronto, riprova
+          fitTimer = setTimeout(tryFit, 100);
+        }
+        // Altrimenti abbandona silenziosamente (terminale non si è inizializzato in tempo)
+      } catch (e) {
+        // Se fallisce e non abbiamo superato i tentativi, riprova
+        if (attempts < maxAttempts) {
+          fitTimer = setTimeout(tryFit, 100);
         }
       }
-    }, 100);
+    };
+
+    // Inizia a provare dopo che il DOM è stato aggiornato
+    requestAnimationFrame(() => {
+      fitTimer = setTimeout(tryFit, 100);
+    });
 
     setTerminal(term);
     setFitAddon(fit);
 
-    // Ripristina console.error dopo un breve delay
-    setTimeout(() => {
-      console.error = originalError;
-    }, 200);
-
     // Cleanup
     return () => {
-      clearTimeout(fitTimer);
+      if (fitTimer) clearTimeout(fitTimer);
       isMountedRef.current = false;
-      // Ripristina console.error nel caso non fosse già stato fatto
-      console.error = originalError;
       // Dispose terminale in modo sicuro
       try {
         term.dispose();
@@ -135,8 +133,12 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
         if (!isMountedRef.current || !terminalRef.current) return;
 
         try {
-          // Verifica che il renderer esista prima di chiamare fit()
-          if ((terminal as any)._core?.viewport && fitAddon) {
+          // Verifica che il renderer E viewport esistano prima di chiamare fit()
+          const core = (terminal as any)._core;
+          const hasRenderer = core?._renderService?._renderer?.value;
+          const hasViewport = core?.viewport;
+
+          if (hasRenderer && hasViewport && fitAddon) {
             fitAddon.fit();
 
             // Invia nuovo dimensionamento al backend
