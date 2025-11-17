@@ -43,8 +43,8 @@ class SSHTerminalManager:
         
     def connect(self) -> bool:
         """
-        Stabilisce connessione SSH
-        Supporta autenticazione con password (per prima installazione) o chiave pubblica
+        Stabilisce connessione SSH con fallback automatico
+        Tenta prima autenticazione con chiave pubblica, poi con password se disponibile
 
         Returns:
             bool: True se connessione riuscita
@@ -53,29 +53,14 @@ class SSHTerminalManager:
             self.client = paramiko.SSHClient()
             self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-            # Determina metodo autenticazione
-            if self.password:
-                # Autenticazione con password (prima installazione)
-                logger.info(f"Connessione terminale SSH a {self.username}@{self.host}:{self.port} (password auth)")
-                self.client.connect(
-                    hostname=self.host,
-                    port=self.port,
-                    username=self.username,
-                    password=self.password,
-                    timeout=self.timeout,
-                    allow_agent=False,
-                    look_for_keys=False,
-                    compress=True
-                )
-            else:
-                # Autenticazione con chiave pubblica (normale)
-                try:
-                    private_key = paramiko.Ed25519Key.from_private_key_file(self.key_path)
-                except Exception as e:
-                    logger.error(f"Errore caricamento chiave: {e}")
-                    return False
+            # TENTATIVO 1: Autenticazione con chiave pubblica
+            auth_success = False
 
-                logger.info(f"Connessione terminale SSH a {self.username}@{self.host}:{self.port} (key auth)")
+            # Prova sempre prima con la chiave (se disponibile)
+            try:
+                private_key = paramiko.Ed25519Key.from_private_key_file(self.key_path)
+                logger.info(f"Connessione terminale SSH a {self.username}@{self.host}:{self.port} (tentativo key auth)")
+
                 self.client.connect(
                     hostname=self.host,
                     port=self.port,
@@ -87,9 +72,77 @@ class SSHTerminalManager:
                     compress=True
                 )
 
-            logger.info(f"Connessione terminale stabilita con {self.host}")
-            return True
+                logger.info(f"✓ Autenticazione con chiave pubblica riuscita per {self.host}")
+                auth_success = True
 
+            except paramiko.AuthenticationException as auth_err:
+                logger.warning(f"✗ Autenticazione con chiave fallita: {auth_err}")
+
+                # TENTATIVO 2: Fallback a password se disponibile
+                if self.password:
+                    logger.info(f"Tentativo fallback autenticazione con password per {self.host}")
+                    try:
+                        # Ricrea client per nuovo tentativo
+                        self.client.close()
+                        self.client = paramiko.SSHClient()
+                        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+                        self.client.connect(
+                            hostname=self.host,
+                            port=self.port,
+                            username=self.username,
+                            password=self.password,
+                            timeout=self.timeout,
+                            allow_agent=False,
+                            look_for_keys=False,
+                            compress=True
+                        )
+
+                        logger.info(f"✓ Autenticazione con password riuscita per {self.host}")
+                        auth_success = True
+
+                    except paramiko.AuthenticationException as pwd_err:
+                        logger.error(f"✗ Autenticazione con password fallita: {pwd_err}")
+                        return False
+                else:
+                    logger.error(f"✗ Nessuna password disponibile per fallback")
+                    return False
+
+            except FileNotFoundError:
+                logger.warning(f"✗ Chiave privata non trovata: {self.key_path}")
+
+                # Prova direttamente con password se disponibile
+                if self.password:
+                    logger.info(f"Tentativo autenticazione diretta con password per {self.host}")
+                    self.client.connect(
+                        hostname=self.host,
+                        port=self.port,
+                        username=self.username,
+                        password=self.password,
+                        timeout=self.timeout,
+                        allow_agent=False,
+                        look_for_keys=False,
+                        compress=True
+                    )
+                    logger.info(f"✓ Autenticazione con password riuscita per {self.host}")
+                    auth_success = True
+                else:
+                    logger.error("✗ Chiave non trovata e nessuna password disponibile")
+                    return False
+
+            if auth_success:
+                logger.info(f"Connessione terminale stabilita con {self.host}")
+                return True
+            else:
+                logger.error(f"Autenticazione fallita per {self.host}")
+                return False
+
+        except paramiko.SSHException as ssh_err:
+            logger.error(f"Errore SSH: {ssh_err}")
+            return False
+        except socket.error as sock_err:
+            logger.error(f"Errore di rete: {sock_err}")
+            return False
         except Exception as e:
             logger.error(f"Errore connessione terminale: {e}")
             return False

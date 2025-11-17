@@ -135,9 +135,12 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
             
             # Connetti SSH
             connected = await sync_to_async(self.ssh_manager.connect)()
-            
+
             if not connected:
-                await self.send_error("Connessione SSH fallita")
+                await self.send_error(
+                    "Connessione SSH fallita - Autenticazione con chiave pubblica non riuscita. "
+                    "Verifica che la chiave SSH sia configurata correttamente sul target."
+                )
                 return
             
             # Avvia shell interattiva
@@ -224,8 +227,19 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
             try:
                 connected = await sync_to_async(self.ssh_manager.connect)()
                 if not connected:
-                    await self.send_error("Connessione SSH fallita")
-                    await self.update_target_status('error', 'Connection failed')
+                    # Messaggio di errore dettagliato
+                    if not ssh_password:
+                        await self.send_error(
+                            "\r\n\x1b[31m✗ Connessione SSH fallita\x1b[0m\r\n"
+                            "\x1b[33m⚠️  Autenticazione con chiave pubblica non riuscita\x1b[0m\r\n"
+                            "\x1b[33m⚠️  Per la prima installazione, fornisci la password SSH\x1b[0m\r\n"
+                        )
+                    else:
+                        await self.send_error(
+                            "\r\n\x1b[31m✗ Connessione SSH fallita\x1b[0m\r\n"
+                            "\x1b[33m⚠️  Verifica le credenziali SSH (chiave o password)\x1b[0m\r\n"
+                        )
+                    await self.update_target_status('error', 'SSH authentication failed')
                     return
 
                 await self.send_output("\x1b[32m  ✓ Connessione SSH stabilita\x1b[0m\r\n\r\n")
