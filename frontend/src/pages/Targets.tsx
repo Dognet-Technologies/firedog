@@ -42,12 +42,12 @@ const Targets: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [filterGruppo, setFilterGruppo] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [formData, setFormData] = useState<TargetCreate & { gruppo?: string; gruppo_custom?: string }>({
+  const [availableGroups, setAvailableGroups] = useState<any[]>([]);
+  const [formData, setFormData] = useState<TargetCreate & { group_ids?: number[] }>({
     ip_address: '',
     hostname: '',
     description: '',
-    gruppo: '',
-    gruppo_custom: '',
+    group_ids: [],
   });
 
   // Group installation state
@@ -57,6 +57,7 @@ const Targets: React.FC = () => {
 
   useEffect(() => {
     loadTargets();
+    loadGroups();
   }, []);
 
   // Gestisce la coda di installazione di gruppo
@@ -94,28 +95,31 @@ const Targets: React.FC = () => {
     }
   };
 
+  const loadGroups = async () => {
+    try {
+      const groups = await apiService.getGroups();
+      setAvailableGroups(groups);
+    } catch (error) {
+      console.error('Error loading groups:', error);
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile caricare i gruppi'
+      });
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validazione gruppo custom
-    if (formData.gruppo === 'custom' && !formData.gruppo_custom?.trim()) {
-      showToast({
-        type: 'warning',
-        title: 'Attenzione',
-        message: 'Specifica il nome del gruppo personalizzato'
-      });
-      return;
-    }
-    
+
     try {
       await apiService.createTarget(formData);
       setShowModal(false);
-      setFormData({ 
-        ip_address: '', 
-        hostname: '', 
+      setFormData({
+        ip_address: '',
+        hostname: '',
         description: '',
-        gruppo: '',
-        gruppo_custom: ''
+        group_ids: []
       });
       showToast({
         type: 'success',
@@ -180,7 +184,9 @@ const Targets: React.FC = () => {
   };
 
   const handleInstallGroup = () => {
-    const groupTargets = filteredAndSortedTargets.filter(t => t.gruppo === filterGruppo);
+    const groupTargets = filteredAndSortedTargets.filter(t =>
+      t.target_groups?.some(g => g.name === filterGruppo)
+    );
 
     if (groupTargets.length === 0) {
       showToast({
@@ -192,7 +198,7 @@ const Targets: React.FC = () => {
     }
 
     const targetIds = groupTargets.map(t => t.id);
-    const gruppoLabel = GRUPPO_OPTIONS.find(g => g.value === filterGruppo)?.label || filterGruppo;
+    const gruppoLabel = filterGruppo; // filterGruppo contiene già il nome del gruppo
 
     // Alert se > 5 target
     if (groupTargets.length > 5) {
@@ -265,12 +271,14 @@ const Targets: React.FC = () => {
   // Filtra e ordina targets
   const filteredAndSortedTargets = targets
     .filter(target => {
-      const matchesSearch = 
+      const matchesSearch =
         target.ip_address.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (target.hostname || '').toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesGruppo = !filterGruppo || target.gruppo === filterGruppo;
-      
+
+      const matchesGruppo = !filterGruppo ||
+        target.target_groups?.some(g => g.name === filterGruppo) ||
+        false;
+
       return matchesSearch && matchesGruppo;
     })
     .sort((a, b) => {
@@ -299,8 +307,8 @@ const Targets: React.FC = () => {
           bValue = b.status;
           break;
         case 'gruppo':
-          aValue = a.gruppo_display || '';
-          bValue = b.gruppo_display || '';
+          aValue = a.target_groups?.[0]?.name || '';
+          bValue = b.target_groups?.[0]?.name || '';
           break;
         default:
           return 0;
@@ -346,29 +354,21 @@ const Targets: React.FC = () => {
 
   // Badge gruppo
   const getGruppoBadge = (target: Target) => {
-    const hasStaticGruppo = target.gruppo && target.gruppo.trim() !== '';
     const hasTargetGroups = target.target_groups && target.target_groups.length > 0;
 
-    if (!hasStaticGruppo && !hasTargetGroups) {
+    if (!hasTargetGroups) {
       return <span className="gruppo-badge gruppo-none">—</span>;
     }
 
     return (
       <div className="gruppo-badges-container">
-        {/* Campo gruppo statico */}
-        {hasStaticGruppo && (
-          <span className={`gruppo-badge gruppo-${target.gruppo}`}>
-            {target.gruppo_display || target.gruppo}
-          </span>
-        )}
-
-        {/* TargetGroups dalla tab Groups */}
-        {hasTargetGroups && target.target_groups!.map((group) => (
+        {/* TargetGroups */}
+        {target.target_groups!.map((group) => (
           <span
             key={group.id}
             className="gruppo-badge gruppo-targetgroup"
             style={{ backgroundColor: group.color + '20', borderColor: group.color, color: group.color }}
-            title={`TargetGroup: ${group.name}`}
+            title={`Gruppo: ${group.name}`}
           >
             {group.name}
           </span>
@@ -435,8 +435,9 @@ const Targets: React.FC = () => {
             onChange={(e) => setFilterGruppo(e.target.value)}
             className="filter-select"
           >
-            {GRUPPO_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <option value="">Tutti i gruppi</option>
+            {availableGroups.map(group => (
+              <option key={group.id} value={group.name}>{group.name}</option>
             ))}
           </select>
         </div>
@@ -605,28 +606,22 @@ const Targets: React.FC = () => {
                 />
               </div>
               <div className="form-group">
-                <label>Gruppo</label>
+                <label>Gruppi (seleziona uno o più)</label>
                 <select
-                  value={formData.gruppo || ''}
-                  onChange={e => setFormData({...formData, gruppo: e.target.value})}
+                  multiple
+                  value={formData.group_ids?.map(String) || []}
+                  onChange={e => {
+                    const selected = Array.from(e.target.selectedOptions, option => parseInt(option.value));
+                    setFormData({...formData, group_ids: selected});
+                  }}
+                  style={{ minHeight: '120px' }}
                 >
-                  {GRUPPO_OPTIONS.slice(1).map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  {availableGroups.map(group => (
+                    <option key={group.id} value={group.id}>{group.name}</option>
                   ))}
                 </select>
+                <small style={{ color: '#888' }}>Tieni premuto Ctrl (Cmd su Mac) per selezionare più gruppi</small>
               </div>
-              {formData.gruppo === 'custom' && (
-                <div className="form-group">
-                  <label>Nome Gruppo Personalizzato <span className="required">*</span></label>
-                  <input
-                    type="text"
-                    value={formData.gruppo_custom || ''}
-                    onChange={e => setFormData({...formData, gruppo_custom: e.target.value})}
-                    placeholder="es: IoT Devices"
-                    required
-                  />
-                </div>
-              )}
               <div className="form-group">
                 <label>Description</label>
                 <textarea

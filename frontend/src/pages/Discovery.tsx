@@ -76,9 +76,9 @@ const Discovery: React.FC = () => {
     ip_address: '',
     hostname: '',
     description: '',
-    gruppo: '',
-    gruppo_custom: ''
+    group_ids: [] as number[]
   });
+  const [availableGroups, setAvailableGroups] = useState<any[]>([]);
 
   // Groups state (NEW)
   const [groups, setGroups] = useState<TargetGroup[]>([]);
@@ -96,6 +96,7 @@ const Discovery: React.FC = () => {
   // Load data on mount
   useEffect(() => {
     loadDiscoveredHosts();
+    loadGroups();
   }, []);
 
   // Load groups when tab changes
@@ -139,6 +140,20 @@ const Discovery: React.FC = () => {
       setDiscoveredHosts(hosts);
     } catch (error) {
       console.error('Error loading discovered hosts:', error);
+    }
+  };
+
+  const loadGroups = async () => {
+    try {
+      const groupsData = await apiService.getGroups();
+      setAvailableGroups(groupsData);
+    } catch (error) {
+      console.error('Error loading groups:', error);
+      showToast({
+        type: 'error',
+        title: 'Errore',
+        message: 'Impossibile caricare i gruppi'
+      });
     }
   };
 
@@ -335,20 +350,10 @@ const Discovery: React.FC = () => {
       return;
     }
 
-    // Validazione gruppo custom
-    if (manualForm.gruppo === 'custom' && !manualForm.gruppo_custom?.trim()) {
-      showToast({
-        type: 'warning',
-        title: 'Attenzione',
-        message: 'Specifica il nome del gruppo personalizzato'
-      });
-      return;
-    }
-
     try {
       setLoading(true);
       await apiService.createTarget(manualForm);
-      
+
       showToast({
         type: 'success',
         title: 'Success',
@@ -359,8 +364,7 @@ const Discovery: React.FC = () => {
         ip_address: '',
         hostname: '',
         description: '',
-        gruppo: '',
-        gruppo_custom: ''
+        group_ids: []
       });
     } catch (error: any) {
       console.error('Error adding target:', error);
@@ -859,37 +863,28 @@ const Discovery: React.FC = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="gruppo">Gruppo Logico</label>
+                  <label htmlFor="groups">Gruppi (seleziona uno o più)</label>
                   <select
-                    id="gruppo"
-                    value={manualForm.gruppo}
-                    onChange={(e) => setManualForm({...manualForm, gruppo: e.target.value, gruppo_custom: ''})}
+                    id="groups"
+                    multiple
+                    value={manualForm.group_ids?.map(String) || []}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.selectedOptions, option => parseInt(option.value));
+                      setManualForm({...manualForm, group_ids: selected});
+                    }}
+                    style={{ minHeight: '120px' }}
                   >
-                    {GRUPPO_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    {availableGroups.map(group => (
+                      <option key={group.id} value={group.id}>{group.name}</option>
                     ))}
                   </select>
-                  <small className="form-hint">Assegna il target a un gruppo per gestione regole centralizzata</small>
+                  <small className="form-hint">Tieni premuto Ctrl (Cmd su Mac) per selezionare più gruppi. Assegna il target a uno o più gruppi per gestione regole centralizzata.</small>
                 </div>
-
-                {manualForm.gruppo === 'custom' && (
-                  <div className="form-group">
-                    <label htmlFor="gruppo_custom">Nome Gruppo Personalizzato *</label>
-                    <input
-                      type="text"
-                      id="gruppo_custom"
-                      value={manualForm.gruppo_custom}
-                      onChange={(e) => setManualForm({...manualForm, gruppo_custom: e.target.value})}
-                      placeholder="es. Backend Servers"
-                      required
-                    />
-                  </div>
-                )}
 
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={loading || !manualForm.ip_address || (manualForm.gruppo === 'custom' && !manualForm.gruppo_custom)}
+                  disabled={loading || !manualForm.ip_address}
                 >
                   {loading ? 'Adding...' : 'Add Target'}
                 </button>

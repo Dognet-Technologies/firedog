@@ -8,10 +8,10 @@ per gruppi comuni (Web, DNS, Database, Storage)
 from .models import TargetGroup, GroupRuleTemplate
 
 
-# Template di regole predefiniti
+# Template di regole predefiniti - 10 gruppi
 PREDEFINED_TEMPLATES = {
     'web': {
-        'name': 'Web Servers',
+        'name': 'Web Server',
         'description': 'Server web con HTTP/HTTPS',
         'color': '#3b82f6',  # Blue
         'icon': 'globe',
@@ -42,40 +42,32 @@ PREDEFINED_TEMPLATES = {
             },
         ],
     },
-    'dns': {
-        'name': 'DNS Servers',
-        'description': 'Server DNS per risoluzione nomi',
-        'color': '#10b981',  # Green
-        'icon': 'globe',
+    'firewall': {
+        'name': 'Firewall',
+        'description': 'Firewall e gateway di sicurezza',
+        'color': '#ef4444',  # Red
+        'icon': 'shield',
         'rules': [
             {
-                'name': 'DNS TCP',
-                'protocol': 'tcp',
-                'port': 53,
-                'action': 'ACCEPT',
-                'comment': 'DNS queries (TCP)',
-                'priority': 10,
-            },
-            {
-                'name': 'DNS UDP',
-                'protocol': 'udp',
-                'port': 53,
-                'action': 'ACCEPT',
-                'comment': 'DNS queries (UDP)',
-                'priority': 10,
-            },
-            {
-                'name': 'SSH Access',
+                'name': 'SSH Management',
                 'protocol': 'tcp',
                 'port': 22,
                 'action': 'ACCEPT',
-                'comment': 'Allow SSH for management',
-                'priority': 20,
+                'comment': 'SSH for firewall management',
+                'priority': 10,
+            },
+            {
+                'name': 'HTTPS Management',
+                'protocol': 'tcp',
+                'port': 443,
+                'action': 'ACCEPT',
+                'comment': 'Web management interface',
+                'priority': 10,
             },
         ],
     },
     'database': {
-        'name': 'Database Servers',
+        'name': 'Database',
         'description': 'Server database (MySQL, PostgreSQL, MongoDB)',
         'color': '#f59e0b',  # Orange
         'icon': 'database',
@@ -114,10 +106,98 @@ PREDEFINED_TEMPLATES = {
             },
         ],
     },
-    'storage': {
-        'name': 'Storage Servers',
-        'description': 'Server di storage (SMB, NFS)',
+    'vpn': {
+        'name': 'VPN',
+        'description': 'Server VPN (OpenVPN, WireGuard)',
+        'color': '#10b981',  # Green
+        'icon': 'shield',
+        'rules': [
+            {
+                'name': 'OpenVPN UDP',
+                'protocol': 'udp',
+                'port': 1194,
+                'action': 'ACCEPT',
+                'comment': 'OpenVPN default port',
+                'priority': 10,
+            },
+            {
+                'name': 'WireGuard',
+                'protocol': 'udp',
+                'port': 51820,
+                'action': 'ACCEPT',
+                'comment': 'WireGuard default port',
+                'priority': 10,
+            },
+            {
+                'name': 'SSH Access',
+                'protocol': 'tcp',
+                'port': 22,
+                'action': 'ACCEPT',
+                'comment': 'Allow SSH for management',
+                'priority': 20,
+            },
+        ],
+    },
+    'ssh-bastions': {
+        'name': 'SSH Bastions',
+        'description': 'SSH bastion/jump host per accesso sicuro',
+        'color': '#06b6d4',  # Cyan
+        'icon': 'server',
+        'rules': [
+            {
+                'name': 'SSH Access',
+                'protocol': 'tcp',
+                'port': 22,
+                'action': 'ACCEPT',
+                'comment': 'SSH for bastion access',
+                'priority': 10,
+            },
+        ],
+    },
+    'proxy': {
+        'name': 'Proxy',
+        'description': 'Proxy e load balancer (HAProxy, Nginx)',
         'color': '#8b5cf6',  # Purple
+        'icon': 'layers',
+        'rules': [
+            {
+                'name': 'HTTP Traffic',
+                'protocol': 'tcp',
+                'port': 80,
+                'action': 'ACCEPT',
+                'comment': 'HTTP proxy',
+                'priority': 10,
+            },
+            {
+                'name': 'HTTPS Traffic',
+                'protocol': 'tcp',
+                'port': 443,
+                'action': 'ACCEPT',
+                'comment': 'HTTPS proxy',
+                'priority': 10,
+            },
+            {
+                'name': 'Proxy Alt Port',
+                'protocol': 'tcp',
+                'port': 8080,
+                'action': 'ACCEPT',
+                'comment': 'Alternative proxy port',
+                'priority': 15,
+            },
+            {
+                'name': 'SSH Access',
+                'protocol': 'tcp',
+                'port': 22,
+                'action': 'ACCEPT',
+                'comment': 'Allow SSH for management',
+                'priority': 20,
+            },
+        ],
+    },
+    'storage': {
+        'name': 'Storage',
+        'description': 'Server di storage (SMB, NFS)',
+        'color': '#ec4899',  # Pink
         'icon': 'hard-drive',
         'rules': [
             {
@@ -162,67 +242,27 @@ PREDEFINED_TEMPLATES = {
             },
         ],
     },
-    'mail': {
-        'name': 'Mail Servers',
-        'description': 'Server email (SMTP, IMAP, POP3)',
-        'color': '#ef4444',  # Red
-        'icon': 'server',
+    'dns': {
+        'name': 'DNS',
+        'description': 'Server DNS per risoluzione nomi',
+        'color': '#14b8a6',  # Teal
+        'icon': 'globe',
         'rules': [
             {
-                'name': 'SMTP',
+                'name': 'DNS TCP',
                 'protocol': 'tcp',
-                'port': 25,
+                'port': 53,
                 'action': 'ACCEPT',
-                'comment': 'SMTP mail transfer',
+                'comment': 'DNS queries (TCP)',
                 'priority': 10,
             },
             {
-                'name': 'SMTP Submission',
-                'protocol': 'tcp',
-                'port': 587,
+                'name': 'DNS UDP',
+                'protocol': 'udp',
+                'port': 53,
                 'action': 'ACCEPT',
-                'comment': 'SMTP submission (authenticated)',
+                'comment': 'DNS queries (UDP)',
                 'priority': 10,
-            },
-            {
-                'name': 'SMTPS',
-                'protocol': 'tcp',
-                'port': 465,
-                'action': 'ACCEPT',
-                'comment': 'SMTP over SSL',
-                'priority': 10,
-            },
-            {
-                'name': 'IMAP',
-                'protocol': 'tcp',
-                'port': 143,
-                'action': 'ACCEPT',
-                'comment': 'IMAP mail access',
-                'priority': 15,
-            },
-            {
-                'name': 'IMAPS',
-                'protocol': 'tcp',
-                'port': 993,
-                'action': 'ACCEPT',
-                'comment': 'IMAP over SSL',
-                'priority': 15,
-            },
-            {
-                'name': 'POP3',
-                'protocol': 'tcp',
-                'port': 110,
-                'action': 'ACCEPT',
-                'comment': 'POP3 mail access',
-                'priority': 15,
-            },
-            {
-                'name': 'POP3S',
-                'protocol': 'tcp',
-                'port': 995,
-                'action': 'ACCEPT',
-                'comment': 'POP3 over SSL',
-                'priority': 15,
             },
             {
                 'name': 'SSH Access',
@@ -234,34 +274,66 @@ PREDEFINED_TEMPLATES = {
             },
         ],
     },
-    'monitoring': {
-        'name': 'Monitoring Servers',
-        'description': 'Server di monitoring (Prometheus, Grafana, etc)',
-        'color': '#06b6d4',  # Cyan
-        'icon': 'shield',
+    'cache': {
+        'name': 'Cache',
+        'description': 'Server cache (Redis, Memcached)',
+        'color': '#f97316',  # Orange-red
+        'icon': 'layers',
         'rules': [
             {
-                'name': 'Prometheus',
+                'name': 'Redis',
                 'protocol': 'tcp',
-                'port': 9090,
+                'port': 6379,
                 'action': 'ACCEPT',
-                'comment': 'Prometheus server',
+                'comment': 'Redis cache server',
                 'priority': 10,
             },
             {
-                'name': 'Grafana',
+                'name': 'Memcached',
                 'protocol': 'tcp',
-                'port': 3000,
+                'port': 11211,
                 'action': 'ACCEPT',
-                'comment': 'Grafana dashboard',
+                'comment': 'Memcached server',
                 'priority': 10,
             },
             {
-                'name': 'Node Exporter',
+                'name': 'SSH Access',
                 'protocol': 'tcp',
-                'port': 9100,
+                'port': 22,
                 'action': 'ACCEPT',
-                'comment': 'Prometheus Node Exporter',
+                'comment': 'Allow SSH for management',
+                'priority': 20,
+            },
+        ],
+    },
+    'ldap': {
+        'name': 'LDAP',
+        'description': 'Server LDAP/Active Directory',
+        'color': '#a855f7',  # Purple-light
+        'icon': 'server',
+        'rules': [
+            {
+                'name': 'LDAP',
+                'protocol': 'tcp',
+                'port': 389,
+                'action': 'ACCEPT',
+                'comment': 'LDAP directory service',
+                'priority': 10,
+            },
+            {
+                'name': 'LDAPS',
+                'protocol': 'tcp',
+                'port': 636,
+                'action': 'ACCEPT',
+                'comment': 'LDAP over SSL',
+                'priority': 10,
+            },
+            {
+                'name': 'Kerberos',
+                'protocol': 'tcp',
+                'port': 88,
+                'action': 'ACCEPT',
+                'comment': 'Kerberos authentication',
                 'priority': 15,
             },
             {
@@ -280,21 +352,21 @@ PREDEFINED_TEMPLATES = {
 def create_predefined_group(template_key):
     """
     Crea un gruppo predefinito con le sue regole
-    
+
     Args:
         template_key: Chiave del template ('web', 'dns', 'database', etc)
-    
+
     Returns:
         TargetGroup: Il gruppo creato
-    
+
     Raises:
         ValueError: Se il template non esiste
     """
     if template_key not in PREDEFINED_TEMPLATES:
         raise ValueError(f"Template '{template_key}' not found")
-    
+
     template = PREDEFINED_TEMPLATES[template_key]
-    
+
     # Crea il gruppo (se non esiste già)
     group, created = TargetGroup.objects.get_or_create(
         name=template['name'],
@@ -304,7 +376,7 @@ def create_predefined_group(template_key):
             'icon': template['icon'],
         }
     )
-    
+
     if created:
         # Crea le regole template
         for rule_data in template['rules']:
@@ -312,7 +384,7 @@ def create_predefined_group(template_key):
                 group=group,
                 **rule_data
             )
-    
+
     return group
 
 
@@ -320,19 +392,19 @@ def create_all_predefined_groups():
     """
     Crea tutti i gruppi predefiniti
     Utile per inizializzazione sistema
-    
+
     Returns:
         list: Lista dei gruppi creati
     """
     groups = []
-    
+
     for template_key in PREDEFINED_TEMPLATES.keys():
         try:
             group = create_predefined_group(template_key)
             groups.append(group)
         except Exception as e:
             print(f"Error creating group '{template_key}': {e}")
-    
+
     return groups
 
 
@@ -344,16 +416,16 @@ def get_template_names():
 def get_template_info(template_key):
     """
     Restituisce informazioni su un template
-    
+
     Args:
         template_key: Chiave del template
-    
+
     Returns:
         dict: Informazioni sul template
     """
     if template_key not in PREDEFINED_TEMPLATES:
         return None
-    
+
     template = PREDEFINED_TEMPLATES[template_key]
     return {
         'key': template_key,

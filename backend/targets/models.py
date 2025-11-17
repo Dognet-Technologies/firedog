@@ -80,46 +80,8 @@ class Target(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # ========== GRUPPO LOGICO ==========
-    GRUPPO_CHOICES = [
-        ('web', 'Web Server'),
-        ('db', 'Database'),
-        ('dns', 'DNS Server'),
-        ('storage', 'Storage'),
-        ('mail', 'Mail Server'),
-        ('backup', 'Backup Server'),
-        ('monitoring', 'Monitoring'),
-        ('proxy', 'Proxy/Load Balancer'),
-        ('vpn', 'VPN Gateway'),
-        ('firewall', 'Firewall'),
-        ('application', 'Application Server'),
-        ('cache', 'Cache Server'),
-        ('queue', 'Message Queue'),
-        ('other', 'Altro'),
-        ('custom', 'Personalizzato'),
-    ]
-    
-    gruppo = models.CharField(
-        max_length=50,
-        choices=GRUPPO_CHOICES,
-        blank=True,
-        null=True,
-        db_index=True,
-        help_text='Gruppo logico del target per organizzazione e gestione regole'
-    )
-    
-    gruppo_custom = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True,
-        help_text='Nome gruppo personalizzato se gruppo="custom"'
-    )
-    
-    def get_gruppo_display_name(self):
-        """Ritorna il nome del gruppo da visualizzare"""
-        if self.gruppo == 'custom' and self.gruppo_custom:
-            return self.gruppo_custom
-        return self.get_gruppo_display() if self.gruppo else 'Non assegnato'
+    # NOTE: Gruppi gestiti tramite relazione Many-to-Many con TargetGroup
+    # Vedere modello TargetGroup per la definizione della relazione
 
     class Meta:
         ordering = ['-created_at']
