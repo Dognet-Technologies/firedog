@@ -176,10 +176,11 @@ const SSHTerminal: React.FC<SSHTerminalProps> = ({ targetId, onClose, onInstallC
 
     websocket.onopen = () => {
       console.log('WebSocket connesso');
-      
-      // Invia richiesta connessione SSH al target
+
+      // Invia richiesta installazione FireDog sul target
+      // Questo trigger l'installazione automatica invece di aprire solo una shell
       websocket.send(JSON.stringify({
-        type: 'connect',
+        type: 'install_firedog',
         target_id: targetId,
         width: terminal.cols,
         height: terminal.rows

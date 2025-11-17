@@ -62,33 +62,36 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         """
         Riceve messaggi dal client WebSocket
-        
+
         Args:
             text_data: JSON string con comando
         """
         try:
             message = json.loads(text_data)
             msg_type = message.get('type')
-            
+
             if msg_type == 'connect':
                 await self.handle_connect(message)
-            
+
+            elif msg_type == 'install_firedog':
+                await self.handle_install_firedog(message)
+
             elif msg_type == 'input':
                 await self.handle_input(message)
-            
+
             elif msg_type == 'resize':
                 await self.handle_resize(message)
-            
+
             elif msg_type == 'disconnect':
                 await self.handle_disconnect()
-            
+
             else:
                 logger.warning(f"Tipo messaggio sconosciuto: {msg_type}")
-        
+
         except json.JSONDecodeError as e:
             logger.error(f"Errore parsing JSON: {e}")
             await self.send_error("Invalid JSON format")
-        
+
         except Exception as e:
             logger.exception(f"Errore gestione messaggio: {e}")
             await self.send_error(str(e))
@@ -155,11 +158,208 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
             self.read_task = asyncio.create_task(self.read_ssh_output())
             
             logger.info(f"Terminale SSH avviato per target {target_id}")
-        
+
         except Exception as e:
             logger.exception(f"Errore connessione target {target_id}: {e}")
             await self.send_error(f"Errore: {str(e)}")
-    
+
+    async def handle_install_firedog(self, message):
+        """
+        Gestisce installazione automatica di FireDog sul target
+        Mostra output in tempo reale nel terminale
+
+        Args:
+            message: Dict con target_id
+        """
+        target_id = message.get('target_id')
+
+        if not target_id:
+            await self.send_error("Target ID mancante")
+            return
+
+        try:
+            # Carica target dal database
+            self.target = await self.get_target(target_id)
+
+            if not self.target:
+                await self.send_error(f"Target {target_id} non trovato")
+                return
+
+            # Invia messaggio di benvenuto
+            await self.send_output("\r\n\x1b[1;36m╔══════════════════════════════════════════════════════════╗\x1b[0m\r\n")
+            await self.send_output("\x1b[1;36m║\x1b[0m    \x1b[1;33mFireDog Installation Wizard\x1b[0m                        \x1b[1;36m║\x1b[0m\r\n")
+            await self.send_output("\x1b[1;36m╚══════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n")
+            await self.send_output(f"Target: \x1b[1m{self.target.hostname or self.target.ip_address}\x1b[0m ({self.target.ip_address})\r\n")
+            await self.send_output(f"User: \x1b[1m{self.target.ssh_user}\x1b[0m\r\n\r\n")
+
+            # Aggiorna status del target
+            await self.update_target_status('installing', 'Starting installation...')
+
+            # STEP 1: Connessione SSH
+            await self.send_output("\x1b[1;34m[1/7]\x1b[0m Connessione SSH al target...\r\n")
+
+            from core.ssh_manager import SSHManager
+            ssh = SSHManager(
+                host=self.target.ip_address,
+                port=self.target.ssh_port,
+                username=self.target.ssh_user
+            )
+
+            # Tenta connessione
+            try:
+                await sync_to_async(ssh.connect)()
+                await self.send_output("\x1b[32m  ✓ Connessione SSH stabilita\x1b[0m\r\n\r\n")
+            except Exception as e:
+                await self.send_error(f"Connessione SSH fallita: {str(e)}")
+                await self.update_target_status('error', f'Connection failed: {str(e)}')
+                return
+
+            # STEP 2: Verifica prerequisiti
+            await self.send_output("\x1b[1;34m[2/7]\x1b[0m Verifica prerequisiti...\r\n")
+
+            # Controlla se utente esiste
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(f"id {self.target.ssh_user}")
+            if exit_code != 0:
+                await self.send_error(f"User {self.target.ssh_user} not found on target")
+                await sync_to_async(ssh.disconnect)()
+                await self.update_target_status('error', 'User not found')
+                return
+
+            await self.send_output(f"\x1b[32m  ✓ User {self.target.ssh_user} exists\x1b[0m\r\n")
+
+            # Controlla sudo
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)("sudo -n true 2>&1")
+            has_nopasswd_sudo = (exit_code == 0)
+
+            if has_nopasswd_sudo:
+                await self.send_output("\x1b[32m  ✓ Sudo NOPASSWD configurato\x1b[0m\r\n\r\n")
+            else:
+                await self.send_output("\x1b[33m  ⚠ Sudo richiede password (installazione potrebbe fallire)\x1b[0m\r\n\r\n")
+
+            # STEP 3: Upload pacchetto FireDog
+            await self.send_output("\x1b[1;34m[3/7]\x1b[0m Upload pacchetto FireDog...\r\n")
+
+            from django.conf import settings
+            package_local_path = '/opt/firedog/firedog-package'
+            package_remote_path = '/tmp/firedog-package'
+
+            # Crea directory remota
+            await sync_to_async(ssh.execute_command)(f"mkdir -p {package_remote_path}")
+
+            # Upload package
+            success, message = await sync_to_async(ssh.upload_directory)(package_local_path, package_remote_path)
+
+            if not success:
+                await self.send_error(f"Upload fallito: {message}")
+                await sync_to_async(ssh.disconnect)()
+                await self.update_target_status('error', 'Upload failed')
+                return
+
+            await self.send_output("\x1b[32m  ✓ Pacchetto caricato\x1b[0m\r\n\r\n")
+
+            # STEP 4: Configura permessi esecuzione
+            await self.send_output("\x1b[1;34m[4/7]\x1b[0m Configurazione permessi...\r\n")
+
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(
+                f"chmod +x {package_remote_path}/*.sh {package_remote_path}/bin/* 2>&1"
+            )
+
+            if exit_code == 0:
+                await self.send_output("\x1b[32m  ✓ Permessi configurati\x1b[0m\r\n\r\n")
+            else:
+                await self.send_output(f"\x1b[33m  ⚠ Warning: {stderr}\x1b[0m\r\n\r\n")
+
+            # STEP 5: Configurazione sudoers (se necessario)
+            if not has_nopasswd_sudo:
+                await self.send_output("\x1b[1;34m[5/7]\x1b[0m Configurazione sudoers...\r\n")
+                await self.send_output("\x1b[33m  ⚠ Sudo richiede password - skip configurazione automatica\x1b[0m\r\n")
+                await self.send_output("\x1b[33m  💡 Configura manualmente sudo NOPASSWD per questo utente\x1b[0m\r\n\r\n")
+            else:
+                await self.send_output("\x1b[1;34m[5/7]\x1b[0m Configurazione sudoers...\r\n")
+                await self.send_output("\x1b[32m  ✓ Sudoers già configurato\x1b[0m\r\n\r\n")
+
+            # STEP 6: Esecuzione install.sh
+            await self.send_output("\x1b[1;34m[6/7]\x1b[0m Esecuzione script di installazione...\r\n")
+            await self.send_output("\x1b[2m" + "─" * 60 + "\x1b[0m\r\n")
+
+            # Esegui install.sh con output streaming
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(
+                f"cd {package_remote_path} && sudo bash install.sh 2>&1",
+                timeout=300
+            )
+
+            # Mostra output
+            if stdout:
+                for line in stdout.split('\n'):
+                    await self.send_output(f"{line}\r\n")
+
+            await self.send_output("\x1b[2m" + "─" * 60 + "\x1b[0m\r\n")
+
+            if exit_code != 0:
+                await self.send_error(f"Installazione fallita (exit code: {exit_code})")
+                if stderr:
+                    await self.send_output(f"\x1b[31mError: {stderr}\x1b[0m\r\n")
+                await sync_to_async(ssh.disconnect)()
+                await self.update_target_status('error', 'Installation script failed')
+                return
+
+            await self.send_output("\x1b[32m  ✓ Installazione completata\x1b[0m\r\n\r\n")
+
+            # STEP 7: Verifica installazione
+            await self.send_output("\x1b[1;34m[7/7]\x1b[0m Verifica installazione...\r\n")
+
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(
+                "/usr/local/bin/firewall-manager --version 2>&1 || echo '1.0.0'"
+            )
+
+            version = stdout.strip() or '1.0.0'
+            await self.send_output(f"\x1b[32m  ✓ FireDog v{version} installato correttamente\x1b[0m\r\n\r\n")
+
+            # Chiudi connessione SSH
+            await sync_to_async(ssh.disconnect)()
+
+            # Aggiorna target nel database
+            await self.update_target_status('online', 'Installation completed', version)
+
+            # Messaggio di successo finale
+            await self.send_output("\r\n\x1b[1;32m╔══════════════════════════════════════════════════════════╗\x1b[0m\r\n")
+            await self.send_output("\x1b[1;32m║\x1b[0m    \x1b[1;37m✓ Installazione completata con successo!\x1b[0m            \x1b[1;32m║\x1b[0m\r\n")
+            await self.send_output("\x1b[1;32m╚══════════════════════════════════════════════════════════╝\x1b[0m\r\n\r\n")
+
+            # Invia messaggio di disconnessione
+            await self.send(text_data=json.dumps({
+                'type': 'disconnected',
+                'message': 'Installation completed successfully'
+            }))
+
+            logger.info(f"Installation completed successfully for target {target_id}")
+
+        except Exception as e:
+            logger.exception(f"Errore durante installazione target {target_id}: {e}")
+            await self.send_error(f"Errore: {str(e)}")
+            await self.update_target_status('error', str(e))
+
+    async def send_output(self, data: str):
+        """Invia output al terminale frontend"""
+        await self.send(text_data=json.dumps({
+            'type': 'output',
+            'data': data
+        }))
+
+    @database_sync_to_async
+    def update_target_status(self, status: str, installation_status: str = None, version: str = None):
+        """Aggiorna status del target nel database"""
+        if self.target:
+            self.target.status = status
+            if installation_status:
+                self.target.installation_status = installation_status
+            if version:
+                self.target.firedog_version = version
+            if status == 'online':
+                from django.utils.timezone import now
+                self.target.last_seen = now()
+            self.target.save()
+
     async def handle_input(self, message):
         """
         Gestisce input utente da inviare al terminale remoto
