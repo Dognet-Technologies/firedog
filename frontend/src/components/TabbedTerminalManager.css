@@ -199,7 +199,9 @@
   flex: 1;
   position: relative;
   overflow: hidden;
-  min-height: 0;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
 }
 
 .terminal-tab-content {
@@ -209,16 +211,13 @@
   right: 0;
   bottom: 0;
   overflow-y: auto;
-  scrollbar-width: none; /* Firefox - hide scrollbar */
-  -ms-overflow-style: none; /* IE/Edge - hide scrollbar */
-}
-
-.terminal-tab-content::-webkit-scrollbar {
-  display: none; /* Chrome/Safari - hide scrollbar */
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .terminal-tab-content.active {
-  display: block;
+  display: flex;
   z-index: 1;
 }
 
@@ -237,6 +236,8 @@
   margin: 0;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .terminal-tab-content .terminal-header {
@@ -245,8 +246,11 @@
 
 .terminal-tab-content .terminal-container {
   flex: 1;
-  min-height: 0;
+  min-height: 300px;
+  height: 100%;
   border-radius: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .terminal-tab-content .terminal-footer {

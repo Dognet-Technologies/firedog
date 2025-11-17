@@ -15,7 +15,7 @@
 /* Split layout wrapper */
 .targets-content-wrapper {
   display: flex;
-  gap: 0;
+  gap: 1rem;
   flex: 1;
   min-height: 0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -28,7 +28,7 @@
 }
 
 .targets-content-wrapper.panel-open .targets-main-content {
-  flex: 0 0 calc(100% - 700px);
+  flex: 0 0 calc(100% - 700px - 1rem);
 }
 
 /* ========== HEADER ========== */
@@ -509,13 +509,13 @@
 /* ========== RESPONSIVE ========== */
 @media (max-width: 1400px) {
   .targets-content-wrapper.panel-open .targets-main-content {
-    flex: 0 0 calc(100% - 600px);
+    flex: 0 0 calc(100% - 600px - 1rem);
   }
 }
 
 @media (max-width: 1200px) {
   .targets-content-wrapper.panel-open .targets-main-content {
-    flex: 0 0 calc(100% - 500px);
+    flex: 0 0 calc(100% - 500px - 1rem);
   }
 
   .targets-table {
