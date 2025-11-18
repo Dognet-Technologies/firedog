@@ -15,13 +15,13 @@ logger = logging.getLogger('firedog.terminal_consumer')
 class SSHTerminalConsumer(AsyncWebsocketConsumer):
     """
     Consumer WebSocket per terminale SSH interattivo
-    
+
     Messaggi ricevuti dal client (frontend):
-    - {"type": "connect", "target_id": 1, "width": 80, "height": 24}
+    - {"type": "connect", "target_id": 1, "width": 80, "height": 24, "password": "optional_ssh_password"}
     - {"type": "input", "data": "ls\n"}
     - {"type": "resize", "width": 100, "height": 30}
     - {"type": "disconnect"}
-    
+
     Messaggi inviati al client:
     - {"type": "connected", "message": "Connected to target"}
     - {"type": "output", "data": "command output"}
@@ -103,13 +103,14 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
     async def handle_connect(self, message):
         """
         Gestisce richiesta di connessione SSH al target
-        
+
         Args:
-            message: Dict con target_id, width, height
+            message: Dict con target_id, width, height, password (optional)
         """
         target_id = message.get('target_id')
         width = message.get('width', 80)
         height = message.get('height', 24)
+        ssh_password = message.get('password')  # Password SSH per fallback autenticazione
         
         if not target_id:
             await self.send_error("Target ID mancante")
@@ -125,22 +126,30 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
             
             # Importa SSHTerminalManager (import lazy per evitare problemi)
             from core.ssh_terminal_manager import SSHTerminalManager
-            
-            # Crea manager SSH
+
+            # Crea manager SSH (con password opzionale per fallback)
             self.ssh_manager = SSHTerminalManager(
                 host=self.target.ip_address,
                 port=self.target.ssh_port,
-                username=self.target.ssh_user
+                username=self.target.ssh_user,
+                password=ssh_password  # Usa password se fornita, altrimenti solo chiave pubblica
             )
             
             # Connetti SSH
             connected = await sync_to_async(self.ssh_manager.connect)()
 
             if not connected:
-                await self.send_error(
-                    "Connessione SSH fallita - Autenticazione con chiave pubblica non riuscita. "
-                    "Verifica che la chiave SSH sia configurata correttamente sul target."
-                )
+                # Messaggio di errore dettagliato
+                if not ssh_password:
+                    await self.send_error(
+                        "Connessione SSH fallita - Autenticazione con chiave pubblica non riuscita.\n"
+                        "Suggerimento: Fornisci la password SSH per permettere il fallback automatico."
+                    )
+                else:
+                    await self.send_error(
+                        "Connessione SSH fallita - Autenticazione fallita sia con chiave che con password.\n"
+                        "Verifica le credenziali SSH."
+                    )
                 return
             
             # Avvia shell interattiva
