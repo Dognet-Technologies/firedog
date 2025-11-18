@@ -77,7 +77,7 @@ systemctl enable ulogd2
 systemctl restart ulogd2
 
 echo -e "${GREEN}[5/8]${NC} Configurazione logrotate..."
-cp firewall-pcap-logrotate /etc/logrotate.d/firewall-pcap
+cp file_config/firewall-pcap-logrotate /etc/logrotate.d/firewall-pcap
 chmod 644 /etc/logrotate.d/firewall-pcap
 
 echo -e "${GREEN}[6/8]${NC} Installazione systemd service..."
@@ -86,9 +86,7 @@ chmod 644 /etc/systemd/system/firewall.service
 systemctl daemon-reload
 
 echo -e "${GREEN}[7/8]${NC} Creazione directory configurazione..."
-mkdir -p /etc/firewall
 mkdir -p /var/lib/firewall
-chmod 700 /etc/firewall
 chmod 700 /var/lib/firewall
 
 echo -e "${GREEN}[8/8]${NC} Inizializzazione firewall..."

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3 
 """
 Advanced Traffic Analyzer
 Analisi intelligente del traffico bloccato con machine learning-like scoring

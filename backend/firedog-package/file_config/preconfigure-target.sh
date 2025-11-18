@@ -60,7 +60,7 @@ ssh_exec() {
 }
 
 ssh_exec_sudo() {
-    ssh_exec "sudo bash -c '$@'"
+    ssh_exec "sudo -S bash -c '$@'"
 }
 
 check_ssh_key() {
