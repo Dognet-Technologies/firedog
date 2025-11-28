@@ -162,7 +162,17 @@ if [[ "$confirm" == "yes" ]]; then
     
     # Abilita servizio
     systemctl enable firewall.service
-   
+
+    # Configura export automatico stato firewall
+    echo ""
+    echo -e "${CYAN}[6/6]${NC} Configurazione export automatico..."
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$SCRIPT_DIR/setup-export-cron.sh" ]; then
+        bash "$SCRIPT_DIR/setup-export-cron.sh"
+    else
+        echo -e "${YELLOW}⚠ setup-export-cron.sh non trovato, skip configurazione export${NC}"
+    fi
+
 if [[ "$REINSTALL" == true ]]; then
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════╗${NC}"
@@ -180,6 +190,7 @@ else
     echo "  firewall-manager --stats         # Statistiche"
     echo "  firewall-manager --analyze 24    # Analizza traffico 24h"
     echo "  firewall-manager --threats       # Mostra minacce"
+    echo "  firewall-manager --export-json   # Export stato in JSON"
     echo ""
     echo "Servizio systemd:"
     echo "  systemctl status firewall        # Stato servizio"
@@ -189,6 +200,10 @@ else
     echo "  /etc/firewall/custom_rules.conf  # Regole personalizzate"
     echo "  /etc/ulogd.conf                  # Configurazione logging"
     echo "  /var/log/ulogd/*.pcap            # File PCAP"
+    echo ""
+    echo "Export automatico (FireDog):"
+    echo "  /opt/firedog/export/status.json  # Stato esportato (ogni 60s)"
+    echo "  /var/log/firedog-export.log      # Log export automatico"
     echo ""
 else
     echo -e "${YELLOW}Inizializzazione annullata.${NC}"
