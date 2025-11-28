@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django_celery_results',
     
     # FireDog apps
+    'accounts.apps.AccountsConfig',  # Gestione ruoli e permessi
     'api.apps.ApiConfig',
     'targets.apps.TargetsConfig',
     'rules.apps.RulesConfig',
