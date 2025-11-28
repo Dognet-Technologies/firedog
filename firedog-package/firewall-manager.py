@@ -455,44 +455,237 @@ class FirewallManager:
     
     def show_threats(self, min_score: int = 30):
         """Mostra potenziali minacce"""
-        
+
         print(f"\n{Colors.BOLD}=== Analisi Minacce (score >= {min_score}) ==={Colors.RESET}\n")
-        
+
         pcap_input = f"{CONFIG['log_dir']}/input_dropped.pcap"
-        
+
         if not os.path.exists(pcap_input):
             self.warning("Nessun file PCAP trovato")
             return
-        
+
         # Estrai IP unici
         try:
             cmd = f"tcpdump -nn -r {pcap_input} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            
+
             ips = [ip.strip() for ip in result.stdout.split('\n') if ip.strip()]
-            
+
             threats = []
             for ip in ips[:50]:  # Limita a 50 IP per performance
                 score, reasons = self.get_threat_score(ip)
                 if score >= min_score:
                     threats.append((ip, score, reasons))
-            
+
             # Ordina per score
             threats.sort(key=lambda x: x[1], reverse=True)
-            
+
             if not threats:
                 self.success("Nessuna minaccia significativa rilevata")
                 return
-            
+
             print(f"{'IP':<18} {'Score':<8} {'Motivi'}")
             print("=" * 80)
-            
+
             for ip, score, reasons in threats:
                 color = Colors.RED if score >= 70 else Colors.YELLOW if score >= 50 else Colors.WHITE
                 print(f"{color}{ip:<18}{Colors.RESET} {score:<8} {', '.join(reasons)}")
-            
+
         except Exception as e:
             self.error(f"Errore analisi minacce: {e}")
+
+    def get_threats_data(self, min_score: int = 30) -> List[Dict]:
+        """Ottieni dati minacce in formato strutturato"""
+
+        threats = []
+        pcap_input = f"{CONFIG['log_dir']}/input_dropped.pcap"
+
+        if not os.path.exists(pcap_input):
+            return threats
+
+        try:
+            cmd = f"tcpdump -nn -r {pcap_input} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+            ips = [ip.strip() for ip in result.stdout.split('\n') if ip.strip()]
+
+            for ip in ips[:50]:
+                score, reasons = self.get_threat_score(ip)
+                if score >= min_score:
+                    # Conta tentativi
+                    cmd_count = f"tcpdump -nn -r {pcap_input} 'src host {ip}' 2>/dev/null | wc -l"
+                    count_result = subprocess.run(cmd_count, shell=True, capture_output=True, text=True)
+                    attempts = int(count_result.stdout.strip()) if count_result.stdout.strip() else 0
+
+                    threats.append({
+                        'ip': ip,
+                        'score': score,
+                        'attempts': attempts,
+                        'reasons': reasons
+                    })
+
+            # Ordina per score
+            threats.sort(key=lambda x: x['score'], reverse=True)
+
+        except Exception:
+            pass
+
+        return threats
+
+    def parse_iptables_rules(self, chain: str) -> List[Dict]:
+        """Parsa regole iptables in formato strutturato"""
+
+        rules = []
+
+        try:
+            result = self.run_command(['iptables', '-L', chain, '-n', '-v', '--line-numbers'])
+            lines = result.stdout.split('\n')
+
+            # Salta header (prime 2 righe)
+            for line in lines[2:]:
+                if not line.strip():
+                    continue
+
+                # Parse line: num pkts bytes target prot opt in out source destination extra
+                parts = line.split()
+                if len(parts) < 8:
+                    continue
+
+                # Estrai commento se presente
+                comment = ''
+                if '/*' in line:
+                    comment_match = re.search(r'/\*\s*(.+?)\s*\*/', line)
+                    if comment_match:
+                        comment = comment_match.group(1)
+
+                rule = {
+                    'num': int(parts[0]) if parts[0].isdigit() else 0,
+                    'pkts': int(parts[1]) if parts[1].isdigit() else 0,
+                    'bytes': int(parts[2]) if parts[2].isdigit() else 0,
+                    'target': parts[3],
+                    'prot': parts[4],
+                    'opt': parts[5],
+                    'in': parts[6],
+                    'out': parts[7],
+                    'source': parts[8] if len(parts) > 8 else '0.0.0.0/0',
+                    'destination': parts[9] if len(parts) > 9 else '0.0.0.0/0',
+                    'extra': ' '.join(parts[10:]) if len(parts) > 10 else '',
+                    'comment': comment
+                }
+
+                rules.append(rule)
+
+        except Exception:
+            pass
+
+        return rules
+
+    def get_system_info(self) -> Dict:
+        """Ottieni informazioni di sistema"""
+
+        info = {
+            'os': 'Unknown',
+            'kernel': 'Unknown',
+            'uptime_seconds': 0
+        }
+
+        try:
+            # OS info
+            if os.path.exists('/etc/os-release'):
+                with open('/etc/os-release', 'r') as f:
+                    for line in f:
+                        if line.startswith('PRETTY_NAME='):
+                            info['os'] = line.split('=')[1].strip().strip('"')
+                            break
+
+            # Kernel
+            result = self.run_command(['uname', '-r'], check=False)
+            if result.returncode == 0:
+                info['kernel'] = result.stdout.strip()
+
+            # Uptime
+            with open('/proc/uptime', 'r') as f:
+                info['uptime_seconds'] = int(float(f.read().split()[0]))
+
+        except Exception:
+            pass
+
+        return info
+
+    def get_primary_ip(self) -> str:
+        """Ottieni IP primario del sistema"""
+
+        try:
+            # Prova a ottenere IP dall'interfaccia di default route
+            result = self.run_command(['ip', 'route', 'get', '1.1.1.1'], check=False)
+            if result.returncode == 0:
+                match = re.search(r'src\s+(\S+)', result.stdout)
+                if match:
+                    return match.group(1)
+        except Exception:
+            pass
+
+        return '0.0.0.0'
+
+    def export_json(self, output_path: str = '/opt/firedog/export/status.json'):
+        """Esporta stato completo firewall in JSON"""
+
+        try:
+            # Crea directory se non esiste
+            output_dir = os.path.dirname(output_path)
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+            # Raccogli dati
+            data = {
+                'hostname': subprocess.run(['hostname'], capture_output=True, text=True).stdout.strip(),
+                'ip_address': self.get_primary_ip(),
+                'timestamp': datetime.now().isoformat(),
+                'firedog_version': '1.0.0',
+                'system': self.get_system_info(),
+                'rules': {
+                    'INPUT': self.parse_iptables_rules('INPUT'),
+                    'OUTPUT': self.parse_iptables_rules('OUTPUT'),
+                    'FORWARD': self.parse_iptables_rules('FORWARD')
+                },
+                'stats': {
+                    'total_packets': {},
+                    'dropped_packets': 0,
+                    'pcap_sizes': {}
+                },
+                'threats': self.get_threats_data(min_score=30),
+                'status': 'healthy'
+            }
+
+            # Statistiche pacchetti per chain
+            for chain in ['INPUT', 'OUTPUT', 'FORWARD']:
+                try:
+                    result = self.run_command(['iptables', '-L', chain, '-n', '-v', '-x'], check=False)
+                    if result.returncode == 0:
+                        # Somma tutti i pacchetti
+                        total = sum(rule['pkts'] for rule in data['rules'][chain])
+                        data['stats']['total_packets'][chain] = total
+                except Exception:
+                    data['stats']['total_packets'][chain] = 0
+
+            # Dimensioni PCAP
+            for pcap_name in ['input_dropped.pcap', 'output_dropped.pcap']:
+                pcap_path = f"{CONFIG['log_dir']}/{pcap_name}"
+                if os.path.exists(pcap_path):
+                    data['stats']['pcap_sizes'][f"{pcap_name.replace('.pcap', '_bytes')}"] = os.path.getsize(pcap_path)
+
+            # Scrivi JSON
+            with open(output_path, 'w') as f:
+                json.dump(data, f, indent=2)
+
+            # Permessi sicuri
+            os.chmod(output_path, 0o644)
+
+            self.success(f"Stato esportato in: {output_path}")
+            return True
+
+        except Exception as e:
+            self.error(f"Errore export JSON: {e}")
+            return False
 
 
 def main():
@@ -505,12 +698,14 @@ def main():
 Esempi:
   %(prog)s --list                          # Lista tutte le regole
   %(prog)s --add-input 8080 tcp            # Apri porta 8080 TCP in INPUT
-  %(prog)s --add-output 3306 tcp           # Apri porta 3306 TCP in OUTPUT  
+  %(prog)s --add-output 3306 tcp           # Apri porta 3306 TCP in OUTPUT
   %(prog)s --add-input 22 tcp --source 192.168.1.10 --comment "SSH da admin"
   %(prog)s --remove INPUT 5                # Rimuovi regola #5 da INPUT
   %(prog)s --analyze 24                    # Analizza traffico ultime 24h
   %(prog)s --threats 50                    # Mostra minacce con score >= 50
   %(prog)s --stats                         # Mostra statistiche
+  %(prog)s --export-json                   # Esporta stato in JSON (default path)
+  %(prog)s --export-json /tmp/fw.json      # Esporta in path custom
         """
     )
     
@@ -558,7 +753,11 @@ Esempi:
     
     parser.add_argument('--restore', action='store_true',
                        help='Ripristina regole salvate')
-    
+
+    parser.add_argument('--export-json', metavar='OUTPUT_PATH',
+                       nargs='?', const='/opt/firedog/export/status.json',
+                       help='Esporta stato completo in JSON (default: /opt/firedog/export/status.json)')
+
     args = parser.parse_args()
     
     # Istanzia manager
@@ -602,7 +801,10 @@ Esempi:
     
     elif args.restore:
         fw.restore_rules()
-    
+
+    elif args.export_json is not None:
+        fw.export_json(args.export_json)
+
     else:
         parser.print_help()
 
