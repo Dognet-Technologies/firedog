@@ -585,3 +585,121 @@ class BlockedIP(models.Model):
         self.save(update_fields=['packet_count', 'last_attempt'])
 
 
+class FirewallStats(models.Model):
+    """
+    Statistiche firewall per un target specifico
+    Aggiornate periodicamente via pull JSON
+    """
+    # Relazione con target
+    target = models.ForeignKey(
+        Target,
+        on_delete=models.CASCADE,
+        related_name='firewall_stats',
+        help_text="Target che ha generato queste statistiche"
+    )
+
+    # System info
+    hostname = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Hostname del target al momento del pull"
+    )
+    firedog_version = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Versione firewall-manager"
+    )
+    os_version = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Sistema operativo"
+    )
+    kernel_version = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Versione kernel"
+    )
+    uptime_seconds = models.PositiveIntegerField(
+        default=0,
+        help_text="Uptime del sistema in secondi"
+    )
+
+    # Packet statistics
+    input_packets = models.BigIntegerField(
+        default=0,
+        help_text="Totale pacchetti INPUT processati"
+    )
+    output_packets = models.BigIntegerField(
+        default=0,
+        help_text="Totale pacchetti OUTPUT processati"
+    )
+    forward_packets = models.BigIntegerField(
+        default=0,
+        help_text="Totale pacchetti FORWARD processati"
+    )
+
+    # PCAP file sizes
+    pcap_input_dropped_bytes = models.BigIntegerField(
+        default=0,
+        help_text="Dimensione file PCAP input dropped (bytes)"
+    )
+    pcap_output_dropped_bytes = models.BigIntegerField(
+        default=0,
+        help_text="Dimensione file PCAP output dropped (bytes)"
+    )
+
+    # Status
+    status = models.CharField(
+        max_length=50,
+        default='healthy',
+        help_text="Stato generale del firewall"
+    )
+
+    # Timestamps
+    collected_at = models.DateTimeField(
+        help_text="Timestamp del JSON source (da target)"
+    )
+    imported_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        help_text="Quando è stato importato nel DB"
+    )
+
+    # Raw JSON (per debug o analisi futura)
+    raw_json = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="JSON completo originale (opzionale)"
+    )
+
+    class Meta:
+        ordering = ['-collected_at']
+        indexes = [
+            models.Index(fields=['target', '-collected_at']),
+            models.Index(fields=['target', '-imported_at']),
+        ]
+        verbose_name = 'Firewall Statistics'
+        verbose_name_plural = 'Firewall Statistics'
+        # Solo una entry per target+timestamp
+        unique_together = [['target', 'collected_at']]
+
+    def __str__(self):
+        return f"Stats for {self.hostname} at {self.collected_at}"
+
+    @property
+    def total_packets(self):
+        """Totale pacchetti processati"""
+        return self.input_packets + self.output_packets + self.forward_packets
+
+    @property
+    def total_pcap_size(self):
+        """Dimensione totale PCAP in bytes"""
+        return self.pcap_input_dropped_bytes + self.pcap_output_dropped_bytes
+
+    @property
+    def total_pcap_size_mb(self):
+        """Dimensione totale PCAP in MB"""
+        return round(self.total_pcap_size / (1024 * 1024), 2)
+
+
+
