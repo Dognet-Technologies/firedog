@@ -283,13 +283,13 @@ save_rules() {
     
     iptables-save > "${RULES_DIR}/iptables.rules"
     chmod 600 "${RULES_DIR}/iptables.rules"
-    
-    # Installa script per ripristino all'avvio
-     
-echo '#!/bin/bash' >> /etc/network/if-pre-up.d/iptables 
-echo '/usr/sbin/iptables-restore < /etc/firewall/iptables.rules' >> /etc/network/if-pre-up.d/iptables 
 
-    
+    # Installa script per ripristino all'avvio
+    cat > /etc/network/if-pre-up.d/iptables << 'EOF'
+#!/bin/bash
+/usr/sbin/iptables-restore < /etc/firewall/iptables.rules
+EOF
+
     chmod +x /etc/network/if-pre-up.d/iptables
     
     success "Regole salvate in ${RULES_DIR}/iptables.rules"
