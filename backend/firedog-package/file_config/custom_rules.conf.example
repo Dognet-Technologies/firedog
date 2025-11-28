@@ -1,0 +1,33 @@
+# Custom Firewall Rules
+# Questo file contiene regole personalizzate che vengono caricate all'avvio
+# Una regola per riga, formato iptables standard
+# Le linee che iniziano con # sono commenti e vengono ignorate
+
+# Esempio: Apri porta 8080 per applicazione web
+# iptables -A INPUT -p tcp --dport 8080 -m conntrack --ctstate NEW -j ACCEPT
+
+# Esempio: Consenti connessioni da subnet specifica
+# iptables -A INPUT -s 192.168.1.0/24 -j ACCEPT
+
+# Esempio: Apri porta MySQL solo da IP specifico
+# iptables -A INPUT -p tcp --dport 3306 -s 10.0.1.50 -m conntrack --ctstate NEW -j ACCEPT
+
+# Esempio: Consenti ping da rete locale
+# iptables -A INPUT -p icmp --icmp-type echo-request -s 192.168.1.0/24 -j ACCEPT
+
+# Esempio: Apri range di porte per applicazione
+# iptables -A INPUT -p tcp --dport 8000:8010 -m conntrack --ctstate NEW -j ACCEPT
+
+# Esempio: Regola OUTPUT verso servizio specifico
+# iptables -A OUTPUT -p tcp --dport 5432 -d 10.0.2.100 -m conntrack --ctstate NEW -j ACCEPT
+
+# ═══════════════════════════════════════════════════════════════════
+# NOTA IMPORTANTE:
+# - Dopo aver modificato questo file, riavvia il firewall:
+#   sudo systemctl restart firewall-fm
+# - Oppure ricarica le regole manualmente:
+#   sudo /usr/local/sbin/firewall-init.sh
+# - Testa sempre le regole prima di renderle permanenti
+# - Usa firewall-manager per gestire le regole dinamicamente:
+#   sudo firewall-manager --add-input 8080 --comment "Web app"
+# ═══════════════════════════════════════════════════════════════════

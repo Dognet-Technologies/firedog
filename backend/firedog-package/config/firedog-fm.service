@@ -1,0 +1,37 @@
+[Unit]
+Description=Advanced Firewall Service
+Documentation=man:iptables(8)
+After=network-pre.target
+Before=network.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Esegui script di inizializzazione
+ExecStart=/usr/local/sbin/firewall-init.sh
+
+# Al reload, salva e ricarica regole
+ExecReload=/usr/sbin/iptables-restore /etc/firewall/iptables.rules
+
+# Allo stop, NON rimuovere regole per sicurezza
+# Se necessario flush, usare: systemctl stop firewall && iptables -F
+ExecStop=/bin/true
+
+# Sicurezza del processo
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/log /var/lib/firewall /etc/firewall
+NoNewPrivileges=false
+PrivateTmp=yes
+
+# Timeout
+TimeoutStartSec=60s
+TimeoutStopSec=10s
+
+# Restart policy
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

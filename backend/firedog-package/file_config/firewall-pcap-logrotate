@@ -1,0 +1,41 @@
+# Logrotate configuration for firewall PCAP files
+# File: /etc/logrotate.d/firewall-pcap
+
+/var/log/ulogd/input_dropped.pcap /var/log/ulogd/output_dropped.pcap {
+    # Rotazione giornaliera
+    daily
+    
+    # Mantieni 30 giorni di log
+    rotate 30
+    
+    # Comprimi i file dopo rotazione
+    compress
+    delaycompress
+    
+    # Non generare errore se file mancante
+    missingok
+    
+    # Non ruotare se vuoto
+    notifempty
+    
+    # Dimensione massima prima di rotazione forzata (1GB totale / 2 file = 500MB per file)
+    size 500M
+    
+    # Crea nuovo file con permessi corretti
+    create 0640 root root
+    
+    # Post-rotate: riavvia ulogd2 per riaprire i file
+    postrotate
+        /usr/bin/systemctl reload ulogd2 >/dev/null 2>&1 || true
+    endscript
+    
+    # Pre-rotate: verifica spazio disco
+    prerotate
+        DISK_USAGE=$(df /var/log/ulogd | tail -1 | awk '{print $5}' | sed 's/%//')
+        if [ "$DISK_USAGE" -gt 90 ]; then
+            echo "WARNING: Disk usage at ${DISK_USAGE}% - forcing cleanup" | logger -t firewall-logrotate
+            # Rimuovi file più vecchi di 15 giorni se disco > 90%
+            find /var/log/ulogd -name "*.pcap.*.gz" -mtime +15 -delete
+        fi
+    endscript
+}

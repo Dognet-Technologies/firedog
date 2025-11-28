@@ -20,7 +20,7 @@ USERNAME="microcyber"
 SSH_KEY="/opt/firedog/ssh/id_ed25519"
 SSH_PUB_KEY="/opt/firedog/ssh/id_ed25519.pub"
 LOG_FILE="/var/log/firewall-init.log"
-RULES_DIR="/opt/firedog/firedog-package"
+RULES_DIR="/opt/firedog-package"
 CUSTOM_RULES="${RULES_DIR}/custom_rules.conf"
 
 echo -e "${GREEN}"
@@ -84,6 +84,8 @@ install_dependencies() {
         tcpdump \
         net-tools \
         iproute2 \
+        ulogd2 \
+        ulogd2-json \
         logrotate \
         git
 
@@ -94,7 +96,7 @@ install_dependencies() {
                 modprobe "$mod" 2>/dev/null || warning "Impossibile caricare modulo: $mod"
             fi
         done
-    success "Dipendenze verificate"
+        #log_info "Dipendenze verificate"
     
     else
         log_warn "Unsupported OS, attempting generic installation..."
@@ -152,19 +154,19 @@ install_service() {
 
 
         log_start "[5/14] Configurazione logrotate..."
-        sudo cp $RULES_DIR/file_config/firewall-pcap-logrotate /etc/logrotate.d/firewall-pcap
+        sudo cp $RULES_DIR/file_config/firewall-pcap-logrotate /etc/logrotate.d/firedog-pcap
         sudo chmod 644 /etc/logrotate.d/firewall-pcap
 
         log_start "[6/14] Installazione systemd service..."
         sudo cp $RULES_DIR/config/firedog-ta.service /etc/systemd/system/firedog-ta.service
         sudo cp $RULES_DIR/config/firedog-fm.service /etc/systemd/system/firedog-fm.service
 
-        sudo chmod 644 /etc/systemd/system/firewall-ta.service
-        sudo chmod 644 /etc/systemd/system/firewall-fm.service
+        sudo chmod 644 /etc/systemd/system/firedog-ta.service
+        sudo chmod 644 /etc/systemd/system/firedog-fm.service
 
         log_start "[7/14] Creazione directory configurazione..."
-        sudo mkdir -p /var/lib/firewall
-        sudo chmod 700 /var/lib/firewall
+        sudo mkdir -p /var/lib/firedog
+        sudo chmod 700 /var/lib/firedog
 
         log_start "[8/14] Inizializzazione firewall..."
         echo ""
@@ -187,7 +189,7 @@ configure_firewall() {
 
     # Backup existing rules
     if command -v iptables-save &> /dev/null; then
-        sudo iptables-save > /opt/firedog/rules/iptables.backup.$(date +%Y%m%d_%H%M%S)
+        sudo iptables-save > /var/lib/firedog/iptables.backup.$(date +%Y%m%d_%H%M%S)
     fi
 
     # Create basic allowed rules (SSH, established connections)
@@ -245,7 +247,7 @@ op_sudoers() {
 
     echo -e "${BLUE}[SUDOERS]${NC} Configuring sudoers for NOPASSWD..."
     # Install sudoers file
-    "sudo cp $RULES_DIR/file_config/udoers-microcyber /etc/sudoers.d/$USERNAME" || {
+    sudo cp $RULES_DIR/file_config/sudoers-microcyber /etc/sudoers.d/$USERNAME || {
         log_warn "Failed to install sudoers file"
         return 1
     }
@@ -282,19 +284,19 @@ op_ssh_harden() {
     # Backup current sshd_config
      sudo cp /etc/ssh/sshd_config "/etc/ssh/sshd_config.backup.\$(date +%Y%m%d_%H%M%S)"
     # Copy hardened config
-        "sudo cp $RULES_DIR/file_config/sshd_config.hardened  /etc/ssh/sshd_config" || {
+        sudo cp $RULES_DIR/file_config/sshd_config.hardened  /etc/ssh/sshd_config || {
         log_warn "Failed to copy sshd_config"
         return 1
     }
 
     # Test config
-    "sudo sshd -t -f /tmp/sshd_config.hardened" || {
+    sudo sshd -t -f /etc/sshd_config || {
         log_warn "sshd_config validation failed"
         return 1
     }
 
     # Apply config
-     sudo systemctl restart sshd ||  {
+    sudo systemctl restart sshd ||  {
         log_warn "sshd_service failed to start"
         return 1
     }
@@ -308,11 +310,11 @@ op_cron() {
     log_start "[14/14] Installing cron jobs..."
 
     # Install cron file
-    "sudo cp $RULES_DIR/firedog-cron /etc/cron.d/firedog" || {
+    sudo cp $RULES_DIR/file_config/firedog-cron /etc/cron.d/firedog || {
         log_warn "Failed to copy firedog-cron"
         return 1
     }
-    "sudo chmod 644 /etc/cron.d/firedog" || {
+    sudo chmod 644 /etc/cron.d/firedog || {
         log_warn "Failed to set permissions"
         return 1
     }
@@ -325,39 +327,32 @@ op_check() {
     log_start "LAST CONTROLL"
     echo -e "${BLUE}[CHECK]${NC} Verifying local configuration..."
     echo ""
-
     local all_ok=true
 
     # Check sudoers
     echo -n "Sudoers NOPASSWD: "
-    test "sudo -n whoami" > /dev/null 2>&1; then
-        log_info "OK"
-    else
-        log_warn "FAILED"
-        all_ok=false
-    fi
+    sudo -n whoami || {
+            log_warn "FAILED" && all_ok=false
+            }   
+        
 
     # Check if user exists
     echo -n "User '$USERNAME' exists: "
-    if "id $USERNAME" > /dev/null 2>&1; then
-        log_info "OK"
-    else
-        log_warn "FAILED"
-        all_ok=false
-    fi
-
+    id $USERNAME || {
+            log_warn "FAILED" && all_ok=false
+            }
     # Check SSH hardening
     echo -n "SSH Password Auth: "
     local pass_auth=$("sudo grep '^PasswordAuthentication' /etc/ssh/sshd_config" || echo "")
     if echo "$pass_auth" | grep -q "no"; then
         log_info "Disabled"
     else
-        echo -e "${YELLOW}⚠ Enabled${NC}"
-    fi
+        log_warn "FAILED" && all_ok=false
 
+}
     # Check sudoers file
     echo -n "Sudoers file: "
-    if "sudo test -f /etc/sudoers.d/$USERNAME" > /dev/null 2>&1; then
+    if [[ -f /etc/sudoers.d/$USERNAME ]]; then
         log_info "Exists"
     else
         log_warn "Not found"
@@ -372,7 +367,6 @@ op_check() {
         log_warn "$HOSTNAME needs additional configuration"
         return 1
     fi
-}
 
 # Main installation function
 main() {
@@ -396,12 +390,12 @@ main() {
     install_dependencies
     create_directories
     install_binaries
+    install_service
     configure_firewall
     create_config
-    install_service
-    op_sudoers
     op_ssh_harden
     op_cron
+    op_sudoers
     op_check
 
     echo ""
