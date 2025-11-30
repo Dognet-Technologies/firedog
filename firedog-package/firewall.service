@@ -1,5 +1,5 @@
 [Unit]
-Description=Advanced Firewall Service
+Description=FireDog Advanced Firewall Service
 Documentation=man:iptables(8)
 After=network-pre.target
 Before=network.target
@@ -9,15 +9,21 @@ Wants=network-pre.target
 Type=oneshot
 RemainAfterExit=yes
 
-# Esegui script di inizializzazione
-ExecStart=/usr/local/sbin/firewall-init.sh
+# IMPORTANTE: Non eseguire firewall-init.sh qui!
+# firewall-init.sh va eseguito SOLO alla prima installazione da install.sh
+# Qui carichiamo le regole salvate per preservare modifiche dinamiche
 
-# Al reload, salva e ricarica regole
-ExecReload=/usr/sbin/iptables-restore /etc/firewall/iptables.rules
+# Verifica esistenza file regole
+ExecStartPre=/bin/bash -c 'test -f /etc/firewall/iptables.rules || { echo "ERRORE: File regole non trovato. Eseguire firewall-init.sh prima."; exit 1; }'
 
-# Allo stop, NON rimuovere regole per sicurezza
-# Se necessario flush, usare: systemctl stop firewall && iptables -F
-ExecStop=/bin/true
+# Carica regole salvate (preserva modifiche dinamiche)
+ExecStart=/usr/sbin/iptables-restore /etc/firewall/iptables.rules
+
+# Al reload, salva stato corrente e ricarica
+ExecReload=/bin/bash -c '/usr/sbin/iptables-save > /etc/firewall/iptables.rules && /usr/sbin/iptables-restore /etc/firewall/iptables.rules'
+
+# Allo stop, salva stato corrente (NON rimuovere regole per sicurezza)
+ExecStop=/usr/sbin/iptables-save -f /etc/firewall/iptables.rules
 
 # Sicurezza del processo
 ProtectSystem=strict
