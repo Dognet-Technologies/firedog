@@ -17,7 +17,8 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Directory sorgente: in produzione i file sono in /opt/firedog/firedog-package
+FIREDOG_PACKAGE_DIR="/opt/firedog/firedog-package"
 OUTPUT_DIR="/tmp/firedog-package-$$"
 WITH_SSH_KEY=false
 
@@ -33,13 +34,23 @@ cat << "EOF"
 EOF
 echo -e "${NC}"
 
+# Verifica che la directory sorgente esista
+if [[ ! -d "$FIREDOG_PACKAGE_DIR" ]]; then
+    echo -e "${RED}✗${NC} Errore: directory sorgente non trovata: $FIREDOG_PACKAGE_DIR"
+    echo ""
+    echo "Assicurati che i file del pacchetto siano installati in:"
+    echo "  $FIREDOG_PACKAGE_DIR"
+    exit 1
+fi
+
 # Crea directory temporanea
 mkdir -p "$OUTPUT_DIR"
 echo -e "${CYAN}→${NC} Directory temporanea: $OUTPUT_DIR"
+echo -e "${CYAN}→${NC} Directory sorgente: $FIREDOG_PACKAGE_DIR"
 
 # Copia tutti i file del pacchetto
 echo -e "${CYAN}→${NC} Copia file pacchetto..."
-cp -r "$SCRIPT_DIR"/* "$OUTPUT_DIR/" 2>/dev/null || true
+cp -r "$FIREDOG_PACKAGE_DIR"/* "$OUTPUT_DIR/" 2>/dev/null || true
 
 # Rimuovi file non necessari
 rm -f "$OUTPUT_DIR/prepare-package.sh"
