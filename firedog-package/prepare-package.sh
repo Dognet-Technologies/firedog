@@ -53,20 +53,34 @@ if [[ "$WITH_SSH_KEY" == true ]]; then
     echo ""
     echo -e "${CYAN}→${NC} Generazione chiave SSH..."
 
-    SSH_KEY_NAME="firedog_master_$(date +%Y%m%d_%H%M%S)"
-    SSH_KEY_PATH="/tmp/$SSH_KEY_NAME"
+    # Crea directory per chiavi sul master se non esiste
+    FIREDOG_SSH_DIR="/opt/firedog/.ssh"
+    if [[ ! -d "$FIREDOG_SSH_DIR" ]]; then
+        echo "  → Creazione directory $FIREDOG_SSH_DIR..."
+        sudo mkdir -p "$FIREDOG_SSH_DIR"
+        sudo chmod 700 "$FIREDOG_SSH_DIR"
+    fi
 
-    ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "firedog-master" &>/dev/null
+    SSH_KEY_NAME="firedog_target_$(date +%Y%m%d_%H%M%S)"
+    SSH_KEY_PATH="$FIREDOG_SSH_DIR/$SSH_KEY_NAME"
+
+    # Genera chiave direttamente in /opt/firedog/.ssh/
+    sudo ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "firedog-master" &>/dev/null
 
     if [[ -f "${SSH_KEY_PATH}.pub" ]]; then
-        cp "${SSH_KEY_PATH}.pub" "$OUTPUT_DIR/firedog_ssh_key.pub"
-        echo -e "${GREEN}✓${NC} Chiave SSH generata"
+        # Copia chiave pubblica nel pacchetto
+        sudo cp "${SSH_KEY_PATH}.pub" "$OUTPUT_DIR/firedog_ssh_key.pub"
+
+        # Fix ownership per il pacchetto
+        sudo chown $USER:$USER "$OUTPUT_DIR/firedog_ssh_key.pub"
+
+        echo -e "${GREEN}✓${NC} Chiave SSH generata e salvata"
         echo ""
-        echo "  Chiave PRIVATA (da conservare sul master): $SSH_KEY_PATH"
-        echo "  Chiave PUBBLICA (nel pacchetto):           ${SSH_KEY_PATH}.pub"
+        echo "  Chiave PRIVATA (master): ${CYAN}$SSH_KEY_PATH${NC}"
+        echo "  Chiave PUBBLICA (pacchetto): firedog_ssh_key.pub"
         echo ""
-        echo -e "${YELLOW}IMPORTANTE:${NC} Salva la chiave privata per connetterti al target dopo l'installazione"
-        echo "  Esempio: sudo cp $SSH_KEY_PATH /opt/firedog/ssh/target_key"
+        echo -e "${GREEN}→${NC} La chiave privata è stata salvata in modo permanente in:"
+        echo "  $FIREDOG_SSH_DIR/"
     fi
 else
     echo ""
@@ -117,13 +131,15 @@ echo "4. Segui le istruzioni interattive dell'installer"
 echo ""
 
 if [[ "$WITH_SSH_KEY" == true ]]; then
-    echo "5. Dopo l'installazione, salva la chiave privata sul master:"
-    echo "   ${CYAN}sudo cp $SSH_KEY_PATH /opt/firedog/ssh/target_key${NC}"
-    echo "   ${CYAN}sudo chown www-data:www-data /opt/firedog/ssh/target_key${NC}"
-    echo "   ${CYAN}sudo chmod 600 /opt/firedog/ssh/target_key${NC}"
+    echo "5. Dopo l'installazione, la chiave privata è già salvata in:"
+    echo "   ${CYAN}$SSH_KEY_PATH${NC}"
     echo ""
-    echo "6. Testa connessione SSH:"
-    echo "   ${CYAN}ssh -i /opt/firedog/ssh/target_key microcyber@192.168.1.50 \"sudo firewall-manager --list\"${NC}"
+    echo "6. Configura ownership per Django/web console:"
+    echo "   ${CYAN}sudo chown www-data:www-data $SSH_KEY_PATH${NC}"
+    echo "   ${CYAN}sudo chmod 600 $SSH_KEY_PATH${NC}"
+    echo ""
+    echo "7. Testa connessione SSH:"
+    echo "   ${CYAN}ssh -i $SSH_KEY_PATH microcyber@192.168.1.50 \"sudo firewall-manager --list\"${NC}"
     echo ""
 fi
 

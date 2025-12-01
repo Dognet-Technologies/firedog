@@ -25,13 +25,16 @@ cd /home/user/firedog/firedog-package/
 **Output:**
 ```
 ✓ Archivio creato: /tmp/firedog-package.tar.gz
-✓ Chiave SSH generata
+✓ Chiave SSH generata e salvata
 
-Chiave PRIVATA: /tmp/firedog_master_20251130_180000
-Chiave PUBBLICA: /tmp/firedog_master_20251130_180000.pub
+Chiave PRIVATA (master): /opt/firedog/.ssh/firedog_target_20251130_180000
+Chiave PUBBLICA (pacchetto): firedog_ssh_key.pub
+
+→ La chiave privata è stata salvata in modo permanente in:
+  /opt/firedog/.ssh/
 ```
 
-**⚠️ IMPORTANTE:** Salva il path della chiave privata, ti servirà dopo!
+**✅ Chiave salvata permanentemente** in `/opt/firedog/.ssh/` sul master
 
 ---
 
@@ -138,8 +141,8 @@ systemctl status firedog
 # Torna sul tuo PC/master
 exit  # Esci dal target
 
-# Usa la chiave privata generata al Passo 1
-SSH_KEY="/tmp/firedog_master_20251130_180000"  # Usa il tuo path
+# Usa la chiave privata salvata in /opt/firedog/.ssh/
+SSH_KEY="/opt/firedog/.ssh/firedog_target_20251130_180000"  # Usa il path mostrato allo Step 1
 
 # Test connessione
 ssh -i $SSH_KEY microcyber@192.168.1.50 "whoami"
@@ -161,16 +164,20 @@ cat test.json | python3 -m json.tool | head -20
 
 ---
 
-### Passo 8: Salva chiave privata sul master (per web console)
+### Passo 8: Configura ownership chiave per web console
 
 ```bash
-# Copia chiave in directory sicura
-sudo mkdir -p /opt/firedog/ssh
-sudo cp $SSH_KEY /opt/firedog/ssh/target_192_168_1_50
-sudo chown www-data:www-data /opt/firedog/ssh/target_192_168_1_50
-sudo chmod 600 /opt/firedog/ssh/target_192_168_1_50
+# La chiave è già salvata in /opt/firedog/.ssh/
+# Configura solo ownership per www-data (Django)
 
-# Ora la web console potrà usare questa chiave per connettersi
+sudo chown www-data:www-data $SSH_KEY
+sudo chmod 600 $SSH_KEY
+
+# Verifica
+ls -l $SSH_KEY
+# Output: -rw------- 1 www-data www-data ... /opt/firedog/.ssh/firedog_target_...
+
+# Ora la web console può usare questa chiave per connettersi
 ```
 
 ---
@@ -195,8 +202,9 @@ Non generi chiave SSH durante preparazione pacchetto. La configuri **manualmente
 **Opzione A - Dal master:**
 
 ```bash
-# Sul master, genera chiave
-ssh-keygen -t ed25519 -f ~/.ssh/firedog_target_key -N ""
+# Sul master, genera chiave in /opt/firedog/.ssh/
+sudo mkdir -p /opt/firedog/.ssh
+sudo ssh-keygen -t ed25519 -f /opt/firedog/.ssh/target_key -N ""
 
 # Copia sul target (richiederà password di microcyber)
 # Prima imposta password temporanea su target:
@@ -204,11 +212,15 @@ ssh simone@192.168.1.50
 sudo passwd microcyber  # Imposta password temporanea
 
 # Poi dal master:
-ssh-copy-id -i ~/.ssh/firedog_target_key.pub microcyber@192.168.1.50
+sudo ssh-copy-id -i /opt/firedog/.ssh/target_key.pub microcyber@192.168.1.50
 # Inserisci password temporanea
 
+# Configura ownership
+sudo chown www-data:www-data /opt/firedog/.ssh/target_key
+sudo chmod 600 /opt/firedog/.ssh/target_key
+
 # Test
-ssh -i ~/.ssh/firedog_target_key microcyber@192.168.1.50 "sudo iptables -L"
+ssh -i /opt/firedog/.ssh/target_key microcyber@192.168.1.50 "sudo iptables -L"
 ```
 
 **Opzione B - Manualmente sul target:**
@@ -424,10 +436,17 @@ sudo systemctl restart sshd
 
 ## 📚 Files Importanti
 
+**Sul master:**
+```
+/opt/firedog/.ssh/
+  firedog_target_TIMESTAMP       # Chiave privata per connessione a target
+  firedog_target_TIMESTAMP.pub   # Chiave pubblica (copiata nel pacchetto)
+```
+
 **Sul target dopo installazione:**
 ```
 /opt/firedog/
-  .ssh/authorized_keys           # Chiave SSH per accesso master
+  .ssh/authorized_keys           # Chiave pubblica per accesso master
   export/status.json             # Export automatico (ogni 60s)
 
 /usr/local/bin/
