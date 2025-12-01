@@ -5,21 +5,47 @@
 Questa guida spiega come installare FireDog **localmente su un target** connettendosi manualmente al sistema.
 
 **Workflow:**
-1. Prepara pacchetto sul tuo computer
-2. Copia pacchetto sul target via SCP
-3. Connettiti al target (con qualsiasi utente con sudo)
-4. Esegui `sudo ./install.sh` SUL TARGET
-5. L'installer crea automaticamente l'utente `microcyber`
+1. **[UNA TANTUM]** Installa file pacchetto sul master in `/opt/firedog/firedog-package`
+2. Prepara pacchetto dal master
+3. Copia pacchetto sul target via SCP
+4. Connettiti al target (con qualsiasi utente con sudo)
+5. Esegui `sudo ./install.sh` SUL TARGET
+6. L'installer crea automaticamente l'utente `microcyber`
 
 ---
 
 ## 🎯 Scenario 1: Installazione CON chiave SSH (Raccomandato)
 
-### Passo 1: Prepara il pacchetto (sul tuo PC/master)
+### Passo 0: Installa file pacchetto sul master (UNA TANTUM)
+
+**Questo passo va fatto solo la prima volta o quando aggiorni i file del pacchetto:**
 
 ```bash
 cd /home/user/firedog/firedog-package/
-./prepare-package.sh --with-ssh-key
+sudo ./install-on-master.sh
+```
+
+**Output:**
+```
+✓ Installazione completata!
+
+File del pacchetto installati in:
+  /opt/firedog/firedog-package/
+
+Struttura directory master:
+  /opt/firedog/
+  ├── firedog-package/  (file sorgente per target)
+  ├── .ssh/             (chiavi SSH per target)
+  ├── exports/          (JSON esportati dai target)
+  ├── logs/             (log operazioni)
+  └── temp/             (file temporanei)
+```
+
+### Passo 1: Prepara il pacchetto (sul master)
+
+```bash
+cd /opt/firedog/firedog-package/
+sudo ./prepare-package.sh --with-ssh-key
 ```
 
 **Output:**
@@ -188,11 +214,19 @@ ls -l $SSH_KEY
 
 Non generi chiave SSH durante preparazione pacchetto. La configuri **manualmente DOPO** l'installazione.
 
+### Passo 0: Installa file pacchetto sul master (UNA TANTUM)
+
+```bash
+cd /home/user/firedog/firedog-package/
+sudo ./install-on-master.sh
+```
+
 ### Passo 1-4: Come Scenario 1 ma senza `--with-ssh-key`
 
 ```bash
 # Passo 1
-./prepare-package.sh  # SENZA --with-ssh-key
+cd /opt/firedog/firedog-package/
+sudo ./prepare-package.sh  # SENZA --with-ssh-key
 
 # Passo 2-4: identici
 ```

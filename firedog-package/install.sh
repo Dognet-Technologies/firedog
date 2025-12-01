@@ -66,8 +66,19 @@ if ! id -u "${FIREDOG_USER}" &>/dev/null; then
     echo -e "${GREEN}[OK]${NC} Utente ${FIREDOG_USER} creato"
 else
     echo -e "${YELLOW}[INFO]${NC} Utente ${FIREDOG_USER} già esistente"
+
     # Aggiorna shell a /bin/false per sicurezza
-    usermod -s /bin/false "${FIREDOG_USER}"
+    # Usa usermod se disponibile, altrimenti modifica direttamente /etc/passwd
+    if command -v usermod &>/dev/null; then
+        usermod -s /bin/false "${FIREDOG_USER}" 2>/dev/null || {
+            # Fallback: modifica /etc/passwd direttamente
+            sed -i "s|^\(${FIREDOG_USER}:.*:\)[^:]*$|\1/bin/false|" /etc/passwd
+        }
+    else
+        # usermod non disponibile, modifica /etc/passwd direttamente
+        sed -i "s|^\(${FIREDOG_USER}:.*:\)[^:]*$|\1/bin/false|" /etc/passwd
+    fi
+
     echo "  → Shell aggiornata a /bin/false per sicurezza"
 fi
 
@@ -106,7 +117,38 @@ else
     echo "  → Path authorized_keys: ${FIREDOG_SSH_DIR}/authorized_keys"
 fi
 
-echo -e "${GREEN}[4/11]${NC} Configurazione sudoers per ${FIREDOG_USER}..."
+echo -e "${GREEN}[4/11]${NC} Creazione directory FireDog..."
+
+# Crea directory export per JSON
+mkdir -p "${FIREDOG_EXPORT_DIR}"
+chown "${FIREDOG_USER}:${FIREDOG_USER}" "${FIREDOG_EXPORT_DIR}"
+chmod 755 "${FIREDOG_EXPORT_DIR}"
+
+echo -e "${GREEN}[OK]${NC} Directory ${FIREDOG_EXPORT_DIR} creata"
+
+echo -e "${GREEN}[5/11]${NC} Installazione script firewall..."
+
+# Copia script inizializzazione
+install -m 755 firewall-init.sh /usr/local/sbin/firewall-init.sh
+
+# Copia manager Python
+install -m 755 firewall-manager.py /usr/local/bin/firewall-manager
+chmod +x /usr/local/bin/firewall-manager
+
+# Copia traffic analyzer Python
+install -m 755 traffic-analyzer.py /usr/local/bin/traffic-analyzer
+chmod +x /usr/local/bin/traffic-analyzer
+
+# Copia SSH gateway (forced commands wrapper)
+install -m 755 firedog-ssh-gateway.sh /usr/local/bin/firedog-ssh-gateway.sh
+chmod +x /usr/local/bin/firedog-ssh-gateway.sh
+
+echo "  → firewall-manager installato in /usr/local/bin/firewall-manager"
+echo "  → traffic-analyzer installato in /usr/local/bin/traffic-analyzer"
+echo "  → firedog-ssh-gateway.sh installato in /usr/local/bin/firedog-ssh-gateway.sh"
+echo "  → firewall-init.sh installato in /usr/local/sbin/firewall-init.sh"
+
+echo -e "${GREEN}[6/11]${NC} Configurazione sudoers per ${FIREDOG_USER}..."
 
 # Crea file sudoers per microcyber
 SUDOERS_FILE="/etc/sudoers.d/${FIREDOG_USER}"
@@ -153,40 +195,10 @@ if visudo -c -f "${SUDOERS_FILE}" &>/dev/null; then
     echo -e "${GREEN}[OK]${NC} Sudoers configurato per ${FIREDOG_USER}"
 else
     echo -e "${RED}[ERROR]${NC} Errore nella configurazione sudoers"
+    echo "  → Verifica manuale: visudo -c -f ${SUDOERS_FILE}"
     rm -f "${SUDOERS_FILE}"
     exit 1
 fi
-
-echo -e "${GREEN}[5/11]${NC} Creazione directory FireDog..."
-
-# Crea directory export per JSON
-mkdir -p "${FIREDOG_EXPORT_DIR}"
-chown "${FIREDOG_USER}:${FIREDOG_USER}" "${FIREDOG_EXPORT_DIR}"
-chmod 755 "${FIREDOG_EXPORT_DIR}"
-
-echo -e "${GREEN}[OK]${NC} Directory ${FIREDOG_EXPORT_DIR} creata"
-
-echo -e "${GREEN}[6/11]${NC} Installazione script firewall..."
-
-# Copia script inizializzazione
-install -m 755 firewall-init.sh /usr/local/sbin/firewall-init.sh
-
-# Copia manager Python
-install -m 755 firewall-manager.py /usr/local/bin/firewall-manager
-chmod +x /usr/local/bin/firewall-manager
-
-# Copia traffic analyzer Python
-install -m 755 traffic-analyzer.py /usr/local/bin/traffic-analyzer
-chmod +x /usr/local/bin/traffic-analyzer
-
-# Copia SSH gateway (forced commands wrapper)
-install -m 755 firedog-ssh-gateway.sh /usr/local/bin/firedog-ssh-gateway.sh
-chmod +x /usr/local/bin/firedog-ssh-gateway.sh
-
-echo "  → firewall-manager installato in /usr/local/bin/firewall-manager"
-echo "  → traffic-analyzer installato in /usr/local/bin/traffic-analyzer"
-echo "  → firedog-ssh-gateway.sh installato in /usr/local/bin/firedog-ssh-gateway.sh"
-echo "  → firewall-init.sh installato in /usr/local/sbin/firewall-init.sh"
 
 echo -e "${GREEN}[7/11]${NC} Configurazione ulogd2..."
 
