@@ -11,6 +11,7 @@
 
 set -e
 
+RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
@@ -74,6 +75,12 @@ if [[ "$WITH_SSH_KEY" == true ]]; then
         # Fix ownership per il pacchetto
         sudo chown $USER:$USER "$OUTPUT_DIR/firedog_ssh_key.pub"
 
+        # Verifica che la copia sia riuscita
+        if [[ ! -f "$OUTPUT_DIR/firedog_ssh_key.pub" ]]; then
+            echo -e "${RED}✗${NC} Errore: chiave pubblica non copiata nel pacchetto"
+            exit 1
+        fi
+
         echo -e "${GREEN}✓${NC} Chiave SSH generata e salvata"
         echo ""
         echo "  Chiave PRIVATA (master): ${CYAN}$SSH_KEY_PATH${NC}"
@@ -81,6 +88,9 @@ if [[ "$WITH_SSH_KEY" == true ]]; then
         echo ""
         echo -e "${GREEN}→${NC} La chiave privata è stata salvata in modo permanente in:"
         echo "  $FIREDOG_SSH_DIR/"
+    else
+        echo -e "${RED}✗${NC} Errore: generazione chiave SSH fallita"
+        exit 1
     fi
 else
     echo ""
@@ -97,6 +107,20 @@ tar czf firedog-package.tar.gz "$(basename $OUTPUT_DIR)"
 if [[ -f firedog-package.tar.gz ]]; then
     SIZE=$(du -h firedog-package.tar.gz | cut -f1)
     echo -e "${GREEN}✓${NC} Archivio creato: /tmp/firedog-package.tar.gz ($SIZE)"
+
+    # Verifica contenuto archivio
+    if [[ "$WITH_SSH_KEY" == true ]]; then
+        echo ""
+        echo -e "${CYAN}→${NC} Verifica contenuto archivio..."
+        if tar tzf firedog-package.tar.gz | grep -q "firedog_ssh_key.pub"; then
+            echo -e "${GREEN}✓${NC} Chiave SSH inclusa nel pacchetto"
+        else
+            echo -e "${RED}✗${NC} ERRORE: Chiave SSH NON trovata nel pacchetto!"
+            echo "  Contenuto archivio:"
+            tar tzf firedog-package.tar.gz | grep -E "(firedog_ssh|\.pub)" || echo "  (nessuna chiave trovata)"
+            exit 1
+        fi
+    fi
 else
     echo -e "${RED}✗${NC} Errore creazione archivio"
     exit 1
