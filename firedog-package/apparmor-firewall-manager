@@ -1,0 +1,127 @@
+# AppArmor profile for firewall-manager
+# Provides mandatory access control for FireDog firewall manager
+# Install: sudo cp apparmor-firewall-manager /etc/apparmor.d/usr.local.bin.firewall-manager && sudo apparmor_parser -r /etc/apparmor.d/usr.local.bin.firewall-manager
+
+#include <tunables/global>
+
+/usr/local/bin/firewall-manager {
+  #include <abstractions/base>
+  #include <abstractions/python>
+
+  # Capabilities necessarie
+  capability net_admin,        # Necessario per iptables
+  capability net_raw,          # Necessario per raw socket
+  capability dac_override,     # Lettura file di sistema
+  capability dac_read_search,  # Ricerca directory di sistema
+
+  # Python interpreter
+  /usr/bin/python3 ixr,
+  /usr/bin/python3.[0-9]* ixr,
+
+  # Python libraries
+  /usr/lib/python3*/**.so mr,
+  /usr/lib/python3*/**/*.py r,
+  /usr/lib/python3*/**.pyc r,
+  /usr/local/lib/python3*/** r,
+
+  # Firewall manager stesso
+  /usr/local/bin/firewall-manager r,
+
+  # Esecuzione comandi sistema
+  /usr/sbin/iptables ix,
+  /usr/sbin/iptables-save ix,
+  /usr/sbin/iptables-restore ix,
+  /usr/sbin/ip6tables ix,
+  /bin/bash ix,
+  /usr/bin/grep ix,
+  /usr/bin/awk ix,
+  /usr/bin/sed ix,
+  /bin/cat ix,
+  /usr/bin/head ix,
+  /usr/bin/tail ix,
+
+  # Lettura configurazione firewall
+  /etc/firewall/ r,
+  /etc/firewall/** r,
+
+  # Scrittura configurazione firewall
+  /etc/firewall/** w,
+  /var/lib/firewall/ r,
+  /var/lib/firewall/** rw,
+
+  # Export JSON
+  /opt/firedog/export/ r,
+  /opt/firedog/export/** rw,
+
+  # Log files
+  /var/log/firedog/ r,
+  /var/log/firedog/** rw,
+  /var/log/ulogd/ r,
+  /var/log/ulogd/** r,
+
+  # PCAP files (lettura)
+  /var/log/ulogd/*.pcap r,
+
+  # Sistema info (read-only)
+  /proc/ r,
+  /proc/** r,
+  /sys/class/net/ r,
+  /sys/class/net/** r,
+  /proc/sys/kernel/random/uuid r,
+  /proc/sys/kernel/hostname r,
+  /etc/hostname r,
+  /etc/os-release r,
+
+  # Network info
+  /proc/net/dev r,
+  /proc/net/tcp r,
+  /proc/net/tcp6 r,
+  /proc/net/udp r,
+  /proc/net/udp6 r,
+
+  # Temporary files
+  /tmp/ r,
+  /tmp/firedog-** rw,
+  owner /tmp/firedog-** rw,
+
+  # DENY pericolosi (defense in depth)
+  deny /etc/shadow r,
+  deny /etc/shadow- r,
+  deny /etc/gshadow r,
+  deny /etc/passwd w,
+  deny /etc/group w,
+  deny /etc/sudoers rw,
+  deny /etc/sudoers.d/ rw,
+  deny /etc/sudoers.d/** rw,
+  deny /root/ rw,
+  deny /root/** rw,
+  deny /home/*/.ssh/** rw,
+  deny /opt/firedog/.ssh/id_* r,  # Nega lettura chiavi private
+  deny /boot/** rw,
+  deny /usr/bin/su x,
+  deny /usr/bin/sudo x,
+  deny /bin/sh x,
+  deny capability sys_admin,
+  deny capability sys_module,
+
+  # Profilo per subprocess iptables
+  /usr/sbin/iptables {
+    #include <abstractions/base>
+
+    capability net_admin,
+    capability net_raw,
+
+    /usr/sbin/iptables mr,
+    /usr/sbin/xtables-legacy-multi mr,
+    /usr/lib/x86_64-linux-gnu/xtables/*.so mr,
+
+    /proc/net/ip_tables_names r,
+    /proc/net/ip_tables_matches r,
+    /proc/net/ip_tables_targets r,
+
+    # Nega pericolosi
+    deny /etc/shadow r,
+    deny /etc/sudoers rw,
+    deny capability sys_module,
+  }
+}
