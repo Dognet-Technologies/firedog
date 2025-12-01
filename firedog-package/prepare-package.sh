@@ -94,7 +94,7 @@ if [[ "$WITH_SSH_KEY" == true ]]; then
 
         echo -e "${GREEN}✓${NC} Chiave SSH generata e salvata"
         echo ""
-        echo "  Chiave PRIVATA (master): ${CYAN}$SSH_KEY_PATH${NC}"
+        echo -e "  Chiave PRIVATA (master): ${CYAN}$SSH_KEY_PATH${NC}"
         echo "  Chiave PUBBLICA (pacchetto): firedog_ssh_key.pub"
         echo ""
         echo -e "${GREEN}→${NC} La chiave privata è stata salvata in modo permanente in:"
@@ -112,23 +112,27 @@ fi
 # Crea archivio
 echo ""
 echo -e "${CYAN}→${NC} Creazione archivio..."
-cd /tmp
-tar czf firedog-package.tar.gz "$(basename $OUTPUT_DIR)"
 
-if [[ -f firedog-package.tar.gz ]]; then
-    SIZE=$(du -h firedog-package.tar.gz | cut -f1)
+# Rimuovi archivio esistente se presente
+rm -f /tmp/firedog-package.tar.gz
+
+# Crea archivio con path assoluto
+tar czf /tmp/firedog-package.tar.gz -C /tmp "$(basename $OUTPUT_DIR)"
+
+if [[ -f /tmp/firedog-package.tar.gz ]]; then
+    SIZE=$(du -h /tmp/firedog-package.tar.gz | cut -f1)
     echo -e "${GREEN}✓${NC} Archivio creato: /tmp/firedog-package.tar.gz ($SIZE)"
 
     # Verifica contenuto archivio
     if [[ "$WITH_SSH_KEY" == true ]]; then
         echo ""
         echo -e "${CYAN}→${NC} Verifica contenuto archivio..."
-        if tar tzf firedog-package.tar.gz | grep -q "firedog_ssh_key.pub"; then
+        if tar tzf /tmp/firedog-package.tar.gz | grep -q "firedog_ssh_key.pub"; then
             echo -e "${GREEN}✓${NC} Chiave SSH inclusa nel pacchetto"
         else
             echo -e "${RED}✗${NC} ERRORE: Chiave SSH NON trovata nel pacchetto!"
             echo "  Contenuto archivio:"
-            tar tzf firedog-package.tar.gz | grep -E "(firedog_ssh|\.pub)" || echo "  (nessuna chiave trovata)"
+            tar tzf /tmp/firedog-package.tar.gz | grep -E "(firedog_ssh|\.pub)" || echo "  (nessuna chiave trovata)"
             exit 1
         fi
     fi
@@ -146,35 +150,35 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║  Pacchetto pronto per installazione!       ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════╝${NC}"
 echo ""
-echo "File creato: ${CYAN}/tmp/firedog-package.tar.gz${NC}"
+echo -e "File creato: ${CYAN}/tmp/firedog-package.tar.gz${NC}"
 echo ""
 echo "PROSSIMI PASSI:"
 echo ""
 echo "1. Copia il pacchetto sul target:"
-echo "   ${CYAN}scp /tmp/firedog-package.tar.gz simone@192.168.1.50:/tmp/${NC}"
+echo -e "   ${CYAN}scp /tmp/firedog-package.tar.gz simone@192.168.1.50:/tmp/${NC}"
 echo ""
 echo "2. Connettiti al target:"
-echo "   ${CYAN}ssh simone@192.168.1.50${NC}"
+echo -e "   ${CYAN}ssh simone@192.168.1.50${NC}"
 echo ""
 echo "3. Estrai ed esegui l'installazione (SUL TARGET):"
-echo "   ${CYAN}cd /tmp${NC}"
-echo "   ${CYAN}tar xzf firedog-package.tar.gz${NC}"
-echo "   ${CYAN}cd firedog-package-*/${NC}"
-echo "   ${CYAN}sudo ./install.sh${NC}"
+echo -e "   ${CYAN}cd /tmp${NC}"
+echo -e "   ${CYAN}tar xzf firedog-package.tar.gz${NC}"
+echo -e "   ${CYAN}cd firedog-package-*/${NC}"
+echo -e "   ${CYAN}sudo ./install.sh${NC}"
 echo ""
 echo "4. Segui le istruzioni interattive dell'installer"
 echo ""
 
 if [[ "$WITH_SSH_KEY" == true ]]; then
     echo "5. Dopo l'installazione, la chiave privata è già salvata in:"
-    echo "   ${CYAN}$SSH_KEY_PATH${NC}"
+    echo -e "   ${CYAN}$SSH_KEY_PATH${NC}"
     echo ""
     echo "6. Configura ownership per Django/web console:"
-    echo "   ${CYAN}sudo chown www-data:www-data $SSH_KEY_PATH${NC}"
-    echo "   ${CYAN}sudo chmod 600 $SSH_KEY_PATH${NC}"
+    echo -e "   ${CYAN}sudo chown www-data:www-data $SSH_KEY_PATH${NC}"
+    echo -e "   ${CYAN}sudo chmod 600 $SSH_KEY_PATH${NC}"
     echo ""
     echo "7. Testa connessione SSH:"
-    echo "   ${CYAN}ssh -i $SSH_KEY_PATH microcyber@192.168.1.50 \"sudo firewall-manager --list\"${NC}"
+    echo -e "   ${CYAN}ssh -i $SSH_KEY_PATH microcyber@192.168.1.50 \"sudo firewall-manager --list\"${NC}"
     echo ""
 fi
 
