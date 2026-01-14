@@ -57,6 +57,9 @@ urlpatterns = [
     # Settings
 #    path('api/settings/', include('settings.urls')),
 
+    # Agent Manager
+    path('api/agent/', include('agent_manager.urls')),
+
     # API endpoints
     path('api/', include(router.urls)),
 ]

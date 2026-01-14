@@ -11,6 +11,8 @@ class Target(models.Model):
     Sistema target remoto su cui viene gestito il firewall
     """
     STATUS_CHOICES = [
+        ('unpaired', 'Unpaired'),
+        ('pairing', 'Pairing'),
         ('pending', 'Pending'),
         ('installing', 'Installing'),
         ('online', 'Online'),
@@ -29,9 +31,29 @@ class Target(models.Model):
         blank=True,
         help_text="Hostname del sistema target"
     )
+    mac_address = models.CharField(
+        max_length=17,
+        blank=True,
+        help_text="MAC address del target (formato AA:BB:CC:DD:EE:FF)"
+    )
     description = models.TextField(
         blank=True,
         help_text="Descrizione del target"
+    )
+
+    # Dog Agent - Identity hash per pairing
+    identity_hash = models.CharField(
+        max_length=128,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="SHA512 hash di ip+hostname+mac per pairing agent"
+    )
+    connection_type = models.CharField(
+        max_length=10,
+        default='agent',
+        choices=[('agent', 'Dog Agent'), ('ssh', 'SSH (Legacy)')],
+        help_text="Tipo di connessione al target"
     )
 
     # Stato e versione
@@ -113,6 +135,24 @@ class Target(models.Model):
         self.status = 'error'
         self.error_message = error_message
         self.save(update_fields=['status', 'error_message', 'updated_at'])
+
+    def calculate_identity_hash(self):
+        """
+        Calcola identity hash per dog agent
+        Format: SHA512(ip+hostname+mac) senza delimitatori
+        """
+        import hashlib
+        if self.ip_address and self.hostname and self.mac_address:
+            identity_text = f"{self.ip_address}{self.hostname}{self.mac_address}"
+            self.identity_hash = hashlib.sha512(identity_text.encode()).hexdigest()
+            return self.identity_hash
+        return None
+
+    def save(self, *args, **kwargs):
+        """Override save per calcolare identity_hash automaticamente"""
+        if self.ip_address and self.hostname and self.mac_address and not self.identity_hash:
+            self.calculate_identity_hash()
+        super().save(*args, **kwargs)
 
 class Statistics(models.Model):
     """Statistiche firewall periodiche"""
