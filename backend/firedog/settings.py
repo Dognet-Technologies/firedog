@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'integrity.apps.IntegrityConfig',
     'discovery.apps.DiscoveryConfig',
     'audit.apps.AuditConfig',
+    'agent_manager.apps.AgentManagerConfig',  # Dog Agent management
     'settings',
     'channels',
 ]

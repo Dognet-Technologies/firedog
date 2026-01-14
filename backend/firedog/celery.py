@@ -28,6 +28,27 @@ app.conf.beat_schedule = {
         'task': 'integrity.tasks.check_all_integrity',
         'schedule': crontab(minute='*/30'),  # Every 30 minutes
     },
+    # Agent Manager tasks
+    'check-agent-health': {
+        'task': 'agent_manager.tasks.check_agent_health',
+        'schedule': crontab(minute='*/2'),  # Every 2 minutes
+    },
+    'cleanup-old-heartbeats': {
+        'task': 'agent_manager.tasks.cleanup_old_heartbeats',
+        'schedule': crontab(minute='0', hour='*'),  # Every hour
+    },
+    'cleanup-expired-pairing-sessions': {
+        'task': 'agent_manager.tasks.cleanup_expired_pairing_sessions',
+        'schedule': crontab(minute='0', hour='0'),  # Daily at midnight
+    },
+    'timeout-stale-commands': {
+        'task': 'agent_manager.tasks.timeout_stale_commands',
+        'schedule': crontab(minute='*/5'),  # Every 5 minutes
+    },
+    'check-critical-threats': {
+        'task': 'agent_manager.tasks.check_critical_threats',
+        'schedule': crontab(minute='*/10'),  # Every 10 minutes
+    },
 }
 
 @app.task(bind=True, ignore_result=True)
