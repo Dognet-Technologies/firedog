@@ -36,23 +36,25 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
         # Genera chiave raw (64 caratteri)
         raw_key = secrets.token_urlsafe(48)
 
-        # Crea hash
+        # Crea hash e cripta la chiave
         key_hash = AgentAPIKey.hash_key(raw_key)
+        encrypted_key = AgentAPIKey.encrypt_key(raw_key)
 
         # Crea record nel DB
         api_key = AgentAPIKey.objects.create(
             key_hash=key_hash,
+            encrypted_key=encrypted_key,
             is_active=True,
             created_by=request.user.username
         )
 
         serializer = self.get_serializer(api_key)
 
-        # Ritorna la chiave raw SOLO UNA VOLTA
+        # Ritorna la chiave raw
         return Response({
             'api_key': serializer.data,
             'raw_key': raw_key,
-            'warning': 'Save this key! It will not be shown again.'
+            'warning': 'Save this key! You can retrieve it later with your admin password.'
         }, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
@@ -76,10 +78,46 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
         """
         api_key = self.get_object()
         api_key.is_active = True
-        api_key.save()  # Il metodo save() già disattiva le altre
+        api_key.save()  # Il metodo save() giï¿½ disattiva le altre
 
         serializer = self.get_serializer(api_key)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def retrieve_key(self, request, pk=None):
+        """
+        Recupera la chiave in chiaro (richiede password admin)
+        POST /api/agent/api-keys/{id}/retrieve_key/
+        Body: { "password": "admin_password" }
+        """
+        api_key = self.get_object()
+        password = request.data.get('password')
+
+        if not password:
+            return Response(
+                {'error': 'Password is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Verifica la password dell'utente
+        if not request.user.check_password(password):
+            return Response(
+                {'error': 'Invalid password'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Decripta e ritorna la chiave
+        try:
+            raw_key = api_key.decrypt_key()
+            return Response({
+                'raw_key': raw_key,
+                'key_id': api_key.id
+            })
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to decrypt key: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class PairingSessionViewSet(viewsets.ModelViewSet):
@@ -149,7 +187,7 @@ class PairingSessionViewSet(viewsets.ModelViewSet):
         """
         session = self.get_object()
 
-        # Verifica se è scaduta
+        # Verifica se ï¿½ scaduta
         if session.is_expired and session.status in ['waiting', 'verifying_api', 'verifying_hash']:
             session.status = 'expired'
             session.save(update_fields=['status'])
