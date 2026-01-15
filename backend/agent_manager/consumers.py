@@ -123,7 +123,8 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 'phase': 2,
                 'phase_1_verified': True,
                 'phase_2_verified': True,
-                'target_id': self.target.id
+                'target_id': self.target.id,
+                'group': self.target.gruppo or 'default'
             }))
 
             logger.info(f"Pairing successful for target {self.target}")
