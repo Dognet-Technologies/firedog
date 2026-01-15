@@ -75,13 +75,15 @@ class AgentConsumer(AsyncWebsocketConsumer):
             "api_key": "...",
             "ip": "192.168.0.15",
             "hostname": "webserver",
-            "mac": "AA:BB:CC:DD:EE:FF"
+            "mac": "AA:BB:CC:DD:EE:FF",
+            "group": "production-servers"
         }
         """
         api_key = data.get('api_key')
         ip_address = data.get('ip')
         hostname = data.get('hostname')
         mac_address = data.get('mac')
+        group = data.get('group', 'default')
 
         if not all([api_key, ip_address, hostname, mac_address]):
             await self.send_error("Missing required fields for pairing")
@@ -106,7 +108,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
         }))
 
         # FASE 2: Verifica identity hash
-        pairing_session = await self.verify_identity_hash(ip_address, hostname, mac_address)
+        pairing_session = await self.verify_identity_hash(ip_address, hostname, mac_address, group)
 
         if pairing_session:
             # Pairing success!
@@ -270,7 +272,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             return False
 
     @database_sync_to_async
-    def verify_identity_hash(self, ip_address, hostname, mac_address):
+    def verify_identity_hash(self, ip_address, hostname, mac_address, group='default'):
         """
         Verifica identity hash e trova sessione di pairing
         """
@@ -301,9 +303,10 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 pairing_session.completed_at = timezone.now()
                 pairing_session.save()
 
-                # Aggiorna target
+                # Aggiorna target con gruppo
                 target.status = 'online'
                 target.last_seen = timezone.now()
+                target.gruppo = group  # Salva il gruppo
                 target.save()
 
                 return pairing_session
