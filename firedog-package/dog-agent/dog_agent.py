@@ -48,6 +48,7 @@ class DogAgent:
         self.running = False
         self.paired = False
         self.target_id = None
+        self.group = None
 
         # Tasks
         self.heartbeat_task = None
@@ -137,7 +138,8 @@ class DogAgent:
         if status == 'success':
             self.paired = True
             self.target_id = data.get('target_id')
-            self.logger.info(f"Pairing successful! Target ID: {self.target_id}")
+            self.group = data.get('group', 'default')
+            self.logger.info(f"Pairing successful! Target ID: {self.target_id}, Group: {self.group}")
 
             # Avvia tasks periodici
             await self.start_periodic_tasks()
@@ -183,7 +185,8 @@ class DogAgent:
                 await self.ws_client.send({
                     'type': 'heartbeat',
                     'timestamp': datetime.now().isoformat(),
-                    'system_stats': stats
+                    'system_stats': stats,
+                    'group': self.group
                 })
 
                 self.logger.debug("Heartbeat sent")

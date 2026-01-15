@@ -8,6 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
+from django.db import models
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
@@ -379,6 +380,100 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(command)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'])
+    def send_to_group(self, request):
+        """
+        Invia comando a tutti i target di un gruppo
+        POST /api/agent/commands/send_to_group/
+        Body: {
+            "group": "production-servers",
+            "action": "add_rule",
+            "payload": {...},
+            "timeout_seconds": 30
+        }
+        """
+        group = request.data.get('group')
+        action = request.data.get('action')
+        payload = request.data.get('payload', {})
+        timeout_seconds = request.data.get('timeout_seconds', 30)
+
+        if not group or not action:
+            return Response(
+                {'error': 'group and action are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Trova tutti i target online del gruppo
+        targets = Target.objects.filter(gruppo=group, status='online')
+
+        if not targets.exists():
+            return Response(
+                {'error': f'No online targets found in group: {group}'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        commands_created = []
+        commands_failed = []
+        channel_layer = get_channel_layer()
+
+        for target in targets:
+            try:
+                # Crea comando per ogni target
+                command = AgentCommand.objects.create(
+                    target=target,
+                    action=action,
+                    payload=payload,
+                    timeout_seconds=timeout_seconds
+                )
+
+                # Verifica che l'agent sia online
+                try:
+                    connection = AgentConnection.objects.get(target=target, is_online=True)
+
+                    # Invia comando via WebSocket
+                    async_to_sync(channel_layer.send)(
+                        connection.websocket_channel,
+                        {
+                            'type': 'send_command',
+                            'command_id': str(command.command_id),
+                            'action': command.action,
+                            'payload': command.payload
+                        }
+                    )
+
+                    command.mark_sent()
+                    commands_created.append({
+                        'target_id': target.id,
+                        'target_hostname': target.hostname,
+                        'command_id': str(command.command_id),
+                        'status': 'sent'
+                    })
+
+                except AgentConnection.DoesNotExist:
+                    command.mark_failed('Agent is not connected')
+                    commands_failed.append({
+                        'target_id': target.id,
+                        'target_hostname': target.hostname,
+                        'error': 'Agent is not connected'
+                    })
+
+            except Exception as e:
+                commands_failed.append({
+                    'target_id': target.id,
+                    'target_hostname': target.hostname,
+                    'error': str(e)
+                })
+
+        return Response({
+            'group': group,
+            'action': action,
+            'targets_found': targets.count(),
+            'commands_sent': len(commands_created),
+            'commands_failed': len(commands_failed),
+            'commands': commands_created,
+            'failures': commands_failed
+        }, status=status.HTTP_201_CREATED)
+
 
 class AgentHeartbeatViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -397,3 +492,34 @@ class AgentHeartbeatViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Limita a ultimi 100 record
         return queryset[:100]
+
+
+class TargetGroupsViewSet(viewsets.ViewSet):
+    """
+    ViewSet per gestire gruppi di target
+    """
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def list_groups(self, request):
+        """
+        Lista tutti i gruppi disponibili con conteggio target
+        GET /api/agent/groups/
+        """
+        from django.db.models import Count
+
+        groups = Target.objects.values('gruppo').annotate(
+            target_count=Count('id'),
+            online_count=Count('id', filter=models.Q(status='online'))
+        ).order_by('gruppo')
+
+        result = [
+            {
+                'name': g['gruppo'] or 'default',
+                'target_count': g['target_count'],
+                'online_count': g['online_count']
+            }
+            for g in groups if g['gruppo']
+        ]
+
+        return Response(result)
