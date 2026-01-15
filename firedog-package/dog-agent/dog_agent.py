@@ -123,7 +123,8 @@ class DogAgent:
             'api_key': self.config.get('server.api_key'),
             'ip': network_info['ip_address'],
             'hostname': network_info['hostname'],
-            'mac': network_info['mac_address']
+            'mac': network_info['mac_address'],
+            'group': self.config.get('agent.group', 'default')
         })
 
         self.logger.info("Pairing request sent")
@@ -221,7 +222,7 @@ class DogAgent:
             await asyncio.sleep(60)  # Ogni minuto
 
     async def integrity_check_loop(self):
-        """Loop verifica integrità"""
+        """Loop verifica integritï¿½"""
         while self.running and self.paired:
             try:
                 modified_files = self.integrity_monitor.check_integrity()
