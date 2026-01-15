@@ -53,6 +53,17 @@ interface SSHKey {
   scope_value?: string;
 }
 
+interface AgentAPIKey {
+  id: number;
+  key_hash: string;
+  is_active: boolean;
+  created_at: string;
+  expires_at?: string;
+  created_by?: number;
+  created_by_username?: string;
+  last_used_at?: string;
+}
+
 interface Target {
   id: number;
   hostname: string;
@@ -119,6 +130,13 @@ const Settings: React.FC = () => {
   const [loadingSSH, setLoadingSSH] = useState(false);
   const [showSSHModal, setShowSSHModal] = useState(false);
   const [sshKeyToDelete, setSSHKeyToDelete] = useState<number | null>(null);
+
+  // Agent API Keys State
+  const [agentAPIKeys, setAgentAPIKeys] = useState<AgentAPIKey[]>([]);
+  const [loadingAgentKeys, setLoadingAgentKeys] = useState(false);
+  const [showAgentKeyModal, setShowAgentKeyModal] = useState(false);
+  const [agentKeyToDelete, setAgentKeyToDelete] = useState<number | null>(null);
+  const [generatedAPIKey, setGeneratedAPIKey] = useState<string | null>(null);
 
   // Database State
   const [dbStats, setDBStats] = useState<DBStats | null>(null);
@@ -217,7 +235,7 @@ const Settings: React.FC = () => {
   // Load data when switching tabs
   useEffect(() => {
     if (activeTab === 'ssh') {
-      loadSSHKeys();
+      loadAgentAPIKeys();
     } else if (activeTab === 'database') {
       loadDBData();
     } else if (activeTab === 'notifications') {
@@ -382,6 +400,69 @@ const Settings: React.FC = () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast({ type: 'success', title: 'Successo', message: 'Chiave pubblica scaricata' });
+  };
+
+  // ============================================================================
+  // AGENT API KEYS MANAGEMENT
+  // ============================================================================
+
+  const loadAgentAPIKeys = async () => {
+    setLoadingAgentKeys(true);
+    try {
+      const keys = await api.getAgentAPIKeys();
+      setAgentAPIKeys(keys);
+    } catch (error) {
+      console.error('Error loading Agent API keys:', error);
+      showToast({ type: 'error', title: 'Errore', message: 'Errore caricamento API Keys' });
+    } finally {
+      setLoadingAgentKeys(false);
+    }
+  };
+
+  const handleGenerateAgentAPIKey = async () => {
+    try {
+      const response = await api.generateAgentAPIKey();
+      setGeneratedAPIKey(response.raw_key);
+      showToast({ type: 'success', title: 'Successo', message: 'API Key generata con successo' });
+      loadAgentAPIKeys();
+      setShowAgentKeyModal(true);
+    } catch (error) {
+      console.error('Error generating Agent API key:', error);
+      showToast({ type: 'error', title: 'Errore', message: 'Errore generazione API Key' });
+    }
+  };
+
+  const handleDeleteAgentAPIKey = async (keyId: number) => {
+    try {
+      await api.deleteAgentAPIKey(keyId);
+      showToast({ type: 'success', title: 'Successo', message: 'API Key eliminata' });
+      loadAgentAPIKeys();
+      setAgentKeyToDelete(null);
+    } catch (error) {
+      console.error('Error deleting Agent API key:', error);
+      showToast({ type: 'error', title: 'Errore', message: 'Errore eliminazione API Key' });
+    }
+  };
+
+  const handleToggleAgentAPIKey = async (keyId: number, isActive: boolean) => {
+    try {
+      if (isActive) {
+        await api.deactivateAgentAPIKey(keyId);
+        showToast({ type: 'success', title: 'Successo', message: 'API Key disattivata' });
+      } else {
+        await api.activateAgentAPIKey(keyId);
+        showToast({ type: 'success', title: 'Successo', message: 'API Key attivata' });
+      }
+      loadAgentAPIKeys();
+    } catch (error) {
+      console.error('Error toggling Agent API key:', error);
+      showToast({ type: 'error', title: 'Errore', message: 'Errore modifica stato API Key' });
+    }
+  };
+
+  const handleCloseGeneratedKeyModal = () => {
+    setShowAgentKeyModal(false);
+    setGeneratedAPIKey(null);
   };
 
   // ============================================================================
@@ -1741,74 +1822,80 @@ const Settings: React.FC = () => {
     </div>
   );
 
-  const renderSSHSettings = () => (
+  const renderAgentAPIKeysSettings = () => (
     <div className="settings-section">
       <div className="section-header-with-action">
         <div>
-          <h2 className="section-title">Chiavi SSH</h2>
-          <p className="section-description">Gestisci le chiavi SSH per la connessione ai target</p>
+          <h2 className="section-title">API Keys Agent</h2>
+          <p className="section-description">Gestisci le API Keys per l'autenticazione degli agent Dog</p>
         </div>
-        <button 
+        <button
           className="btn btn-primary"
-          onClick={() => setShowSSHModal(true)}
+          onClick={handleGenerateAgentAPIKey}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          Genera Nuova Chiave
+          Genera Nuova API Key
         </button>
       </div>
 
-      {loadingSSH ? (
+      {loadingAgentKeys ? (
         <div className="loading-state">
           <div className="spinner" />
-          <p>Caricamento chiavi SSH...</p>
+          <p>Caricamento API Keys...</p>
         </div>
-      ) : sshKeys.length === 0 ? (
+      ) : agentAPIKeys.length === 0 ? (
         <div className="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
-          <h3>Nessuna chiave SSH configurata</h3>
-          <p>Genera una nuova chiave per iniziare a connettere i target</p>
+          <h3>Nessuna API Key configurata</h3>
+          <p>Genera una nuova API Key per consentire agli agent di connettersi</p>
         </div>
       ) : (
         <div className="ssh-keys-list">
-          {sshKeys.map(key => (
+          {agentAPIKeys.map(key => (
             <div key={key.id} className="ssh-key-card">
               <div className="ssh-key-header">
                 <div className="ssh-key-info">
-                  <h3>{key.name}</h3>
+                  <h3>API Key #{key.id}</h3>
                   <div className="ssh-key-meta">
-                    <span className="badge badge-info">{key.key_type.toUpperCase()}</span>
-                    <span className="badge badge-secondary">
-                      {key.scope === 'global' ? 'Globale' : 
-                       key.scope === 'group' ? `Gruppo: ${key.scope_value}` :
-                       `Target: ${key.scope_value}`}
+                    <span className={`badge ${key.is_active ? 'badge-success' : 'badge-danger'}`}>
+                      {key.is_active ? 'Attiva' : 'Disattivata'}
                     </span>
-                    <span className="ssh-key-targets">
-                      {key.associated_targets} target associati
-                    </span>
+                    {key.created_by_username && (
+                      <span className="badge badge-secondary">
+                        Creata da: {key.created_by_username}
+                      </span>
+                    )}
+                    {key.last_used_at && (
+                      <span className="ssh-key-targets">
+                        Ultimo uso: {new Date(key.last_used_at).toLocaleString('it-IT')}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="ssh-key-actions">
                   <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => handleDownloadPublicKey(key)}
-                    title="Scarica chiave pubblica"
+                    className={`btn btn-ghost btn-sm ${key.is_active ? 'btn-warning' : 'btn-success'}`}
+                    onClick={() => handleToggleAgentAPIKey(key.id, key.is_active)}
+                    title={key.is_active ? 'Disattiva' : 'Attiva'}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
+                      {key.is_active ? (
+                        <path d="M17 10H3M21 6v8M5 6v8" />
+                      ) : (
+                        <path d="M9 10l3 3 7-7" />
+                      )}
                     </svg>
                   </button>
                   <button
                     className="btn btn-ghost btn-sm btn-danger"
-                    onClick={() => setSSHKeyToDelete(key.id)}
-                    title="Elimina chiave"
+                    onClick={() => setAgentKeyToDelete(key.id)}
+                    title="Elimina API Key"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="3 6 5 6 21 6" />
@@ -1819,16 +1906,118 @@ const Settings: React.FC = () => {
               </div>
               <div className="ssh-key-details">
                 <div className="ssh-key-fingerprint">
-                  <label>Fingerprint:</label>
-                  <code>{key.fingerprint}</code>
+                  <label>Hash (SHA512):</label>
+                  <code>{key.key_hash.substring(0, 32)}...</code>
                 </div>
                 <div className="ssh-key-created">
                   <label>Creata:</label>
                   <span>{new Date(key.created_at).toLocaleString('it-IT')}</span>
                 </div>
+                {key.expires_at && (
+                  <div className="ssh-key-created">
+                    <label>Scade:</label>
+                    <span>{new Date(key.expires_at).toLocaleString('it-IT')}</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal per mostrare la chiave generata (solo una volta) */}
+      {showAgentKeyModal && generatedAPIKey && (
+        <div className="modal-overlay" onClick={handleCloseGeneratedKeyModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>API Key Generata</h2>
+              <button className="modal-close" onClick={handleCloseGeneratedKeyModal}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="alert alert-warning" style={{ marginBottom: '1.5rem' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <div>
+                  <strong>ATTENZIONE!</strong> Salva questa API Key in un posto sicuro.
+                  Non sarà più possibile visualizzarla dopo aver chiuso questa finestra.
+                </div>
+              </div>
+              <div className="form-group">
+                <label>API Key:</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    value={generatedAPIKey}
+                    readOnly
+                    className="form-control"
+                    style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                  />
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedAPIKey);
+                      showToast({ type: 'success', title: 'Copiato', message: 'API Key copiata negli appunti' });
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <p style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                Usa questa chiave nel file di configurazione dell'agent (agent.conf) nel campo <code>api_key</code>.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={handleCloseGeneratedKeyModal}>
+                Ho salvato la chiave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal conferma eliminazione */}
+      {agentKeyToDelete && (
+        <div className="modal-overlay" onClick={() => setAgentKeyToDelete(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Conferma Eliminazione</h2>
+              <button className="modal-close" onClick={() => setAgentKeyToDelete(null)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Sei sicuro di voler eliminare questa API Key?</p>
+              <p style={{ marginTop: '0.5rem', color: 'var(--text-secondary)' }}>
+                Gli agent che utilizzano questa chiave non potranno più connettersi al server.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setAgentKeyToDelete(null)}>
+                Annulla
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => handleDeleteAgentAPIKey(agentKeyToDelete)}
+              >
+                Elimina
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -2154,10 +2343,10 @@ const Settings: React.FC = () => {
           onClick={() => setActiveTab('ssh')}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
-          Chiavi SSH
+          API Keys Agent
         </button>
         <button
           className={`tab ${activeTab === 'database' ? 'active' : ''}`}
@@ -2178,7 +2367,7 @@ const Settings: React.FC = () => {
         {activeTab === 'notifications' && renderNotificationSettings()}
         {activeTab === 'security' && renderSecuritySettings()}
         {activeTab === 'monitoring' && renderMonitoringSettings()}
-        {activeTab === 'ssh' && renderSSHSettings()}
+        {activeTab === 'ssh' && renderAgentAPIKeysSettings()}
         {activeTab === 'database' && renderDatabaseSettings()}
       </div>
 
