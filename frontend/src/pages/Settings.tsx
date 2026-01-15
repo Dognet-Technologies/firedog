@@ -1961,7 +1961,7 @@ const Settings: React.FC = () => {
               <div className="ssh-key-details">
                 <div className="ssh-key-fingerprint">
                   <label>Hash (SHA512):</label>
-                  <code>{key.key_hash.substring(0, 32)}...</code>
+                  <code>{key.key_hash ? key.key_hash.substring(0, 32) + '...' : 'N/A'}</code>
                 </div>
                 <div className="ssh-key-created">
                   <label>Creata:</label>

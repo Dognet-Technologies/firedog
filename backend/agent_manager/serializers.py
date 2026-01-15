@@ -7,10 +7,12 @@ from targets.models import Target
 
 
 class AgentAPIKeySerializer(serializers.ModelSerializer):
+    created_by_username = serializers.CharField(source='created_by', read_only=True)
+
     class Meta:
         model = AgentAPIKey
-        fields = ['id', 'is_active', 'created_at', 'expires_at', 'created_by']
-        read_only_fields = ['id', 'created_at']
+        fields = ['id', 'key_hash', 'is_active', 'created_at', 'expires_at', 'created_by', 'created_by_username', 'last_used_at']
+        read_only_fields = ['id', 'key_hash', 'created_at', 'last_used_at']
 
 
 class PairingSessionSerializer(serializers.ModelSerializer):
