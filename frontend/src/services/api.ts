@@ -641,6 +641,11 @@ class ApiService {
     return response.data;
   }
 
+  async retrieveAgentAPIKey(id: number, password: string): Promise<{ raw_key: string; key_id: number }> {
+    const response = await this.api.post(`/agent/api-keys/${id}/retrieve_key/`, { password });
+    return response.data;
+  }
+
     // ========== Database Management ==========
 
   async getDatabaseStats(): Promise<DatabaseStats> {

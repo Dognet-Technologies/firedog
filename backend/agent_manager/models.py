@@ -6,8 +6,18 @@ import hashlib
 from django.db import models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from targets.models import Target
+from cryptography.fernet import Fernet
 import uuid
+import base64
+
+
+def get_encryption_key():
+    """Ottiene la chiave di crittografia dal SECRET_KEY di Django"""
+    # Usa i primi 32 bytes del SECRET_KEY e codifica in base64 per Fernet
+    key = settings.SECRET_KEY.encode()[:32]
+    return base64.urlsafe_b64encode(key.ljust(32, b'0'))
 
 
 class AgentAPIKey(models.Model):
@@ -19,6 +29,9 @@ class AgentAPIKey(models.Model):
         max_length=128,
         unique=True,
         help_text="SHA512 hash dell'API key"
+    )
+    encrypted_key = models.TextField(
+        help_text="API key criptata (recuperabile con password admin)"
     )
     is_active = models.BooleanField(
         default=True,
@@ -35,6 +48,11 @@ class AgentAPIKey(models.Model):
         max_length=100,
         help_text="Utente che ha creato la chiave"
     )
+    last_used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Ultimo utilizzo della chiave"
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -49,6 +67,19 @@ class AgentAPIKey(models.Model):
     def hash_key(cls, raw_key: str) -> str:
         """Hash dell'API key con SHA512"""
         return hashlib.sha512(raw_key.encode()).hexdigest()
+
+    @classmethod
+    def encrypt_key(cls, raw_key: str) -> str:
+        """Cripta la chiave con Fernet (simmetrica)"""
+        fernet = Fernet(get_encryption_key())
+        encrypted = fernet.encrypt(raw_key.encode())
+        return encrypted.decode()
+
+    def decrypt_key(self) -> str:
+        """Decripta la chiave"""
+        fernet = Fernet(get_encryption_key())
+        decrypted = fernet.decrypt(self.encrypted_key.encode())
+        return decrypted.decode()
 
     def verify_key(self, raw_key: str) -> bool:
         """Verifica se la chiave corrisponde"""

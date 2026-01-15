@@ -137,6 +137,11 @@ const Settings: React.FC = () => {
   const [showAgentKeyModal, setShowAgentKeyModal] = useState(false);
   const [agentKeyToDelete, setAgentKeyToDelete] = useState<number | null>(null);
   const [generatedAPIKey, setGeneratedAPIKey] = useState<string | null>(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForRetrieve, setPasswordForRetrieve] = useState('');
+  const [keyIdToRetrieve, setKeyIdToRetrieve] = useState<number | null>(null);
+  const [retrievedKey, setRetrievedKey] = useState<string | null>(null);
+  const [retrievingKey, setRetrievingKey] = useState(false);
 
   // Database State
   const [dbStats, setDBStats] = useState<DBStats | null>(null);
@@ -463,6 +468,43 @@ const Settings: React.FC = () => {
   const handleCloseGeneratedKeyModal = () => {
     setShowAgentKeyModal(false);
     setGeneratedAPIKey(null);
+  };
+
+  const handleShowKeyRequest = (keyId: number) => {
+    setKeyIdToRetrieve(keyId);
+    setShowPasswordModal(true);
+    setPasswordForRetrieve('');
+    setRetrievedKey(null);
+  };
+
+  const handleRetrieveKey = async () => {
+    if (!keyIdToRetrieve || !passwordForRetrieve) {
+      showToast({ type: 'error', title: 'Errore', message: 'Inserisci la password' });
+      return;
+    }
+
+    setRetrievingKey(true);
+    try {
+      const response = await api.retrieveAgentAPIKey(keyIdToRetrieve, passwordForRetrieve);
+      setRetrievedKey(response.raw_key);
+      showToast({ type: 'success', title: 'Successo', message: 'API Key recuperata' });
+    } catch (error: any) {
+      console.error('Error retrieving API key:', error);
+      if (error.response?.status === 401) {
+        showToast({ type: 'error', title: 'Errore', message: 'Password non valida' });
+      } else {
+        showToast({ type: 'error', title: 'Errore', message: 'Errore recupero API Key' });
+      }
+    } finally {
+      setRetrievingKey(false);
+    }
+  };
+
+  const handleClosePasswordModal = () => {
+    setShowPasswordModal(false);
+    setPasswordForRetrieve('');
+    setKeyIdToRetrieve(null);
+    setRetrievedKey(null);
   };
 
   // ============================================================================
@@ -1880,6 +1922,16 @@ const Settings: React.FC = () => {
                 </div>
                 <div className="ssh-key-actions">
                   <button
+                    className="btn btn-ghost btn-sm btn-info"
+                    onClick={() => handleShowKeyRequest(key.id)}
+                    title="Mostra API Key"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                  <button
                     className={`btn btn-ghost btn-sm ${key.is_active ? 'btn-warning' : 'btn-success'}`}
                     onClick={() => handleToggleAgentAPIKey(key.id, key.is_active)}
                     title={key.is_active ? 'Disattiva' : 'Attiva'}
@@ -2016,6 +2068,107 @@ const Settings: React.FC = () => {
               >
                 Elimina
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal per inserire password e mostrare la chiave */}
+      {showPasswordModal && (
+        <div className="modal-overlay" onClick={handleClosePasswordModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Mostra API Key</h2>
+              <button className="modal-close" onClick={handleClosePasswordModal}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              {!retrievedKey ? (
+                <>
+                  <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                    <div>
+                      Per motivi di sicurezza, inserisci la tua password per visualizzare la chiave.
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Password Admin:</label>
+                    <input
+                      type="password"
+                      value={passwordForRetrieve}
+                      onChange={(e) => setPasswordForRetrieve(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleRetrieveKey()}
+                      placeholder="Inserisci la tua password"
+                      className="form-control"
+                      autoFocus
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="alert alert-success" style={{ marginBottom: '1.5rem' }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    <div>
+                      API Key recuperata con successo!
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>API Key:</label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input
+                        type="text"
+                        value={retrievedKey}
+                        readOnly
+                        className="form-control"
+                        style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                      />
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          navigator.clipboard.writeText(retrievedKey);
+                          showToast({ type: 'success', title: 'Copiato', message: 'API Key copiata negli appunti' });
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              {!retrievedKey ? (
+                <>
+                  <button className="btn btn-secondary" onClick={handleClosePasswordModal}>
+                    Annulla
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleRetrieveKey}
+                    disabled={retrievingKey || !passwordForRetrieve}
+                  >
+                    {retrievingKey ? 'Verifica...' : 'Mostra Chiave'}
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-primary" onClick={handleClosePasswordModal}>
+                  Chiudi
+                </button>
+              )}
             </div>
           </div>
         </div>
