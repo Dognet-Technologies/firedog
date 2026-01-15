@@ -87,8 +87,8 @@ const FirewallRules: React.FC = () => {
 
   const loadGroups = async () => {
     try {
-      const response = await apiService.get('/agent/groups/');
-      setGroups(response.data);
+      const groups = await apiService.getAgentGroups();
+      setGroups(groups);
     } catch (error) {
       console.error('Error loading groups:', error);
     }
@@ -119,13 +119,9 @@ const FirewallRules: React.FC = () => {
     try {
       if (targetSelection === 'group' && selectedGroup) {
         // Send rule to entire group
-        await apiService.post('/agent/commands/send_to_group/', {
-          group: selectedGroup,
-          action: 'add_firewall_rule',
-          payload: {
-            mode: viewMode,
-            rule: newRule
-          }
+        await apiService.sendRuleToGroup(selectedGroup, 'add_firewall_rule', {
+          mode: viewMode,
+          rule: newRule
         });
         showToast({
           type: 'success',

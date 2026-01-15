@@ -646,6 +646,22 @@ class ApiService {
     return response.data;
   }
 
+  // ========== Agent Groups ==========
+
+  async getAgentGroups(): Promise<any> {
+    const response = await this.api.get('/agent/groups/');
+    return response.data;
+  }
+
+  async sendRuleToGroup(group: string, action: string, payload: any): Promise<any> {
+    const response = await this.api.post('/agent/commands/send_to_group/', {
+      group,
+      action,
+      payload
+    });
+    return response.data;
+  }
+
     // ========== Database Management ==========
 
   async getDatabaseStats(): Promise<DatabaseStats> {
