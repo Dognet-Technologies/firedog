@@ -19,6 +19,16 @@
 .mode-tab span { font-size: var(--font-sm); color: var(--text-secondary); }
 .expert-warning { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); background: rgba(255, 214, 10, 0.1); border: 1px solid var(--status-warning); border-radius: var(--radius-md); }
 .controls-section { display: flex; gap: var(--space-xl); align-items: flex-end; margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: var(--radius-lg); }
+.control-group { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 200px; }
+.control-group label { font-size: var(--font-sm); font-weight: var(--font-medium); color: var(--text-secondary); }
+.control-group select { padding: var(--space-sm) var(--space-md); background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: var(--radius-md); color: var(--text-primary); font-size: var(--font-sm); cursor: pointer; transition: all var(--transition-base); }
+.control-group select:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(0, 201, 255, 0.1); }
+.selection-type-toggle { display: flex; gap: var(--space-xs); }
+.toggle-btn { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); background: var(--bg-tertiary); border: 2px solid var(--border-primary); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); font-size: var(--font-sm); color: var(--text-secondary); }
+.toggle-btn svg { width: 16px; height: 16px; stroke-width: 2; }
+.toggle-btn:hover { border-color: var(--accent-primary); background: var(--bg-hover); }
+.toggle-btn.active { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--bg-primary); box-shadow: 0 0 8px rgba(0, 201, 255, 0.3); }
+.toggle-btn.active svg { color: var(--bg-primary); }
 .chain-tabs { display: flex; gap: var(--space-sm); flex: 1; }
 .chain-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: var(--space-sm); padding: var(--space-md); background: var(--bg-tertiary); border: 2px solid var(--border-primary); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); }
 .chain-tab.active { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--bg-primary); box-shadow: 0 0 12px rgba(0, 201, 255, 0.4); }
