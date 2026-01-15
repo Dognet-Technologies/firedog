@@ -500,8 +500,7 @@ class TargetGroupsViewSet(viewsets.ViewSet):
     """
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=['get'])
-    def list_groups(self, request):
+    def list(self, request):
         """
         Lista tutti i gruppi disponibili con conteggio target
         GET /api/agent/groups/
