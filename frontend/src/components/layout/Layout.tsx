@@ -77,8 +77,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       subItems: [
         { id: 'settings-general', label: 'Generali', icon: 'sliders', path: '/settings/general' },
         { id: 'settings-integrity', label: 'File Integrity', icon: 'lock', path: '/integrity' },
-        { id: 'settings-notifications', label: 'Notifiche', icon: 'bell', path: '/settings/notifications' },
-        { id: 'settings-users', label: 'Utenti', icon: 'users', path: '/settings/users' },
       ],
     },
   ];
