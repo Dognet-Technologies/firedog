@@ -31,6 +31,8 @@ class AgentAPIKey(models.Model):
         help_text="SHA512 hash dell'API key"
     )
     encrypted_key = models.TextField(
+        null=True,
+        blank=True,
         help_text="API key criptata (recuperabile con password admin)"
     )
     is_active = models.BooleanField(

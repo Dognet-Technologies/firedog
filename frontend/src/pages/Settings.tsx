@@ -492,6 +492,8 @@ const Settings: React.FC = () => {
       console.error('Error retrieving API key:', error);
       if (error.response?.status === 401) {
         showToast({ type: 'error', title: 'Errore', message: 'Password non valida' });
+      } else if (error.response?.status === 404) {
+        showToast({ type: 'error', title: 'Errore', message: 'Questa chiave è stata creata prima della funzionalità di recupero. Genera una nuova chiave.' });
       } else {
         showToast({ type: 'error', title: 'Errore', message: 'Errore recupero API Key' });
       }

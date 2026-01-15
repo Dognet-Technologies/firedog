@@ -106,6 +106,13 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
+        # Verifica se la chiave criptata esiste
+        if not api_key.encrypted_key:
+            return Response(
+                {'error': 'This API key was created before the encryption feature. Please generate a new key.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
         # Decripta e ritorna la chiave
         try:
             raw_key = api_key.decrypt_key()
