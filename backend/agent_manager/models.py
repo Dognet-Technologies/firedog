@@ -23,7 +23,7 @@ class AgentAPIKey(models.Model):
     is_active = models.BooleanField(
         default=True,
         db_index=True,
-        help_text="Solo una chiave può essere attiva"
+        help_text="Solo una chiave puÃ² essere attiva"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(
@@ -129,7 +129,7 @@ class PairingSession(models.Model):
     completed_at = models.DateTimeField(
         null=True,
         blank=True,
-        help_text="Quando il pairing è stato completato"
+        help_text="Quando il pairing Ã¨ stato completato"
     )
 
     class Meta:
@@ -148,7 +148,7 @@ class PairingSession(models.Model):
 
     @property
     def is_expired(self):
-        """Verifica se la sessione è scaduta"""
+        """Verifica se la sessione Ã¨ scaduta"""
         return timezone.now() > self.expires_at
 
     def verify_phase_1(self, api_key: str) -> bool:
@@ -250,7 +250,7 @@ class AgentConnection(models.Model):
     disconnected_at = models.DateTimeField(
         null=True,
         blank=True,
-        help_text="Quando l'agent si è disconnesso"
+        help_text="Quando l'agent si Ã¨ disconnesso"
     )
 
     class Meta:
@@ -413,7 +413,7 @@ class AgentHeartbeat(models.Model):
     timestamp = models.DateTimeField(
         auto_now_add=True,
         db_index=True,
-        help_text="Quando l'heartbeat è stato ricevuto"
+        help_text="Quando l'heartbeat Ã¨ stato ricevuto"
     )
 
     # System statistics
