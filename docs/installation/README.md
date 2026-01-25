@@ -6,6 +6,36 @@ Documentazione completa per l'installazione e configurazione di FireDog.
 
 ## 📚 Indice Documentazione
 
+### ⚙️ Scelta Metodo di Installazione
+
+**Docker vs Nativo - Quale scegliere?**
+
+| Caratteristica | Docker | Nativo |
+|---------------|--------|--------|
+| **Facilità installazione** | ⭐⭐⭐⭐⭐ Molto semplice | ⭐⭐⭐ Media |
+| **Performance** | ⭐⭐⭐⭐ Ottima | ⭐⭐⭐⭐⭐ Massima |
+| **Isolamento** | ⭐⭐⭐⭐⭐ Completo | ⭐⭐ Limitato |
+| **Aggiornamenti** | ⭐⭐⭐⭐⭐ Molto facili | ⭐⭐⭐ Manuali |
+| **Controllo sistema** | ⭐⭐⭐ Limitato | ⭐⭐⭐⭐⭐ Completo |
+| **Uso risorse** | ⭐⭐⭐⭐ Efficiente | ⭐⭐⭐⭐⭐ Massimo |
+| **Troubleshooting** | ⭐⭐⭐ Medio | ⭐⭐⭐⭐ Diretto |
+| **Portabilità** | ⭐⭐⭐⭐⭐ Massima | ⭐⭐ Bassa |
+
+**Usa Docker se:**
+- Prima installazione o test
+- Vuoi semplicità di gestione
+- Preferisci isolamento applicativo
+- Hai poca esperienza con gestione server
+
+**Usa Nativo se:**
+- Ambiente production enterprise
+- Vuoi massime performance
+- Hai requisiti specifici di sistema
+- Preferisci controllo completo
+- Hai esperienza con gestione server Linux
+
+---
+
 ### 🚀 [Quick Start Guide](./QUICK_START.md)
 **Guida rapida** per installare server e agent in pochi minuti.
 
@@ -15,8 +45,8 @@ Documentazione completa per l'installazione e configurazione di FireDog.
 
 ---
 
-### 🖥️ [Server Installation](./SERVER_INSTALLATION.md)
-**Guida completa** per l'installazione del server FireDog su Debian 12.
+### 🖥️ [Server Installation (Docker)](./SERVER_INSTALLATION.md)
+**Guida completa** per l'installazione del server FireDog su Debian 12 con Docker.
 
 **Include**:
 - Requisiti sistema
@@ -29,6 +59,28 @@ Documentazione completa per l'installazione e configurazione di FireDog.
 - Troubleshooting
 
 **Tempo stimato**: 30-60 minuti
+
+---
+
+### 💻 [Server Installation (Native - No Docker)](./SERVER_NATIVE_INSTALLATION.md)
+**Guida completa** per l'installazione nativa del server FireDog su Debian 12 senza Docker.
+
+**Include**:
+- Installazione PostgreSQL nativo
+- Installazione Redis nativo
+- Setup Python virtualenv
+- Configurazione Django con Gunicorn e Daphne
+- Servizi systemd per tutti i componenti
+- Setup Celery worker e beat
+- Installazione Node.js e build React
+- Nginx come reverse proxy
+- SSL/TLS con Let's Encrypt
+- Script backup e manutenzione
+- Troubleshooting
+
+**Tempo stimato**: 45-90 minuti
+
+**Ideale per**: Production server, installazioni enterprise, controllo completo
 
 ---
 
@@ -60,8 +112,13 @@ Documentazione completa per l'installazione e configurazione di FireDog.
 
 ### Scenario 2: Ambiente Production
 
+**Scegli metodo di installazione:**
+- **Docker** ([SERVER_INSTALLATION.md](./SERVER_INSTALLATION.md)) - Più semplice, isolato, aggiornamenti facili
+- **Nativo** ([SERVER_NATIVE_INSTALLATION.md](./SERVER_NATIVE_INSTALLATION.md)) - Controllo completo, performance ottimali
+
+**Passi:**
 1. **Pianifica** architettura (server sizing, network, gruppi)
-2. **Installa Server** con configurazione production ([SERVER_INSTALLATION.md](./SERVER_INSTALLATION.md))
+2. **Installa Server** con configurazione production (Docker o Nativo)
 3. **Configura SSL** con nginx e Let's Encrypt
 4. **Setup Backup** automatico database
 5. **Installa Agent** su target di development per test
