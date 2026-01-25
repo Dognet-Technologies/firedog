@@ -30,6 +30,8 @@ FireDog è una piattaforma di gestione e monitoraggio della sicurezza per infras
 
 ## Parte 1: Installazione Server (Debian 12)
 
+> **Nota**: Questa guida usa Docker per semplicità. Per installazione nativa senza Docker, vedi [SERVER_NATIVE_INSTALLATION.md](./SERVER_NATIVE_INSTALLATION.md)
+
 ### Step 1: Preparazione Sistema
 
 ```bash
