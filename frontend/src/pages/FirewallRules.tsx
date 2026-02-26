@@ -10,11 +10,18 @@ import { useNotifications } from '../contexts/NotificationContext';
 
 type ViewMode = 'standard' | 'expert';
 type Chain = 'INPUT' | 'OUTPUT' | 'FORWARD';
+type TargetSelection = 'single' | 'group';
 
 interface RulesData {
   input_rules: FirewallRule[];
   output_rules: FirewallRule[];
   forward_rules: FirewallRule[];
+}
+
+interface AgentGroup {
+  name: string;
+  target_count: number;
+  online_count: number;
 }
 
 interface NewRule {
@@ -32,6 +39,9 @@ interface NewRule {
 const FirewallRules: React.FC = () => {
   const [targets, setTargets] = useState<Target[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
+  const [groups, setGroups] = useState<AgentGroup[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [targetSelection, setTargetSelection] = useState<TargetSelection>('single');
   const [loading, setLoading] = useState(true);
   const { showToast, showConfirm } = useNotifications();
   const [viewMode, setViewMode] = useState<ViewMode>('standard');
@@ -52,13 +62,14 @@ const FirewallRules: React.FC = () => {
 
   useEffect(() => {
     loadTargets();
+    loadGroups();
   }, []);
 
   useEffect(() => {
-    if (selectedTarget) {
+    if (selectedTarget && targetSelection === 'single') {
       loadRules();
     }
-  }, [selectedTarget]);
+  }, [selectedTarget, targetSelection]);
 
   const loadTargets = async () => {
     try {
@@ -71,6 +82,15 @@ const FirewallRules: React.FC = () => {
       console.error('Error loading targets:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGroups = async () => {
+    try {
+      const groups = await apiService.getAgentGroups();
+      setGroups(groups);
+    } catch (error) {
+      console.error('Error loading groups:', error);
     }
   };
 
@@ -95,15 +115,30 @@ const FirewallRules: React.FC = () => {
 
   const handleAddRule = async () => {
     // Validazione...
-    
+
     try {
-      console.log('Adding rule:', newRule);
-      showToast({
-        type: 'success',
-        title: 'Regola aggiunta',
-        message: 'La regola è stata aggiunta con successo'
-      });
-      
+      if (targetSelection === 'group' && selectedGroup) {
+        // Send rule to entire group
+        await apiService.sendRuleToGroup(selectedGroup, 'add_firewall_rule', {
+          mode: viewMode,
+          rule: newRule
+        });
+        showToast({
+          type: 'success',
+          title: 'Regola inviata',
+          message: `Regola inviata a tutti i target del gruppo "${selectedGroup}"`
+        });
+      } else if (targetSelection === 'single' && selectedTarget) {
+        // Send rule to single target
+        console.log('Adding rule to target:', selectedTarget, newRule);
+        showToast({
+          type: 'success',
+          title: 'Regola aggiunta',
+          message: 'La regola è stata aggiunta con successo'
+        });
+        await loadRules(true);
+      }
+
       setShowAddModal(false);
       setNewRule({
         chain: 'INPUT',
@@ -111,8 +146,6 @@ const FirewallRules: React.FC = () => {
         port: '',
         action: 'ACCEPT',
       });
-      
-      await loadRules(true);
     } catch (error) {
       console.error('Error adding rule:', error);
       showToast({
@@ -397,11 +430,11 @@ const FirewallRules: React.FC = () => {
           </button>
         </div>
         {viewMode === 'expert' && (
-          <div className="expert-warning">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <div className="expert-warning" style={{ padding: '0.75rem 1rem', fontSize: '0.875rem' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ width: '18px', height: '18px', minWidth: '18px' }}>
               <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
             </svg>
-            <span>Modalità Expert: Accesso completo a iptables. Fai attenzione a non bloccarti fuori!</span>
+            <span>Modalità Expert: Accesso completo a iptables. Fai attenzione!</span>
           </div>
         )}
       </div>
@@ -409,20 +442,68 @@ const FirewallRules: React.FC = () => {
       {/* Controls */}
       <div className="controls-section">
         <div className="control-group">
-          <label>Target</label>
-          <select
-            value={selectedTarget || ''}
-            onChange={(e) => setSelectedTarget(Number(e.target.value))}
-            disabled={loading}
-          >
-            <option value="">Seleziona un target</option>
-            {targets.map((target) => (
-              <option key={target.id} value={target.id}>
-                {target.hostname} ({target.ip_address})
-              </option>
-            ))}
-          </select>
+          <label>Tipo Selezione</label>
+          <div className="selection-type-toggle">
+            <button
+              className={`toggle-btn ${targetSelection === 'single' ? 'active' : ''}`}
+              onClick={() => {
+                setTargetSelection('single');
+                setSelectedGroup(null);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+              </svg>
+              Target Singolo
+            </button>
+            <button
+              className={`toggle-btn ${targetSelection === 'group' ? 'active' : ''}`}
+              onClick={() => {
+                setTargetSelection('group');
+                setSelectedTarget(null);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+              </svg>
+              Gruppo
+            </button>
+          </div>
         </div>
+
+        {targetSelection === 'single' ? (
+          <div className="control-group">
+            <label>Target</label>
+            <select
+              value={selectedTarget || ''}
+              onChange={(e) => setSelectedTarget(Number(e.target.value))}
+              disabled={loading}
+            >
+              <option value="">Seleziona un target</option>
+              {targets.map((target) => (
+                <option key={target.id} value={target.id}>
+                  {target.hostname} ({target.ip_address})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="control-group">
+            <label>Gruppo</label>
+            <select
+              value={selectedGroup || ''}
+              onChange={(e) => setSelectedGroup(e.target.value)}
+              disabled={loading}
+            >
+              <option value="">Seleziona un gruppo</option>
+              {groups.map((group) => (
+                <option key={group.name} value={group.name}>
+                  {group.name} ({group.online_count}/{group.target_count} online)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="chain-tabs">
           <button
@@ -462,21 +543,39 @@ const FirewallRules: React.FC = () => {
             <div className="spinner"></div>
             <p>Caricamento regole...</p>
           </div>
-        ) : !selectedTarget ? (
+        ) : (!selectedTarget && targetSelection === 'single') || (!selectedGroup && targetSelection === 'group') ? (
           <div className="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
             </svg>
-            <h3>Seleziona un Target</h3>
-            <p>Scegli un target online per gestire le sue regole firewall</p>
+            <h3>
+              {targetSelection === 'single' ? 'Seleziona un Target' : 'Seleziona un Gruppo'}
+            </h3>
+            <p>
+              {targetSelection === 'single'
+                ? 'Scegli un target online per gestire le sue regole firewall'
+                : 'Scegli un gruppo per inviare regole a tutti i target appartenenti al gruppo'}
+            </p>
           </div>
-        ) : currentRules.length === 0 ? (
+        ) : currentRules.length === 0 || targetSelection === 'group' ? (
           <div className="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+              {targetSelection === 'group' ? (
+                <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+              ) : (
+                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+              )}
             </svg>
-            <h3>Nessuna Regola {activeChain}</h3>
-            <p>Aggiungi la prima regola per la chain {activeChain}</p>
+            <h3>
+              {targetSelection === 'group'
+                ? `Gestione Gruppo: ${selectedGroup}`
+                : `Nessuna Regola ${activeChain}`}
+            </h3>
+            <p>
+              {targetSelection === 'group'
+                ? 'Usa il pulsante "Aggiungi Regola" per inviare regole a tutti i target del gruppo'
+                : `Aggiungi la prima regola per la chain ${activeChain}`}
+            </p>
           </div>
         ) : (
           <div className="rules-table-wrapper">

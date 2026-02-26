@@ -1,0 +1,29 @@
+{
+  "server": {
+    "url": "https://firedog.example.com",
+    "api_key": "YOUR_API_KEY_HERE",
+    "verify_ssl": true,
+    "reconnect_interval": 30
+  },
+  "agent": {
+    "group": "production-servers",
+    "notification_interval": 30,
+    "log_level": "INFO",
+    "log_path": "/opt/sentinelsuite/firedog/log"
+  },
+  "intervention": {
+    "mode": "automatic",
+    "block_type": "temporary",
+    "block_duration": 3600,
+    "threat_threshold": 75
+  },
+  "monitoring": {
+    "check_integrity": true,
+    "integrity_files": [
+      "/opt/sentinelsuite/firedog/dog_agent.py",
+      "/etc/dog-agent/agent.conf"
+    ],
+    "pcap_path_input": "/var/log/ulogd/input_dropped.pcap",
+    "pcap_path_output": "/var/log/ulogd/output_dropped.pcap"
+  }
+}

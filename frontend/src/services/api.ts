@@ -70,6 +70,23 @@ import type {
       scope_value?: string;
     }
 
+    export interface AgentAPIKey {
+      id: number;
+      key_hash: string;
+      is_active: boolean;
+      created_at: string;
+      expires_at?: string;
+      created_by?: number;
+      created_by_username?: string;
+      last_used_at?: string;
+    }
+
+    export interface AgentAPIKeyGenerateResponse {
+      raw_key: string;
+      warning: string;
+      api_key: AgentAPIKey;
+    }
+
     export interface DatabaseStats {
       total_size: string;
       connection_status: 'connected' | 'error';
@@ -589,6 +606,58 @@ class ApiService {
   async downloadSSHKeyPublic(id: number): Promise<Blob> {
     const response = await this.api.get(`/settings/ssh-keys/${id}/download/`, {
       responseType: 'blob',
+    });
+    return response.data;
+  }
+
+    // ========== Agent API Keys ==========
+
+  async getAgentAPIKeys(): Promise<AgentAPIKey[]> {
+    const response = await this.api.get('/agent/api-keys/');
+    return response.data.results || response.data;
+  }
+
+  async getAgentAPIKey(id: number): Promise<AgentAPIKey> {
+    const response = await this.api.get(`/agent/api-keys/${id}/`);
+    return response.data;
+  }
+
+  async generateAgentAPIKey(): Promise<AgentAPIKeyGenerateResponse> {
+    const response = await this.api.post('/agent/api-keys/generate/');
+    return response.data;
+  }
+
+  async deleteAgentAPIKey(id: number): Promise<void> {
+    await this.api.delete(`/agent/api-keys/${id}/`);
+  }
+
+  async activateAgentAPIKey(id: number): Promise<AgentAPIKey> {
+    const response = await this.api.post(`/agent/api-keys/${id}/activate/`);
+    return response.data;
+  }
+
+  async deactivateAgentAPIKey(id: number): Promise<AgentAPIKey> {
+    const response = await this.api.post(`/agent/api-keys/${id}/deactivate/`);
+    return response.data;
+  }
+
+  async retrieveAgentAPIKey(id: number, password: string): Promise<{ raw_key: string; key_id: number }> {
+    const response = await this.api.post(`/agent/api-keys/${id}/retrieve_key/`, { password });
+    return response.data;
+  }
+
+  // ========== Agent Groups ==========
+
+  async getAgentGroups(): Promise<any> {
+    const response = await this.api.get('/agent/groups/');
+    return response.data;
+  }
+
+  async sendRuleToGroup(group: string, action: string, payload: any): Promise<any> {
+    const response = await this.api.post('/agent/commands/send_to_group/', {
+      group,
+      action,
+      payload
     });
     return response.data;
   }
