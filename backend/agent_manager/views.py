@@ -2,6 +2,7 @@
 Views per agent_manager app
 REST API per gestione agent
 """
+
 import secrets
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -12,10 +13,19 @@ from django.db import models
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
-from .models import AgentAPIKey, PairingSession, AgentConnection, AgentCommand, AgentHeartbeat
+from .models import (
+    AgentAPIKey,
+    PairingSession,
+    AgentConnection,
+    AgentCommand,
+    AgentHeartbeat,
+)
 from .serializers import (
-    AgentAPIKeySerializer, PairingSessionSerializer,
-    AgentConnectionSerializer, AgentCommandSerializer, AgentHeartbeatSerializer
+    AgentAPIKeySerializer,
+    PairingSessionSerializer,
+    AgentConnectionSerializer,
+    AgentCommandSerializer,
+    AgentHeartbeatSerializer,
 )
 from targets.models import Target
 
@@ -24,11 +34,12 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
     """
     ViewSet per gestione API Keys
     """
+
     queryset = AgentAPIKey.objects.all()
     serializer_class = AgentAPIKeySerializer
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=["post"])
     def generate(self, request):
         """
         Genera una nuova API key
@@ -46,19 +57,22 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
             key_hash=key_hash,
             encrypted_key=encrypted_key,
             is_active=True,
-            created_by=request.user.username
+            created_by=request.user.username,
         )
 
         serializer = self.get_serializer(api_key)
 
         # Ritorna la chiave raw
-        return Response({
-            'api_key': serializer.data,
-            'raw_key': raw_key,
-            'warning': 'Save this key! You can retrieve it later with your admin password.'
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "api_key": serializer.data,
+                "raw_key": raw_key,
+                "warning": "Save this key! You can retrieve it later with your admin password.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def deactivate(self, request, pk=None):
         """
         Disattiva una API key
@@ -66,12 +80,12 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
         """
         api_key = self.get_object()
         api_key.is_active = False
-        api_key.save(update_fields=['is_active'])
+        api_key.save(update_fields=["is_active"])
 
         serializer = self.get_serializer(api_key)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):
         """
         Attiva una API key (disattiva tutte le altre)
@@ -84,7 +98,7 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(api_key)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def retrieve_key(self, request, pk=None):
         """
         Recupera la chiave in chiaro (richiede password admin)
@@ -92,39 +106,36 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
         Body: { "password": "admin_password" }
         """
         api_key = self.get_object()
-        password = request.data.get('password')
+        password = request.data.get("password")
 
         if not password:
             return Response(
-                {'error': 'Password is required'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Password is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         # Verifica la password dell'utente
         if not request.user.check_password(password):
             return Response(
-                {'error': 'Invalid password'},
-                status=status.HTTP_401_UNAUTHORIZED
+                {"error": "Invalid password"}, status=status.HTTP_401_UNAUTHORIZED
             )
 
         # Verifica se la chiave criptata esiste
         if not api_key.encrypted_key:
             return Response(
-                {'error': 'This API key was created before the encryption feature. Please generate a new key.'},
-                status=status.HTTP_404_NOT_FOUND
+                {
+                    "error": "This API key was created before the encryption feature. Please generate a new key."
+                },
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         # Decripta e ritorna la chiave
         try:
             raw_key = api_key.decrypt_key()
-            return Response({
-                'raw_key': raw_key,
-                'key_id': api_key.id
-            })
+            return Response({"raw_key": raw_key, "key_id": api_key.id})
         except Exception as e:
             return Response(
-                {'error': f'Failed to decrypt key: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": f"Failed to decrypt key: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
@@ -132,6 +143,7 @@ class PairingSessionViewSet(viewsets.ModelViewSet):
     """
     ViewSet per gestione sessioni di pairing
     """
+
     queryset = PairingSession.objects.all()
     serializer_class = PairingSessionSerializer
     permission_classes = [IsAuthenticated]
@@ -139,55 +151,52 @@ class PairingSessionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filtra per target se specificato"""
         queryset = super().get_queryset()
-        target_id = self.request.query_params.get('target_id')
+        target_id = self.request.query_params.get("target_id")
         if target_id:
             queryset = queryset.filter(target_id=target_id)
         return queryset
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=["post"])
     def start(self, request):
         """
         Avvia una nuova sessione di pairing
         POST /api/agent/pairing/start/
         Body: {"target_id": 123}
         """
-        target_id = request.data.get('target_id')
+        target_id = request.data.get("target_id")
 
         if not target_id:
             return Response(
-                {'error': 'target_id is required'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "target_id is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
             target = Target.objects.get(pk=target_id)
         except Target.DoesNotExist:
             return Response(
-                {'error': 'Target not found'},
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "Target not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
         # Verifica che il target abbia identity_hash
         if not target.identity_hash:
             return Response(
-                {'error': 'Target does not have identity_hash set. Please configure IP, hostname and MAC address.'},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    "error": "Target does not have identity_hash set. Please configure IP, hostname and MAC address."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Crea nuova sessione di pairing
-        session = PairingSession.objects.create(
-            target=target,
-            status='waiting'
-        )
+        session = PairingSession.objects.create(target=target, status="waiting")
 
         # Aggiorna stato target
-        target.status = 'pairing'
-        target.save(update_fields=['status'])
+        target.status = "pairing"
+        target.save(update_fields=["status"])
 
         serializer = self.get_serializer(session)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=["get"])
     def status(self, request, pk=None):
         """
         Ottiene lo status di una sessione di pairing
@@ -196,13 +205,17 @@ class PairingSessionViewSet(viewsets.ModelViewSet):
         session = self.get_object()
 
         # Verifica se � scaduta
-        if session.is_expired and session.status in ['waiting', 'verifying_api', 'verifying_hash']:
-            session.status = 'expired'
-            session.save(update_fields=['status'])
+        if session.is_expired and session.status in [
+            "waiting",
+            "verifying_api",
+            "verifying_hash",
+        ]:
+            session.status = "expired"
+            session.save(update_fields=["status"])
 
             # Reset target status
-            session.target.status = 'unpaired'
-            session.target.save(update_fields=['status'])
+            session.target.status = "unpaired"
+            session.target.save(update_fields=["status"])
 
         serializer = self.get_serializer(session)
         return Response(serializer.data)
@@ -212,11 +225,12 @@ class AgentConnectionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet per visualizzare connessioni agent (solo lettura)
     """
+
     queryset = AgentConnection.objects.all()
     serializer_class = AgentConnectionSerializer
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def online(self, request):
         """
         Lista agent online
@@ -226,7 +240,7 @@ class AgentConnectionViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(connections, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def offline(self, request):
         """
         Lista agent offline
@@ -236,7 +250,7 @@ class AgentConnectionViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(connections, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def disconnect(self, request, pk=None):
         """
         Forza disconnessione di un agent
@@ -248,10 +262,7 @@ class AgentConnectionViewSet(viewsets.ReadOnlyModelViewSet):
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.send)(
             connection.websocket_channel,
-            {
-                'type': 'disconnect_agent',
-                'reason': 'Disconnected by admin'
-            }
+            {"type": "disconnect_agent", "reason": "Disconnected by admin"},
         )
 
         connection.mark_offline()
@@ -264,6 +275,7 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
     """
     ViewSet per gestione comandi agent
     """
+
     queryset = AgentCommand.objects.all()
     serializer_class = AgentCommandSerializer
     permission_classes = [IsAuthenticated]
@@ -271,11 +283,11 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filtra per target se specificato"""
         queryset = super().get_queryset()
-        target_id = self.request.query_params.get('target_id')
+        target_id = self.request.query_params.get("target_id")
         if target_id:
             queryset = queryset.filter(target_id=target_id)
 
-        status_filter = self.request.query_params.get('status')
+        status_filter = self.request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
 
@@ -300,43 +312,45 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
 
         # Verifica che l'agent sia online
         try:
-            connection = AgentConnection.objects.get(target=command.target, is_online=True)
+            connection = AgentConnection.objects.get(
+                target=command.target, is_online=True
+            )
 
             # Invia comando via WebSocket
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.send)(
                 connection.websocket_channel,
                 {
-                    'type': 'send_command',
-                    'command_id': str(command.command_id),
-                    'action': command.action,
-                    'payload': command.payload
-                }
+                    "type": "send_command",
+                    "command_id": str(command.command_id),
+                    "action": command.action,
+                    "payload": command.payload,
+                },
             )
 
             command.mark_sent()
 
         except AgentConnection.DoesNotExist:
-            command.mark_failed('Agent is not connected')
+            command.mark_failed("Agent is not connected")
 
         headers = self.get_success_headers(serializer.data)
         return Response(
             self.get_serializer(command).data,
             status=status.HTTP_201_CREATED,
-            headers=headers
+            headers=headers,
         )
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def pending(self, request):
         """
         Lista comandi pendenti
         GET /api/agent/commands/pending/
         """
-        commands = self.queryset.filter(status='pending')
+        commands = self.queryset.filter(status="pending")
         serializer = self.get_serializer(commands, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def retry(self, request, pk=None):
         """
         Riprova l'esecuzione di un comando fallito
@@ -344,43 +358,45 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
         """
         command = self.get_object()
 
-        if command.status not in ['failed', 'timeout']:
+        if command.status not in ["failed", "timeout"]:
             return Response(
-                {'error': 'Can only retry failed or timeout commands'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Can only retry failed or timeout commands"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Reset status
-        command.status = 'pending'
+        command.status = "pending"
         command.sent_at = None
         command.completed_at = None
-        command.error_message = ''
+        command.error_message = ""
         command.save()
 
         # Riprova invio
         try:
-            connection = AgentConnection.objects.get(target=command.target, is_online=True)
+            connection = AgentConnection.objects.get(
+                target=command.target, is_online=True
+            )
 
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.send)(
                 connection.websocket_channel,
                 {
-                    'type': 'send_command',
-                    'command_id': str(command.command_id),
-                    'action': command.action,
-                    'payload': command.payload
-                }
+                    "type": "send_command",
+                    "command_id": str(command.command_id),
+                    "action": command.action,
+                    "payload": command.payload,
+                },
             )
 
             command.mark_sent()
 
         except AgentConnection.DoesNotExist:
-            command.mark_failed('Agent is not connected')
+            command.mark_failed("Agent is not connected")
 
         serializer = self.get_serializer(command)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=["post"])
     def send_to_group(self, request):
         """
         Invia comando a tutti i target di un gruppo
@@ -392,24 +408,24 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
             "timeout_seconds": 30
         }
         """
-        group = request.data.get('group')
-        action = request.data.get('action')
-        payload = request.data.get('payload', {})
-        timeout_seconds = request.data.get('timeout_seconds', 30)
+        group = request.data.get("group")
+        action = request.data.get("action")
+        payload = request.data.get("payload", {})
+        timeout_seconds = request.data.get("timeout_seconds", 30)
 
         if not group or not action:
             return Response(
-                {'error': 'group and action are required'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "group and action are required"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Trova tutti i target online del gruppo
-        targets = Target.objects.filter(gruppo=group, status='online')
+        targets = Target.objects.filter(gruppo=group, status="online")
 
         if not targets.exists():
             return Response(
-                {'error': f'No online targets found in group: {group}'},
-                status=status.HTTP_404_NOT_FOUND
+                {"error": f"No online targets found in group: {group}"},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         commands_created = []
@@ -423,62 +439,74 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
                     target=target,
                     action=action,
                     payload=payload,
-                    timeout_seconds=timeout_seconds
+                    timeout_seconds=timeout_seconds,
                 )
 
                 # Verifica che l'agent sia online
                 try:
-                    connection = AgentConnection.objects.get(target=target, is_online=True)
+                    connection = AgentConnection.objects.get(
+                        target=target, is_online=True
+                    )
 
                     # Invia comando via WebSocket
                     async_to_sync(channel_layer.send)(
                         connection.websocket_channel,
                         {
-                            'type': 'send_command',
-                            'command_id': str(command.command_id),
-                            'action': command.action,
-                            'payload': command.payload
-                        }
+                            "type": "send_command",
+                            "command_id": str(command.command_id),
+                            "action": command.action,
+                            "payload": command.payload,
+                        },
                     )
 
                     command.mark_sent()
-                    commands_created.append({
-                        'target_id': target.id,
-                        'target_hostname': target.hostname,
-                        'command_id': str(command.command_id),
-                        'status': 'sent'
-                    })
+                    commands_created.append(
+                        {
+                            "target_id": target.id,
+                            "target_hostname": target.hostname,
+                            "command_id": str(command.command_id),
+                            "status": "sent",
+                        }
+                    )
 
                 except AgentConnection.DoesNotExist:
-                    command.mark_failed('Agent is not connected')
-                    commands_failed.append({
-                        'target_id': target.id,
-                        'target_hostname': target.hostname,
-                        'error': 'Agent is not connected'
-                    })
+                    command.mark_failed("Agent is not connected")
+                    commands_failed.append(
+                        {
+                            "target_id": target.id,
+                            "target_hostname": target.hostname,
+                            "error": "Agent is not connected",
+                        }
+                    )
 
             except Exception as e:
-                commands_failed.append({
-                    'target_id': target.id,
-                    'target_hostname': target.hostname,
-                    'error': str(e)
-                })
+                commands_failed.append(
+                    {
+                        "target_id": target.id,
+                        "target_hostname": target.hostname,
+                        "error": str(e),
+                    }
+                )
 
-        return Response({
-            'group': group,
-            'action': action,
-            'targets_found': targets.count(),
-            'commands_sent': len(commands_created),
-            'commands_failed': len(commands_failed),
-            'commands': commands_created,
-            'failures': commands_failed
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "group": group,
+                "action": action,
+                "targets_found": targets.count(),
+                "commands_sent": len(commands_created),
+                "commands_failed": len(commands_failed),
+                "commands": commands_created,
+                "failures": commands_failed,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class AgentHeartbeatViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet per visualizzare heartbeat (solo lettura)
     """
+
     queryset = AgentHeartbeat.objects.all()
     serializer_class = AgentHeartbeatSerializer
     permission_classes = [IsAuthenticated]
@@ -486,7 +514,7 @@ class AgentHeartbeatViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Filtra per target e limita a ultimi 100"""
         queryset = super().get_queryset()
-        target_id = self.request.query_params.get('target_id')
+        target_id = self.request.query_params.get("target_id")
         if target_id:
             queryset = queryset.filter(target_id=target_id)
 
@@ -498,6 +526,7 @@ class TargetGroupsViewSet(viewsets.ViewSet):
     """
     ViewSet per gestire gruppi di target
     """
+
     permission_classes = [IsAuthenticated]
 
     def list(self, request):
@@ -507,18 +536,23 @@ class TargetGroupsViewSet(viewsets.ViewSet):
         """
         from django.db.models import Count
 
-        groups = Target.objects.values('gruppo').annotate(
-            target_count=Count('id'),
-            online_count=Count('id', filter=models.Q(status='online'))
-        ).order_by('gruppo')
+        groups = (
+            Target.objects.values("gruppo")
+            .annotate(
+                target_count=Count("id"),
+                online_count=Count("id", filter=models.Q(status="online")),
+            )
+            .order_by("gruppo")
+        )
 
         result = [
             {
-                'name': g['gruppo'] or 'default',
-                'target_count': g['target_count'],
-                'online_count': g['online_count']
+                "name": g["gruppo"] or "default",
+                "target_count": g["target_count"],
+                "online_count": g["online_count"],
             }
-            for g in groups if g['gruppo']
+            for g in groups
+            if g["gruppo"]
         ]
 
         return Response(result)

@@ -1,6 +1,7 @@
 """
 Celery tasks per agent_manager
 """
+
 from celery import shared_task
 from django.utils import timezone
 from datetime import timedelta
@@ -21,8 +22,7 @@ def check_agent_health():
     threshold = timezone.now() - timedelta(minutes=2)
 
     offline_agents = AgentConnection.objects.filter(
-        is_online=True,
-        last_heartbeat__lt=threshold
+        is_online=True, last_heartbeat__lt=threshold
     )
 
     count = 0
@@ -32,9 +32,9 @@ def check_agent_health():
         # Crea alert
         Alert.objects.create(
             target=connection.target,
-            severity='high',
-            title='Agent Offline',
-            message=f'Agent {connection.target.hostname} has not sent heartbeat for more than 2 minutes'
+            severity="high",
+            title="Agent Offline",
+            message=f"Agent {connection.target.hostname} has not sent heartbeat for more than 2 minutes",
         )
 
         count += 1
@@ -49,7 +49,7 @@ def check_agent_health():
 @shared_task
 def cleanup_old_heartbeats():
     """
-    Rimuove heartbeat più vecchi di 24 ore
+    Rimuove heartbeat piÃ¹ vecchi di 24 ore
     Esegui ogni ora
     """
     threshold = timezone.now() - timedelta(hours=24)
@@ -64,7 +64,7 @@ def cleanup_old_heartbeats():
 @shared_task
 def cleanup_expired_pairing_sessions():
     """
-    Rimuove sessioni di pairing scadute più vecchie di 7 giorni
+    Rimuove sessioni di pairing scadute piÃ¹ vecchie di 7 giorni
     Esegui ogni giorno
     """
     threshold = timezone.now() - timedelta(days=7)
@@ -72,22 +72,20 @@ def cleanup_expired_pairing_sessions():
     # Marca come expired le sessioni scadute
     expired = PairingSession.objects.filter(
         expires_at__lt=timezone.now(),
-        status__in=['waiting', 'verifying_api', 'verifying_hash']
+        status__in=["waiting", "verifying_api", "verifying_hash"],
     )
 
     for session in expired:
-        session.status = 'expired'
-        session.save(update_fields=['status'])
+        session.status = "expired"
+        session.save(update_fields=["status"])
 
         # Reset target status
-        if session.target.status == 'pairing':
-            session.target.status = 'unpaired'
-            session.target.save(update_fields=['status'])
+        if session.target.status == "pairing":
+            session.target.status = "unpaired"
+            session.target.save(update_fields=["status"])
 
     # Elimina vecchie sessioni
-    deleted_count, _ = PairingSession.objects.filter(
-        created_at__lt=threshold
-    ).delete()
+    deleted_count, _ = PairingSession.objects.filter(created_at__lt=threshold).delete()
 
     logger.info(f"Cleaned up {deleted_count} old pairing sessions")
     return f"Deleted {deleted_count} old pairing sessions"
@@ -102,9 +100,7 @@ def timeout_stale_commands():
     count = 0
 
     # Trova comandi sent o executing oltre il timeout
-    commands = AgentCommand.objects.filter(
-        status__in=['sent', 'executing']
-    )
+    commands = AgentCommand.objects.filter(status__in=["sent", "executing"])
 
     for command in commands:
         if command.sent_at:
@@ -132,9 +128,8 @@ def check_critical_threats():
 
     # Trova threat critici recenti
     critical_threats = ThreatLog.objects.filter(
-        timestamp__gte=threshold,
-        threat_score__gte=80
-    ).select_related('target')
+        timestamp__gte=threshold, threat_score__gte=80
+    ).select_related("target")
 
     # Raggruppa per target
     threats_by_target = {}
@@ -153,12 +148,14 @@ def check_critical_threats():
 
             Alert.objects.create(
                 target=target,
-                severity='critical',
-                title=f'Multiple Critical Threats Detected',
-                message=f'{len(threats)} critical threats detected in the last 10 minutes'
+                severity="critical",
+                title=f"Multiple Critical Threats Detected",
+                message=f"{len(threats)} critical threats detected in the last 10 minutes",
             )
 
             alert_count += 1
-            logger.warning(f"Created alert for {len(threats)} critical threats on {target}")
+            logger.warning(
+                f"Created alert for {len(threats)} critical threats on {target}"
+            )
 
     return f"Created {alert_count} threat alerts"

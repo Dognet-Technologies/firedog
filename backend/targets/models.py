@@ -2,44 +2,42 @@
 Models per l'app Targets
 Gestione dei sistemi target remoti
 """
+
 from django.db import models
 from django.core.validators import validate_ipv46_address
 from django.utils import timezone
+
 
 class Target(models.Model):
     """
     Sistema target remoto su cui viene gestito il firewall
     """
+
     STATUS_CHOICES = [
-        ('unpaired', 'Unpaired'),
-        ('pairing', 'Pairing'),
-        ('pending', 'Pending'),
-        ('installing', 'Installing'),
-        ('online', 'Online'),
-        ('offline', 'Offline'),
-        ('error', 'Error'),
+        ("unpaired", "Unpaired"),
+        ("pairing", "Pairing"),
+        ("pending", "Pending"),
+        ("installing", "Installing"),
+        ("online", "Online"),
+        ("offline", "Offline"),
+        ("error", "Error"),
     ]
 
     # Identificazione
     ip_address = models.GenericIPAddressField(
         unique=True,
         validators=[validate_ipv46_address],
-        help_text="Indirizzo IP del target"
+        help_text="Indirizzo IP del target",
     )
     hostname = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Hostname del sistema target"
+        max_length=255, blank=True, help_text="Hostname del sistema target"
     )
     mac_address = models.CharField(
         max_length=17,
         blank=True,
-        help_text="MAC address del target (formato AA:BB:CC:DD:EE:FF)"
+        help_text="MAC address del target (formato AA:BB:CC:DD:EE:FF)",
     )
-    description = models.TextField(
-        blank=True,
-        help_text="Descrizione del target"
-    )
+    description = models.TextField(blank=True, help_text="Descrizione del target")
 
     # Dog Agent - Identity hash per pairing
     identity_hash = models.CharField(
@@ -47,56 +45,41 @@ class Target(models.Model):
         unique=True,
         null=True,
         blank=True,
-        help_text="SHA512 hash di ip+hostname+mac per pairing agent"
+        help_text="SHA512 hash di ip+hostname+mac per pairing agent",
     )
     connection_type = models.CharField(
         max_length=10,
-        default='agent',
-        choices=[('agent', 'Dog Agent'), ('ssh', 'SSH (Legacy)')],
-        help_text="Tipo di connessione al target"
+        default="agent",
+        choices=[("agent", "Dog Agent"), ("ssh", "SSH (Legacy)")],
+        help_text="Tipo di connessione al target",
     )
 
     # Stato e versione
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default='pending',
+        default="pending",
         db_index=True,
-        help_text="Stato corrente del target"
+        help_text="Stato corrente del target",
     )
     firedog_version = models.CharField(
-        max_length=50,
-        blank=True,
-        help_text="Versione del pacchetto firedog installato"
+        max_length=50, blank=True, help_text="Versione del pacchetto firedog installato"
     )
 
     # Configurazione SSH
-    ssh_port = models.PositiveIntegerField(
-        default=22,
-        help_text="Porta SSH del target"
-    )
+    ssh_port = models.PositiveIntegerField(default=22, help_text="Porta SSH del target")
     ssh_user = models.CharField(
-        max_length=100,
-        default='microcyber',
-        help_text="Utente SSH per la connessione"
+        max_length=100, default="microcyber", help_text="Utente SSH per la connessione"
     )
 
     # Metadata
     last_seen = models.DateTimeField(
-        null=True,
-        blank=True,
-        db_index=True,
-        help_text="Ultimo contatto riuscito"
+        null=True, blank=True, db_index=True, help_text="Ultimo contatto riuscito"
     )
     last_fetch = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Ultimo fetch dati completato"
+        null=True, blank=True, help_text="Ultimo fetch dati completato"
     )
-    error_message = models.TextField(
-        blank=True,
-        help_text="Ultimo messaggio di errore"
-    )
+    error_message = models.TextField(blank=True, help_text="Ultimo messaggio di errore")
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -106,35 +89,35 @@ class Target(models.Model):
     # Vedere modello TargetGroup per la definizione della relazione
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['status', 'last_seen']),
-            models.Index(fields=['ip_address']),
+            models.Index(fields=["status", "last_seen"]),
+            models.Index(fields=["ip_address"]),
         ]
-        verbose_name = 'Target'
-        verbose_name_plural = 'Targets'
+        verbose_name = "Target"
+        verbose_name_plural = "Targets"
 
     def __str__(self):
         return f"{self.hostname or self.ip_address} ({self.status})"
 
     def mark_online(self):
         """Marca il target come online"""
-        self.status = 'online'
+        self.status = "online"
         self.last_seen = timezone.now()
-        self.error_message = ''
-        self.save(update_fields=['status', 'last_seen', 'error_message', 'updated_at'])
+        self.error_message = ""
+        self.save(update_fields=["status", "last_seen", "error_message", "updated_at"])
 
-    def mark_offline(self, error_message=''):
+    def mark_offline(self, error_message=""):
         """Marca il target come offline"""
-        self.status = 'offline'
+        self.status = "offline"
         self.error_message = error_message
-        self.save(update_fields=['status', 'error_message', 'updated_at'])
+        self.save(update_fields=["status", "error_message", "updated_at"])
 
     def mark_error(self, error_message):
         """Marca il target come in errore"""
-        self.status = 'error'
+        self.status = "error"
         self.error_message = error_message
-        self.save(update_fields=['status', 'error_message', 'updated_at'])
+        self.save(update_fields=["status", "error_message", "updated_at"])
 
     def calculate_identity_hash(self):
         """
@@ -142,6 +125,7 @@ class Target(models.Model):
         Format: SHA512(ip+hostname+mac) senza delimitatori
         """
         import hashlib
+
         if self.ip_address and self.hostname and self.mac_address:
             identity_text = f"{self.ip_address}{self.hostname}{self.mac_address}"
             self.identity_hash = hashlib.sha512(identity_text.encode()).hexdigest()
@@ -150,9 +134,15 @@ class Target(models.Model):
 
     def save(self, *args, **kwargs):
         """Override save per calcolare identity_hash automaticamente"""
-        if self.ip_address and self.hostname and self.mac_address and not self.identity_hash:
+        if (
+            self.ip_address
+            and self.hostname
+            and self.mac_address
+            and not self.identity_hash
+        ):
             self.calculate_identity_hash()
         super().save(*args, **kwargs)
+
 
 class Statistics(models.Model):
     """Statistiche firewall periodiche"""
@@ -206,63 +196,63 @@ class Alert(models.Model):
     def __str__(self):
         return f"[{self.severity.upper()}] {self.title}"
 
-
     @property
     def is_active(self):
         """Verifica se il target è attivo"""
-        return self.status == 'online'
+        return self.status == "online"
 
     @property
     def connection_string(self):
         """Restituisce la stringa di connessione SSH"""
         return f"{self.ssh_user}@{self.ip_address}:{self.ssh_port}"
 
+
 class TargetGroup(models.Model):
     """
     Gruppo di target per gestione centralizzata delle regole
     Esempi: Web Servers, DNS Servers, Database Servers, Storage
     """
+
     ICON_CHOICES = [
-        ('server', 'Server'),
-        ('database', 'Database'),
-        ('globe', 'Web/DNS'),
-        ('shield', 'Security'),
-        ('hard-drive', 'Storage'),
-        ('cloud', 'Cloud'),
-        ('layers', 'Application'),
-        ('box', 'Generic'),
+        ("server", "Server"),
+        ("database", "Database"),
+        ("globe", "Web/DNS"),
+        ("shield", "Security"),
+        ("hard-drive", "Storage"),
+        ("cloud", "Cloud"),
+        ("layers", "Application"),
+        ("box", "Generic"),
     ]
 
     # Identificazione
     name = models.CharField(
         max_length=100,
         unique=True,
-        help_text="Nome del gruppo (es. 'Web Servers', 'DNS')"
+        help_text="Nome del gruppo (es. 'Web Servers', 'DNS')",
     )
     description = models.TextField(
-        blank=True,
-        help_text="Descrizione del gruppo e del suo scopo"
+        blank=True, help_text="Descrizione del gruppo e del suo scopo"
     )
 
     # UI customization
     color = models.CharField(
         max_length=7,
-        default='#3b82f6',
-        help_text="Colore esadecimale per UI (es. #3b82f6)"
+        default="#3b82f6",
+        help_text="Colore esadecimale per UI (es. #3b82f6)",
     )
     icon = models.CharField(
         max_length=20,
         choices=ICON_CHOICES,
-        default='server',
-        help_text="Icona per rappresentare il gruppo"
+        default="server",
+        help_text="Icona per rappresentare il gruppo",
     )
 
     # Relazione Many-to-Many con Target
     targets = models.ManyToManyField(
         Target,
-        related_name='groups',
+        related_name="groups",
         blank=True,
-        help_text="Target appartenenti a questo gruppo"
+        help_text="Target appartenenti a questo gruppo",
     )
 
     # Metadata
@@ -270,9 +260,9 @@ class TargetGroup(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['name']
-        verbose_name = 'Target Group'
-        verbose_name_plural = 'Target Groups'
+        ordering = ["name"]
+        verbose_name = "Target Group"
+        verbose_name_plural = "Target Groups"
 
     def __str__(self):
         return f"{self.name} ({self.targets.count()} targets)"
@@ -285,7 +275,7 @@ class TargetGroup(models.Model):
     @property
     def online_count(self):
         """Numero di target online nel gruppo"""
-        return self.targets.filter(status='online').count()
+        return self.targets.filter(status="online").count()
 
     def add_target(self, target):
         """Aggiunge un target al gruppo"""
@@ -299,10 +289,10 @@ class TargetGroup(models.Model):
         """Restituisce lista dei target come dizionario"""
         return [
             {
-                'id': t.id,
-                'ip_address': t.ip_address,
-                'hostname': t.hostname,
-                'status': t.status,
+                "id": t.id,
+                "ip_address": t.ip_address,
+                "hostname": t.hostname,
+                "status": t.status,
             }
             for t in self.targets.all()
         ]
@@ -313,70 +303,52 @@ class GroupRuleTemplate(models.Model):
     Template di regole firewall per un gruppo
     Quando un target viene aggiunto al gruppo, queste regole vengono applicate
     """
+
     ACTION_CHOICES = [
-        ('ACCEPT', 'Accept'),
-        ('DROP', 'Drop'),
-        ('REJECT', 'Reject'),
+        ("ACCEPT", "Accept"),
+        ("DROP", "Drop"),
+        ("REJECT", "Reject"),
     ]
 
     PROTOCOL_CHOICES = [
-        ('tcp', 'TCP'),
-        ('udp', 'UDP'),
-        ('icmp', 'ICMP'),
-        ('all', 'All'),
+        ("tcp", "TCP"),
+        ("udp", "UDP"),
+        ("icmp", "ICMP"),
+        ("all", "All"),
     ]
 
     # Gruppo di appartenenza
     group = models.ForeignKey(
         TargetGroup,
         on_delete=models.CASCADE,
-        related_name='rule_templates',
-        help_text="Gruppo a cui appartiene questo template"
+        related_name="rule_templates",
+        help_text="Gruppo a cui appartiene questo template",
     )
 
     # Regola
-    name = models.CharField(
-        max_length=255,
-        help_text="Nome descrittivo della regola"
-    )
-    protocol = models.CharField(
-        max_length=10,
-        choices=PROTOCOL_CHOICES,
-        default='tcp'
-    )
+    name = models.CharField(max_length=255, help_text="Nome descrittivo della regola")
+    protocol = models.CharField(max_length=10, choices=PROTOCOL_CHOICES, default="tcp")
     port = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Porta (opzionale per ICMP)"
+        null=True, blank=True, help_text="Porta (opzionale per ICMP)"
     )
     source_ip = models.GenericIPAddressField(
-        null=True,
-        blank=True,
-        help_text="IP sorgente (opzionale, any se vuoto)"
+        null=True, blank=True, help_text="IP sorgente (opzionale, any se vuoto)"
     )
-    action = models.CharField(
-        max_length=10,
-        choices=ACTION_CHOICES,
-        default='ACCEPT'
-    )
-    comment = models.TextField(
-        blank=True,
-        help_text="Commento sulla regola"
-    )
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES, default="ACCEPT")
+    comment = models.TextField(blank=True, help_text="Commento sulla regola")
 
     # Priority per ordinamento
     priority = models.PositiveIntegerField(
-        default=100,
-        help_text="Priorità di applicazione (più basso = più importante)"
+        default=100, help_text="Priorità di applicazione (più basso = più importante)"
     )
 
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['group', 'priority', 'port']
-        verbose_name = 'Group Rule Template'
-        verbose_name_plural = 'Group Rule Templates'
+        ordering = ["group", "priority", "port"]
+        verbose_name = "Group Rule Template"
+        verbose_name_plural = "Group Rule Templates"
 
     def __str__(self):
         port_str = f":{self.port}" if self.port else ""
@@ -386,89 +358,82 @@ class GroupRuleTemplate(models.Model):
         """
         Converte il template in comando iptables
         """
-        cmd_parts = ['iptables', '-A', 'INPUT']
-        
-        if self.protocol != 'all':
-            cmd_parts.extend(['-p', self.protocol])
-        
+        cmd_parts = ["iptables", "-A", "INPUT"]
+
+        if self.protocol != "all":
+            cmd_parts.extend(["-p", self.protocol])
+
         if self.port:
-            cmd_parts.extend(['--dport', str(self.port)])
-        
+            cmd_parts.extend(["--dport", str(self.port)])
+
         if self.source_ip:
-            cmd_parts.extend(['-s', self.source_ip])
-        
-        cmd_parts.extend(['-j', self.action])
-        
+            cmd_parts.extend(["-s", self.source_ip])
+
+        cmd_parts.extend(["-j", self.action])
+
         if self.comment:
-            cmd_parts.extend(['-m', 'comment', '--comment', f'"{self.comment}"'])
-        
-        return ' '.join(cmd_parts)
+            cmd_parts.extend(["-m", "comment", "--comment", f'"{self.comment}"'])
+
+        return " ".join(cmd_parts)
+
 
 class WhitelistEntry(models.Model):
     """
     Entry nella whitelist - IP o subnet autorizzati permanentemente
     Questi IP bypassano completamente le regole del firewall
     """
+
     # Relazione con target
     target = models.ForeignKey(
         Target,
         on_delete=models.CASCADE,
-        related_name='whitelist_entries',
-        help_text="Target su cui applicare la whitelist"
+        related_name="whitelist_entries",
+        help_text="Target su cui applicare la whitelist",
     )
 
     # IP o subnet
     ip_address = models.CharField(
-        max_length=50,
-        help_text="Indirizzo IP o subnet CIDR (es. 192.168.1.0/24)"
+        max_length=50, help_text="Indirizzo IP o subnet CIDR (es. 192.168.1.0/24)"
     )
 
     description = models.CharField(
-        max_length=512,
-        blank=True,
-        help_text="Descrizione dell'IP o subnet"
+        max_length=512, blank=True, help_text="Descrizione dell'IP o subnet"
     )
 
     # Metadata
     added_by = models.CharField(
-        max_length=100,
-        help_text="Utente che ha aggiunto l'entry"
+        max_length=100, help_text="Utente che ha aggiunto l'entry"
     )
 
     added_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-        help_text="Quando è stata aggiunta"
+        auto_now_add=True, db_index=True, help_text="Quando è stata aggiunta"
     )
 
     last_seen = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Ultimo accesso rilevato da questo IP"
+        null=True, blank=True, help_text="Ultimo accesso rilevato da questo IP"
     )
 
     hit_count = models.PositiveIntegerField(
-        default=0,
-        help_text="Numero di connessioni da questo IP"
+        default=0, help_text="Numero di connessioni da questo IP"
     )
 
     # Stato
     is_active = models.BooleanField(
         default=True,
         db_index=True,
-        help_text="Se disabilitato, l'IP non è più in whitelist"
+        help_text="Se disabilitato, l'IP non è più in whitelist",
     )
 
     class Meta:
-        ordering = ['-added_at']
+        ordering = ["-added_at"]
         indexes = [
-            models.Index(fields=['target', 'is_active']),
-            models.Index(fields=['ip_address']),
-            models.Index(fields=['-added_at']),
+            models.Index(fields=["target", "is_active"]),
+            models.Index(fields=["ip_address"]),
+            models.Index(fields=["-added_at"]),
         ]
-        unique_together = ['target', 'ip_address']
-        verbose_name = 'Whitelist Entry'
-        verbose_name_plural = 'Whitelist Entries'
+        unique_together = ["target", "ip_address"]
+        verbose_name = "Whitelist Entry"
+        verbose_name_plural = "Whitelist Entries"
 
     def __str__(self):
         return f"{self.ip_address} on {self.target.hostname}"
@@ -476,125 +441,110 @@ class WhitelistEntry(models.Model):
     @property
     def is_subnet(self):
         """Verifica se è una subnet CIDR"""
-        return '/' in self.ip_address
+        return "/" in self.ip_address
 
     def increment_hit_count(self):
         """Incrementa contatore accessi e aggiorna last_seen"""
         self.hit_count += 1
         self.last_seen = timezone.now()
-        self.save(update_fields=['hit_count', 'last_seen'])
+        self.save(update_fields=["hit_count", "last_seen"])
 
 
 class BlockedIP(models.Model):
     """
     IP bloccato manualmente o automaticamente dal sistema
     """
+
     BLOCK_REASON_CHOICES = [
-        ('manual', 'Manual Block'),
-        ('threat_detected', 'Threat Detected'),
-        ('port_scan', 'Port Scanning'),
-        ('brute_force', 'Brute Force Attack'),
-        ('syn_flood', 'SYN Flood'),
-        ('ddos', 'DDoS Attack'),
-        ('malware', 'Malware Activity'),
-        ('other', 'Other'),
+        ("manual", "Manual Block"),
+        ("threat_detected", "Threat Detected"),
+        ("port_scan", "Port Scanning"),
+        ("brute_force", "Brute Force Attack"),
+        ("syn_flood", "SYN Flood"),
+        ("ddos", "DDoS Attack"),
+        ("malware", "Malware Activity"),
+        ("other", "Other"),
     ]
 
     # Relazione con target
     target = models.ForeignKey(
         Target,
         on_delete=models.CASCADE,
-        related_name='blocked_ips',
-        help_text="Target su cui bloccare l'IP"
+        related_name="blocked_ips",
+        help_text="Target su cui bloccare l'IP",
     )
 
     # IP bloccato
     ip_address = models.GenericIPAddressField(
         validators=[validate_ipv46_address],
         db_index=True,
-        help_text="Indirizzo IP bloccato"
+        help_text="Indirizzo IP bloccato",
     )
 
     # Motivo blocco
     block_reason = models.CharField(
         max_length=20,
         choices=BLOCK_REASON_CHOICES,
-        default='manual',
-        help_text="Motivo del blocco"
+        default="manual",
+        help_text="Motivo del blocco",
     )
 
     description = models.TextField(
-        blank=True,
-        help_text="Descrizione dettagliata del blocco"
+        blank=True, help_text="Descrizione dettagliata del blocco"
     )
 
     # Metadata
     blocked_by = models.CharField(
-        max_length=100,
-        help_text="Utente o sistema che ha bloccato l'IP"
+        max_length=100, help_text="Utente o sistema che ha bloccato l'IP"
     )
 
     blocked_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-        help_text="Quando è stato bloccato"
+        auto_now_add=True, db_index=True, help_text="Quando è stato bloccato"
     )
 
     # Statistiche minaccia
     threat_score = models.PositiveIntegerField(
-        default=0,
-        help_text="Score della minaccia (0-100)"
+        default=0, help_text="Score della minaccia (0-100)"
     )
 
     packet_count = models.PositiveIntegerField(
-        default=0,
-        help_text="Numero di pacchetti bloccati da questo IP"
+        default=0, help_text="Numero di pacchetti bloccati da questo IP"
     )
 
     last_attempt = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Ultimo tentativo di connessione"
+        null=True, blank=True, help_text="Ultimo tentativo di connessione"
     )
 
     # Blocco temporaneo
     expires_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Scadenza blocco (null = permanente)"
+        null=True, blank=True, help_text="Scadenza blocco (null = permanente)"
     )
 
     # Stato
     is_active = models.BooleanField(
-        default=True,
-        db_index=True,
-        help_text="Se falso, il blocco è stato rimosso"
+        default=True, db_index=True, help_text="Se falso, il blocco è stato rimosso"
     )
 
     unblocked_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Quando è stato sbloccato"
+        null=True, blank=True, help_text="Quando è stato sbloccato"
     )
 
     unblocked_by = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="Utente che ha rimosso il blocco"
+        max_length=100, blank=True, help_text="Utente che ha rimosso il blocco"
     )
 
     class Meta:
-        ordering = ['-blocked_at']
+        ordering = ["-blocked_at"]
         indexes = [
-            models.Index(fields=['target', 'is_active']),
-            models.Index(fields=['ip_address', 'is_active']),
-            models.Index(fields=['block_reason']),
-            models.Index(fields=['-blocked_at']),
-            models.Index(fields=['expires_at']),
+            models.Index(fields=["target", "is_active"]),
+            models.Index(fields=["ip_address", "is_active"]),
+            models.Index(fields=["block_reason"]),
+            models.Index(fields=["-blocked_at"]),
+            models.Index(fields=["expires_at"]),
         ]
-        unique_together = ['target', 'ip_address']
-        verbose_name = 'Blocked IP'
-        verbose_name_plural = 'Blocked IPs'
+        unique_together = ["target", "ip_address"]
+        verbose_name = "Blocked IP"
+        verbose_name_plural = "Blocked IPs"
 
     def __str__(self):
         return f"{self.ip_address} blocked on {self.target.hostname}"
@@ -616,13 +566,13 @@ class BlockedIP(models.Model):
         self.is_active = False
         self.unblocked_at = timezone.now()
         self.unblocked_by = unblocked_by
-        self.save(update_fields=['is_active', 'unblocked_at', 'unblocked_by'])
+        self.save(update_fields=["is_active", "unblocked_at", "unblocked_by"])
 
     def increment_packet_count(self, count: int = 1):
         """Incrementa contatore pacchetti bloccati"""
         self.packet_count += count
         self.last_attempt = timezone.now()
-        self.save(update_fields=['packet_count', 'last_attempt'])
+        self.save(update_fields=["packet_count", "last_attempt"])
 
 
 class FirewallStats(models.Model):
@@ -630,69 +580,54 @@ class FirewallStats(models.Model):
     Statistiche firewall per un target specifico
     Aggiornate periodicamente via pull JSON
     """
+
     # Relazione con target
     target = models.ForeignKey(
         Target,
         on_delete=models.CASCADE,
-        related_name='firewall_stats',
-        help_text="Target che ha generato queste statistiche"
+        related_name="firewall_stats",
+        help_text="Target che ha generato queste statistiche",
     )
 
     # System info
     hostname = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Hostname del target al momento del pull"
+        max_length=255, blank=True, help_text="Hostname del target al momento del pull"
     )
     firedog_version = models.CharField(
-        max_length=50,
-        blank=True,
-        help_text="Versione firewall-manager"
+        max_length=50, blank=True, help_text="Versione firewall-manager"
     )
     os_version = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Sistema operativo"
+        max_length=255, blank=True, help_text="Sistema operativo"
     )
     kernel_version = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Versione kernel"
+        max_length=255, blank=True, help_text="Versione kernel"
     )
     uptime_seconds = models.PositiveIntegerField(
-        default=0,
-        help_text="Uptime del sistema in secondi"
+        default=0, help_text="Uptime del sistema in secondi"
     )
 
     # Packet statistics
     input_packets = models.BigIntegerField(
-        default=0,
-        help_text="Totale pacchetti INPUT processati"
+        default=0, help_text="Totale pacchetti INPUT processati"
     )
     output_packets = models.BigIntegerField(
-        default=0,
-        help_text="Totale pacchetti OUTPUT processati"
+        default=0, help_text="Totale pacchetti OUTPUT processati"
     )
     forward_packets = models.BigIntegerField(
-        default=0,
-        help_text="Totale pacchetti FORWARD processati"
+        default=0, help_text="Totale pacchetti FORWARD processati"
     )
 
     # PCAP file sizes
     pcap_input_dropped_bytes = models.BigIntegerField(
-        default=0,
-        help_text="Dimensione file PCAP input dropped (bytes)"
+        default=0, help_text="Dimensione file PCAP input dropped (bytes)"
     )
     pcap_output_dropped_bytes = models.BigIntegerField(
-        default=0,
-        help_text="Dimensione file PCAP output dropped (bytes)"
+        default=0, help_text="Dimensione file PCAP output dropped (bytes)"
     )
 
     # Status
     status = models.CharField(
-        max_length=50,
-        default='healthy',
-        help_text="Stato generale del firewall"
+        max_length=50, default="healthy", help_text="Stato generale del firewall"
     )
 
     # Timestamps
@@ -700,28 +635,24 @@ class FirewallStats(models.Model):
         help_text="Timestamp del JSON source (da target)"
     )
     imported_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-        help_text="Quando è stato importato nel DB"
+        auto_now_add=True, db_index=True, help_text="Quando è stato importato nel DB"
     )
 
     # Raw JSON (per debug o analisi futura)
     raw_json = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="JSON completo originale (opzionale)"
+        null=True, blank=True, help_text="JSON completo originale (opzionale)"
     )
 
     class Meta:
-        ordering = ['-collected_at']
+        ordering = ["-collected_at"]
         indexes = [
-            models.Index(fields=['target', '-collected_at']),
-            models.Index(fields=['target', '-imported_at']),
+            models.Index(fields=["target", "-collected_at"]),
+            models.Index(fields=["target", "-imported_at"]),
         ]
-        verbose_name = 'Firewall Statistics'
-        verbose_name_plural = 'Firewall Statistics'
+        verbose_name = "Firewall Statistics"
+        verbose_name_plural = "Firewall Statistics"
         # Solo una entry per target+timestamp
-        unique_together = [['target', 'collected_at']]
+        unique_together = [["target", "collected_at"]]
 
     def __str__(self):
         return f"Stats for {self.hostname} at {self.collected_at}"
@@ -740,6 +671,3 @@ class FirewallStats(models.Model):
     def total_pcap_size_mb(self):
         """Dimensione totale PCAP in MB"""
         return round(self.total_pcap_size / (1024 * 1024), 2)
-
-
-

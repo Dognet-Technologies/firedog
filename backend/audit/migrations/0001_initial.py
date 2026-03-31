@@ -11,32 +11,141 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('contenttypes', '0002_remove_content_type_name'),
+        ("contenttypes", "0002_remove_content_type_name"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='AuditLog',
+            name="AuditLog",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('action', models.CharField(choices=[('create', 'Create'), ('update', 'Update'), ('delete', 'Delete'), ('install', 'Install'), ('uninstall', 'Uninstall'), ('rule_add', 'Rule Add'), ('rule_remove', 'Rule Remove'), ('fetch', 'Fetch Data'), ('scan', 'Network Scan'), ('approve', 'Approve Change'), ('login', 'Login'), ('logout', 'Logout'), ('error', 'Error')], db_index=True, help_text='Tipo di azione eseguita', max_length=20)),
-                ('object_id', models.PositiveIntegerField(blank=True, null=True)),
-                ('description', models.TextField(help_text="Descrizione dell'operazione")),
-                ('old_values', models.JSONField(blank=True, help_text='Valori prima della modifica', null=True)),
-                ('new_values', models.JSONField(blank=True, help_text='Valori dopo la modifica', null=True)),
-                ('ip_address', models.GenericIPAddressField(blank=True, help_text="IP da cui è stata eseguita l'azione", null=True)),
-                ('user_agent', models.CharField(blank=True, help_text='User agent del client', max_length=512)),
-                ('success', models.BooleanField(db_index=True, default=True, help_text="Indica se l'operazione è riuscita")),
-                ('error_message', models.TextField(blank=True, help_text="Messaggio di errore se l'operazione è fallita")),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text="Quando l'azione è stata eseguita")),
-                ('content_type', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='contenttypes.contenttype')),
-                ('user', models.ForeignKey(blank=True, help_text="Utente che ha eseguito l'azione", null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='audit_logs', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "action",
+                    models.CharField(
+                        choices=[
+                            ("create", "Create"),
+                            ("update", "Update"),
+                            ("delete", "Delete"),
+                            ("install", "Install"),
+                            ("uninstall", "Uninstall"),
+                            ("rule_add", "Rule Add"),
+                            ("rule_remove", "Rule Remove"),
+                            ("fetch", "Fetch Data"),
+                            ("scan", "Network Scan"),
+                            ("approve", "Approve Change"),
+                            ("login", "Login"),
+                            ("logout", "Logout"),
+                            ("error", "Error"),
+                        ],
+                        db_index=True,
+                        help_text="Tipo di azione eseguita",
+                        max_length=20,
+                    ),
+                ),
+                ("object_id", models.PositiveIntegerField(blank=True, null=True)),
+                (
+                    "description",
+                    models.TextField(help_text="Descrizione dell'operazione"),
+                ),
+                (
+                    "old_values",
+                    models.JSONField(
+                        blank=True, help_text="Valori prima della modifica", null=True
+                    ),
+                ),
+                (
+                    "new_values",
+                    models.JSONField(
+                        blank=True, help_text="Valori dopo la modifica", null=True
+                    ),
+                ),
+                (
+                    "ip_address",
+                    models.GenericIPAddressField(
+                        blank=True,
+                        help_text="IP da cui è stata eseguita l'azione",
+                        null=True,
+                    ),
+                ),
+                (
+                    "user_agent",
+                    models.CharField(
+                        blank=True, help_text="User agent del client", max_length=512
+                    ),
+                ),
+                (
+                    "success",
+                    models.BooleanField(
+                        db_index=True,
+                        default=True,
+                        help_text="Indica se l'operazione è riuscita",
+                    ),
+                ),
+                (
+                    "error_message",
+                    models.TextField(
+                        blank=True,
+                        help_text="Messaggio di errore se l'operazione è fallita",
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Quando l'azione è stata eseguita",
+                    ),
+                ),
+                (
+                    "content_type",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="contenttypes.contenttype",
+                    ),
+                ),
+                (
+                    "user",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Utente che ha eseguito l'azione",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="audit_logs",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Audit Log',
-                'verbose_name_plural': 'Audit Logs',
-                'ordering': ['-created_at'],
-                'indexes': [models.Index(fields=['user', 'created_at'], name='audit_audit_user_id_a3c2bc_idx'), models.Index(fields=['action', 'success'], name='audit_audit_action_2c1e66_idx'), models.Index(fields=['content_type', 'object_id'], name='audit_audit_content_4c2ead_idx'), models.Index(fields=['-created_at'], name='audit_audit_created_6e540c_idx')],
+                "verbose_name": "Audit Log",
+                "verbose_name_plural": "Audit Logs",
+                "ordering": ["-created_at"],
+                "indexes": [
+                    models.Index(
+                        fields=["user", "created_at"],
+                        name="audit_audit_user_id_a3c2bc_idx",
+                    ),
+                    models.Index(
+                        fields=["action", "success"],
+                        name="audit_audit_action_2c1e66_idx",
+                    ),
+                    models.Index(
+                        fields=["content_type", "object_id"],
+                        name="audit_audit_content_4c2ead_idx",
+                    ),
+                    models.Index(
+                        fields=["-created_at"], name="audit_audit_created_6e540c_idx"
+                    ),
+                ],
             },
         ),
     ]

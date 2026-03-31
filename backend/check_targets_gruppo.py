@@ -2,12 +2,13 @@
 """
 Script per verificare i target nel database e cosa restituisce l'API
 """
+
 import os
 import sys
 import django
 
 # Setup Django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'firedog.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "firedog.settings")
 sys.path.insert(0, os.path.dirname(__file__))
 django.setup()
 
@@ -71,7 +72,9 @@ with connection.cursor() as cursor:
     columns = cursor.fetchall()
 
     for col in columns:
-        print(f"  {col[0]:20} | Type: {col[1]:15} | Nullable: {col[2]} | Default: {col[3]}")
+        print(
+            f"  {col[0]:20} | Type: {col[1]:15} | Nullable: {col[2]} | Default: {col[3]}"
+        )
 
 # 5. Query SQL diretta
 print("\n\n🔍 QUERY SQL DIRETTA:")
@@ -85,6 +88,8 @@ with connection.cursor() as cursor:
     rows = cursor.fetchall()
 
     for row in rows:
-        print(f"  ID {row[0]}: IP={row[1]}, Host={row[2]}, Gruppo='{row[3]}', Custom='{row[4]}'")
+        print(
+            f"  ID {row[0]}: IP={row[1]}, Host={row[2]}, Gruppo='{row[3]}', Custom='{row[4]}'"
+        )
 
 print("\n" + "=" * 70)

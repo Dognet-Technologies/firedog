@@ -2,17 +2,19 @@
 """
 Script per verificare se il campo 'gruppo' esiste nella tabella Target
 """
+
 import os
 import sys
 import django
 
 # Setup Django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'firedog.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "firedog.settings")
 sys.path.insert(0, os.path.dirname(__file__))
 django.setup()
 
 from targets.models import Target
 from django.db import connection
+
 
 def check_gruppo_field():
     """Verifica se il campo gruppo esiste nella tabella"""
@@ -37,7 +39,9 @@ def check_gruppo_field():
 
         # Verifica se ci sono dati
         total = Target.objects.count()
-        with_gruppo = Target.objects.exclude(gruppo__isnull=True).exclude(gruppo='').count()
+        with_gruppo = (
+            Target.objects.exclude(gruppo__isnull=True).exclude(gruppo="").count()
+        )
 
         print(f"\n📊 Statistiche:")
         print(f"  - Totale targets: {total}")
@@ -59,10 +63,12 @@ def check_gruppo_field():
 
     print("\n" + "=" * 60)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         check_gruppo_field()
     except Exception as e:
         print(f"❌ Errore durante la verifica: {e}")
         import traceback
+
         traceback.print_exc()

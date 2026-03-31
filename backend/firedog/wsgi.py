@@ -14,7 +14,7 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 
 # Imposta variabile ambiente Django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'firedog.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "firedog.settings")
 
 # Inizializza Django ASGI application PRIMA di importare routing
 # Questo popola l'AppRegistry di Django
@@ -24,9 +24,9 @@ django_asgi_app = get_asgi_application()
 from firedog.routing import websocket_urlpatterns
 
 # ASGI application con supporto HTTP e WebSocket
-application = ProtocolTypeRouter({
-    "http": django_asgi_app,
-    "websocket": AuthMiddlewareStack(
-        URLRouter(websocket_urlpatterns)
-    ),
-})
+application = ProtocolTypeRouter(
+    {
+        "http": django_asgi_app,
+        "websocket": AuthMiddlewareStack(URLRouter(websocket_urlpatterns)),
+    }
+)

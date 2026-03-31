@@ -6,13 +6,17 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('agent_manager', '0001_initial'),
+        ("agent_manager", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='agentapikey',
-            name='encrypted_key',
-            field=models.TextField(blank=True, help_text='API key criptata (recuperabile con password admin)', null=True),
+            model_name="agentapikey",
+            name="encrypted_key",
+            field=models.TextField(
+                blank=True,
+                help_text="API key criptata (recuperabile con password admin)",
+                null=True,
+            ),
         ),
     ]
