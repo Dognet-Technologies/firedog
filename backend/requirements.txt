@@ -12,7 +12,7 @@ click-didyoumean==0.3.1
 click-plugins==1.1.1.2
 click-repl==0.3.0
 cron_descriptor==2.0.6
-cryptography==42.0.2
+cryptography==46.0.6
 decorator==5.2.1
 Django==4.2.11
 django-celery-beat==2.5.0
@@ -42,8 +42,8 @@ psycopg2-binary==2.9.9
 ptyprocess==0.7.0
 pure_eval==0.2.3
 pycparser==2.23
-Pygments==2.19.2
-PyJWT==2.10.1
+Pygments==2.20.0
+PyJWT==2.12.1
 PyNaCl==1.6.0
 pytest==8.0.2
 pytest-django==4.8.0
