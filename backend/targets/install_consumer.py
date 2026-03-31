@@ -2,6 +2,7 @@
 WebSocket Consumer per Installazione Interattiva FireDog
 Gestisce installazione sui target con supporto per input password e streaming output
 """
+
 import json
 import asyncio
 import logging
@@ -10,7 +11,7 @@ from channels.db import database_sync_to_async
 from asgiref.sync import sync_to_async
 from django.conf import settings
 
-logger = logging.getLogger('firedog.install_consumer')
+logger = logging.getLogger("firedog.install_consumer")
 
 
 class InstallConsumer(AsyncWebsocketConsumer):
@@ -67,18 +68,18 @@ class InstallConsumer(AsyncWebsocketConsumer):
         """Riceve messaggi dal client WebSocket"""
         try:
             message = json.loads(text_data)
-            msg_type = message.get('type')
+            msg_type = message.get("type")
 
-            if msg_type == 'start_install':
+            if msg_type == "start_install":
                 await self.handle_start_install(message)
 
-            elif msg_type == 'start_group_install':
+            elif msg_type == "start_group_install":
                 await self.handle_start_group_install(message)
 
-            elif msg_type == 'password_input':
+            elif msg_type == "password_input":
                 await self.handle_password_input(message)
 
-            elif msg_type == 'cancel':
+            elif msg_type == "cancel":
                 await self.handle_cancel()
 
             else:
@@ -99,8 +100,8 @@ class InstallConsumer(AsyncWebsocketConsumer):
         Args:
             message: Dict con target_id e use_password
         """
-        target_id = message.get('target_id')
-        self.use_password = message.get('use_password', False)
+        target_id = message.get("target_id")
+        self.use_password = message.get("use_password", False)
 
         if not target_id:
             await self.send_error("Target ID mancante")
@@ -115,7 +116,9 @@ class InstallConsumer(AsyncWebsocketConsumer):
                 return
 
             # Avvia task di installazione
-            await self.send_status(f"Avvio installazione su {self.target.hostname or self.target.ip_address}...")
+            await self.send_status(
+                f"Avvio installazione su {self.target.hostname or self.target.ip_address}..."
+            )
             self.installation_task = asyncio.create_task(self.run_installation())
 
         except Exception as e:
@@ -129,8 +132,8 @@ class InstallConsumer(AsyncWebsocketConsumer):
         Args:
             message: Dict con group_id
         """
-        group_id = message.get('group_id')
-        self.use_password = message.get('use_password', False)
+        group_id = message.get("group_id")
+        self.use_password = message.get("use_password", False)
 
         if not group_id:
             await self.send_error("Group ID mancante")
@@ -147,7 +150,9 @@ class InstallConsumer(AsyncWebsocketConsumer):
             self.is_group = True
 
             # Avvia task di installazione gruppo
-            await self.send_status(f"Avvio installazione su {len(self.targets)} target...")
+            await self.send_status(
+                f"Avvio installazione su {len(self.targets)} target..."
+            )
             self.installation_task = asyncio.create_task(self.run_group_installation())
 
         except Exception as e:
@@ -161,7 +166,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
         Args:
             message: Dict con password
         """
-        self.password = message.get('password', '')
+        self.password = message.get("password", "")
         logger.info("Password ricevuta dall'utente")
 
         # Se c'è un task in attesa, lo notifica
@@ -189,7 +194,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
             self.ssh_manager = SSHTerminalManager(
                 host=self.target.ip_address,
                 port=self.target.ssh_port,
-                username=self.target.ssh_user
+                username=self.target.ssh_user,
             )
 
             connected = await sync_to_async(self.ssh_manager.connect)()
@@ -197,7 +202,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
             if not connected:
                 # Se fallisce con chiave, potrebbe richiedere password
                 if self.use_password:
-                    await self.send_message('password_required', {})
+                    await self.send_message("password_required", {})
                     # Attendere password (implementazione da completare)
                     # Per ora fallisce
                     await self.send_error("Connessione SSH fallita")
@@ -212,7 +217,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
             await self.send_progress(2, 7, "Caricamento pacchetto FireDog...")
 
             package_local = settings.FIREDOG_PACKAGE_PATH
-            package_remote = '/tmp/firedog-package'
+            package_remote = "/tmp/firedog-package"
 
             # Crea directory remota
             await self.execute_command(f"mkdir -p {package_remote}")
@@ -273,10 +278,12 @@ class InstallConsumer(AsyncWebsocketConsumer):
             await self.send_status(f"✓ FireDog {version} installato correttamente")
 
             # Aggiorna target nel database
-            await self.update_target_status('online', version)
+            await self.update_target_status("online", version)
 
             # Invia messaggio di successo
-            await self.send_success(f"Installazione completata su {self.target.hostname or self.target.ip_address}")
+            await self.send_success(
+                f"Installazione completata su {self.target.hostname or self.target.ip_address}"
+            )
 
         except asyncio.CancelledError:
             logger.info("Installazione cancellata")
@@ -285,7 +292,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.exception(f"Errore durante installazione: {e}")
             await self.send_error(f"Errore: {str(e)}")
-            await self.update_target_status('error', None, str(e))
+            await self.update_target_status("error", None, str(e))
 
     async def run_group_installation(self):
         """Esegue installazione su gruppo di target (sequenziale)"""
@@ -294,7 +301,9 @@ class InstallConsumer(AsyncWebsocketConsumer):
         for idx, target in enumerate(self.targets, 1):
             self.target = target
 
-            await self.send_status(f"\n{'='*60}\nTarget {idx}/{total}: {target.hostname or target.ip_address}\n{'='*60}")
+            await self.send_status(
+                f"\n{'='*60}\nTarget {idx}/{total}: {target.hostname or target.ip_address}\n{'='*60}"
+            )
 
             # Esegui installazione singola
             await self.run_installation()
@@ -322,7 +331,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
         ssh = SSHManager(
             host=self.target.ip_address,
             port=self.target.ssh_port,
-            username=self.target.ssh_user
+            username=self.target.ssh_user,
         )
 
         await sync_to_async(ssh.connect)()
@@ -345,11 +354,13 @@ class InstallConsumer(AsyncWebsocketConsumer):
             ssh = SSHManager(
                 host=self.target.ip_address,
                 port=self.target.ssh_port,
-                username=self.target.ssh_user
+                username=self.target.ssh_user,
             )
 
             await sync_to_async(ssh.connect)()
-            success, message = await sync_to_async(ssh.upload_directory)(local_path, remote_path)
+            success, message = await sync_to_async(ssh.upload_directory)(
+                local_path, remote_path
+            )
             await sync_to_async(ssh.disconnect)()
 
             if not success:
@@ -365,13 +376,15 @@ class InstallConsumer(AsyncWebsocketConsumer):
         """Esegue lo script install.sh"""
         try:
             # Rendi eseguibili gli script
-            await self.execute_command(f"chmod +x {package_remote}/*.sh {package_remote}/bin/*", stream_output=False)
+            await self.execute_command(
+                f"chmod +x {package_remote}/*.sh {package_remote}/bin/*",
+                stream_output=False,
+            )
 
             # Esegui install.sh
             await self.send_output("\n--- Esecuzione install.sh ---\n")
             exit_code, stdout, stderr = await self.execute_command(
-                f"cd {package_remote} && sudo bash install.sh",
-                stream_output=True
+                f"cd {package_remote} && sudo bash install.sh", stream_output=True
             )
 
             return exit_code == 0
@@ -384,8 +397,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
         """Verifica che firedog sia installato correttamente"""
         try:
             exit_code, stdout, stderr = await self.execute_command(
-                "/usr/local/bin/firewall-manager --version",
-                stream_output=False
+                "/usr/local/bin/firewall-manager --version", stream_output=False
             )
 
             if exit_code == 0 and stdout:
@@ -415,17 +427,21 @@ class InstallConsumer(AsyncWebsocketConsumer):
                 return False
 
             # Leggi chiave pubblica
-            with open(pub_key_path, 'r') as f:
+            with open(pub_key_path, "r") as f:
                 pub_key = f.read().strip()
 
             await self.send_output("Configuring SSH key authentication...")
 
             # Crea directory .ssh
-            await self.execute_command("mkdir -p ~/.ssh && chmod 700 ~/.ssh", stream_output=False)
+            await self.execute_command(
+                "mkdir -p ~/.ssh && chmod 700 ~/.ssh", stream_output=False
+            )
 
             # Aggiungi chiave a authorized_keys
             cmd = f'echo "{pub_key}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
-            exit_code, stdout, stderr = await self.execute_command(cmd, stream_output=False)
+            exit_code, stdout, stderr = await self.execute_command(
+                cmd, stream_output=False
+            )
 
             if exit_code != 0:
                 await self.send_error(f"Failed to configure SSH key: {stderr}")
@@ -448,7 +464,9 @@ class InstallConsumer(AsyncWebsocketConsumer):
             from pathlib import Path
 
             # Path file template sudoers
-            sudoers_template = Path(settings.FIREDOG_FILE_CONFIG_PATH) / "sudoers-microcyber"
+            sudoers_template = (
+                Path(settings.FIREDOG_FILE_CONFIG_PATH) / "sudoers-microcyber"
+            )
 
             if not sudoers_template.exists():
                 await self.send_error(f"Sudoers template not found: {sudoers_template}")
@@ -462,15 +480,14 @@ class InstallConsumer(AsyncWebsocketConsumer):
             ssh = SSHManager(
                 host=self.target.ip_address,
                 port=self.target.ssh_port,
-                username=self.target.ssh_user
+                username=self.target.ssh_user,
             )
 
             await sync_to_async(ssh.connect)()
 
             # Upload file
             success, message = await sync_to_async(ssh.upload_file)(
-                str(sudoers_template),
-                f"/tmp/sudoers-{self.target.ssh_user}"
+                str(sudoers_template), f"/tmp/sudoers-{self.target.ssh_user}"
             )
 
             if not success:
@@ -484,7 +501,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
                 cmd = f'echo "{self.password}" | sudo -S mv /tmp/sudoers-{self.target.ssh_user} /etc/sudoers.d/{self.target.ssh_user}'
             else:
                 # Prova senza password (se già configurato)
-                cmd = f'sudo mv /tmp/sudoers-{self.target.ssh_user} /etc/sudoers.d/{self.target.ssh_user}'
+                cmd = f"sudo mv /tmp/sudoers-{self.target.ssh_user} /etc/sudoers.d/{self.target.ssh_user}"
 
             exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(cmd)
 
@@ -494,7 +511,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
                 return False
 
             # Imposta permessi
-            cmd = f'sudo chmod 440 /etc/sudoers.d/{self.target.ssh_user}'
+            cmd = f"sudo chmod 440 /etc/sudoers.d/{self.target.ssh_user}"
             exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(cmd)
 
             await sync_to_async(ssh.disconnect)()
@@ -520,7 +537,9 @@ class InstallConsumer(AsyncWebsocketConsumer):
             from pathlib import Path
 
             # Path file template sshd_config
-            sshd_template = Path(settings.FIREDOG_FILE_CONFIG_PATH) / "sshd_config.hardened"
+            sshd_template = (
+                Path(settings.FIREDOG_FILE_CONFIG_PATH) / "sshd_config.hardened"
+            )
 
             if not sshd_template.exists():
                 await self.send_error(f"SSHD template not found: {sshd_template}")
@@ -534,19 +553,18 @@ class InstallConsumer(AsyncWebsocketConsumer):
             ssh = SSHManager(
                 host=self.target.ip_address,
                 port=self.target.ssh_port,
-                username=self.target.ssh_user
+                username=self.target.ssh_user,
             )
 
             await sync_to_async(ssh.connect)()
 
             # Backup sshd_config originale
-            backup_cmd = 'sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)'
+            backup_cmd = "sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)"
             await sync_to_async(ssh.execute_command)(backup_cmd)
 
             # Upload nuovo config
             success, message = await sync_to_async(ssh.upload_file)(
-                str(sshd_template),
-                "/tmp/sshd_config.hardened"
+                str(sshd_template), "/tmp/sshd_config.hardened"
             )
 
             if not success:
@@ -555,8 +573,10 @@ class InstallConsumer(AsyncWebsocketConsumer):
                 return False
 
             # Test configurazione
-            test_cmd = 'sudo sshd -t -f /tmp/sshd_config.hardened'
-            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(test_cmd)
+            test_cmd = "sudo sshd -t -f /tmp/sshd_config.hardened"
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(
+                test_cmd
+            )
 
             if exit_code != 0:
                 await self.send_error(f"SSHD config validation failed: {stderr}")
@@ -564,8 +584,10 @@ class InstallConsumer(AsyncWebsocketConsumer):
                 return False
 
             # Applica configurazione
-            apply_cmd = 'sudo mv /tmp/sshd_config.hardened /etc/ssh/sshd_config'
-            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(apply_cmd)
+            apply_cmd = "sudo mv /tmp/sshd_config.hardened /etc/ssh/sshd_config"
+            exit_code, stdout, stderr = await sync_to_async(ssh.execute_command)(
+                apply_cmd
+            )
 
             if exit_code != 0:
                 await self.send_error(f"Failed to apply sshd_config: {stderr}")
@@ -573,7 +595,7 @@ class InstallConsumer(AsyncWebsocketConsumer):
                 return False
 
             # Riavvia SSH daemon
-            restart_cmd = 'sudo systemctl restart sshd || sudo service ssh restart'
+            restart_cmd = "sudo systemctl restart sshd || sudo service ssh restart"
             await sync_to_async(ssh.execute_command)(restart_cmd)
 
             await sync_to_async(ssh.disconnect)()
@@ -592,48 +614,37 @@ class InstallConsumer(AsyncWebsocketConsumer):
 
     async def send_status(self, message):
         """Invia messaggio di status"""
-        await self.send(text_data=json.dumps({
-            'type': 'status',
-            'message': message
-        }))
+        await self.send(text_data=json.dumps({"type": "status", "message": message}))
 
     async def send_output(self, data):
         """Invia output comando"""
-        await self.send(text_data=json.dumps({
-            'type': 'output',
-            'data': data
-        }))
+        await self.send(text_data=json.dumps({"type": "output", "data": data}))
 
     async def send_error(self, message):
         """Invia messaggio di errore"""
-        await self.send(text_data=json.dumps({
-            'type': 'error',
-            'message': message
-        }))
+        await self.send(text_data=json.dumps({"type": "error", "message": message}))
 
     async def send_success(self, message):
         """Invia messaggio di successo"""
-        await self.send(text_data=json.dumps({
-            'type': 'success',
-            'message': message
-        }))
+        await self.send(text_data=json.dumps({"type": "success", "message": message}))
 
     async def send_progress(self, step, total, description):
         """Invia aggiornamento progresso"""
-        await self.send(text_data=json.dumps({
-            'type': 'progress',
-            'step': step,
-            'total': total,
-            'description': description,
-            'percentage': int((step / total) * 100)
-        }))
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "progress",
+                    "step": step,
+                    "total": total,
+                    "description": description,
+                    "percentage": int((step / total) * 100),
+                }
+            )
+        )
 
     async def send_message(self, msg_type, data):
         """Invia messaggio generico"""
-        await self.send(text_data=json.dumps({
-            'type': msg_type,
-            **data
-        }))
+        await self.send(text_data=json.dumps({"type": msg_type, **data}))
 
     # Database operations
 

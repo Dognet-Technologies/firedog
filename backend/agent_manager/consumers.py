@@ -1,12 +1,19 @@
 """
 WebSocket Consumer per comunicazione con dog-agent
 """
+
 import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
-from .models import AgentAPIKey, PairingSession, AgentConnection, AgentCommand, AgentHeartbeat
+from .models import (
+    AgentAPIKey,
+    PairingSession,
+    AgentConnection,
+    AgentCommand,
+    AgentHeartbeat,
+)
 from targets.models import Target, Alert
 from threats.models import ThreatLog
 
@@ -45,18 +52,18 @@ class AgentConsumer(AsyncWebsocketConsumer):
         """
         try:
             data = json.loads(text_data)
-            message_type = data.get('type')
+            message_type = data.get("type")
 
             logger.debug(f"Received message type: {message_type}")
 
             # Routing messaggi
-            if message_type == 'pair_request':
+            if message_type == "pair_request":
                 await self.handle_pair_request(data)
-            elif message_type == 'heartbeat':
+            elif message_type == "heartbeat":
                 await self.handle_heartbeat(data)
-            elif message_type == 'threat_log':
+            elif message_type == "threat_log":
                 await self.handle_threat_log(data)
-            elif message_type == 'command_response':
+            elif message_type == "command_response":
                 await self.handle_command_response(data)
             else:
                 await self.send_error(f"Unknown message type: {message_type}")
@@ -79,11 +86,11 @@ class AgentConsumer(AsyncWebsocketConsumer):
             "group": "production-servers"
         }
         """
-        api_key = data.get('api_key')
-        ip_address = data.get('ip')
-        hostname = data.get('hostname')
-        mac_address = data.get('mac')
-        group = data.get('group', 'default')
+        api_key = data.get("api_key")
+        ip_address = data.get("ip")
+        hostname = data.get("hostname")
+        mac_address = data.get("mac")
+        group = data.get("group", "default")
 
         if not all([api_key, ip_address, hostname, mac_address]):
             await self.send_error("Missing required fields for pairing")
@@ -92,23 +99,33 @@ class AgentConsumer(AsyncWebsocketConsumer):
         # FASE 1: Verifica API key
         api_verified = await self.verify_api_key(api_key)
         if not api_verified:
-            await self.send(text_data=json.dumps({
-                'type': 'pairing_status',
-                'status': 'failed',
-                'phase': 1,
-                'error': 'Invalid API key'
-            }))
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "pairing_status",
+                        "status": "failed",
+                        "phase": 1,
+                        "error": "Invalid API key",
+                    }
+                )
+            )
             return
 
-        await self.send(text_data=json.dumps({
-            'type': 'pairing_status',
-            'status': 'verifying',
-            'phase': 1,
-            'phase_1_verified': True
-        }))
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "pairing_status",
+                    "status": "verifying",
+                    "phase": 1,
+                    "phase_1_verified": True,
+                }
+            )
+        )
 
         # FASE 2: Verifica identity hash
-        pairing_session = await self.verify_identity_hash(ip_address, hostname, mac_address, group)
+        pairing_session = await self.verify_identity_hash(
+            ip_address, hostname, mac_address, group
+        )
 
         if pairing_session:
             # Pairing success!
@@ -117,25 +134,33 @@ class AgentConsumer(AsyncWebsocketConsumer):
             # Crea/Aggiorna connessione
             self.connection = await self.create_connection(self.target)
 
-            await self.send(text_data=json.dumps({
-                'type': 'pairing_status',
-                'status': 'success',
-                'phase': 2,
-                'phase_1_verified': True,
-                'phase_2_verified': True,
-                'target_id': self.target.id,
-                'group': self.target.gruppo or 'default'
-            }))
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "pairing_status",
+                        "status": "success",
+                        "phase": 2,
+                        "phase_1_verified": True,
+                        "phase_2_verified": True,
+                        "target_id": self.target.id,
+                        "group": self.target.gruppo or "default",
+                    }
+                )
+            )
 
             logger.info(f"Pairing successful for target {self.target}")
 
         else:
-            await self.send(text_data=json.dumps({
-                'type': 'pairing_status',
-                'status': 'failed',
-                'phase': 2,
-                'error': 'Identity hash verification failed'
-            }))
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "pairing_status",
+                        "status": "failed",
+                        "phase": 2,
+                        "error": "Identity hash verification failed",
+                    }
+                )
+            )
 
     async def handle_heartbeat(self, data):
         """
@@ -158,7 +183,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             await self.send_error("Not paired. Send pair_request first.")
             return
 
-        system_stats = data.get('system_stats', {})
+        system_stats = data.get("system_stats", {})
 
         # Aggiorna connection heartbeat
         await self.update_heartbeat(system_stats)
@@ -167,10 +192,11 @@ class AgentConsumer(AsyncWebsocketConsumer):
         await self.save_heartbeat(system_stats)
 
         # Invia ACK
-        await self.send(text_data=json.dumps({
-            'type': 'heartbeat_ack',
-            'timestamp': timezone.now().isoformat()
-        }))
+        await self.send(
+            text_data=json.dumps(
+                {"type": "heartbeat_ack", "timestamp": timezone.now().isoformat()}
+            )
+        )
 
     async def handle_threat_log(self, data):
         """
@@ -192,21 +218,20 @@ class AgentConsumer(AsyncWebsocketConsumer):
             await self.send_error("Not paired")
             return
 
-        threats = data.get('threats', [])
+        threats = data.get("threats", [])
 
         for threat in threats:
             # Salva ThreatLog
             await self.save_threat_log(threat)
 
             # Crea alert se score >= 80
-            if threat.get('threat_score', 0) >= 80:
+            if threat.get("threat_score", 0) >= 80:
                 await self.create_threat_alert(threat)
 
         # Invia ACK
-        await self.send(text_data=json.dumps({
-            'type': 'threat_ack',
-            'count': len(threats)
-        }))
+        await self.send(
+            text_data=json.dumps({"type": "threat_ack", "count": len(threats)})
+        )
 
     async def handle_command_response(self, data):
         """
@@ -219,10 +244,10 @@ class AgentConsumer(AsyncWebsocketConsumer):
             "error": "..."
         }
         """
-        command_id = data.get('command_id')
-        command_status = data.get('status')
-        result = data.get('result')
-        error = data.get('error')
+        command_id = data.get("command_id")
+        command_status = data.get("status")
+        result = data.get("result")
+        error = data.get("error")
 
         if not command_id:
             await self.send_error("Missing command_id")
@@ -235,31 +260,36 @@ class AgentConsumer(AsyncWebsocketConsumer):
         """
         Invia comando all'agent (chiamato da channel layer)
         """
-        await self.send(text_data=json.dumps({
-            'type': 'command',
-            'command_id': event['command_id'],
-            'action': event['action'],
-            'payload': event['payload']
-        }))
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "command",
+                    "command_id": event["command_id"],
+                    "action": event["action"],
+                    "payload": event["payload"],
+                }
+            )
+        )
 
     async def disconnect_agent(self, event):
         """
         Forza disconnessione agent (chiamato da channel layer)
         """
-        await self.send(text_data=json.dumps({
-            'type': 'disconnect',
-            'reason': event.get('reason', 'Server disconnect')
-        }))
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "disconnect",
+                    "reason": event.get("reason", "Server disconnect"),
+                }
+            )
+        )
         await self.close()
 
     async def send_error(self, message):
         """
         Invia messaggio di errore all'agent
         """
-        await self.send(text_data=json.dumps({
-            'type': 'error',
-            'message': message
-        }))
+        await self.send(text_data=json.dumps({"type": "error", "message": message}))
 
     # Database operations (async wrappers)
 
@@ -273,7 +303,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             return False
 
     @database_sync_to_async
-    def verify_identity_hash(self, ip_address, hostname, mac_address, group='default'):
+    def verify_identity_hash(self, ip_address, hostname, mac_address, group="default"):
         """
         Verifica identity hash e trova sessione di pairing
         """
@@ -288,16 +318,20 @@ class AgentConsumer(AsyncWebsocketConsumer):
             target = Target.objects.get(identity_hash=calculated_hash)
 
             # Trova sessione di pairing attiva
-            pairing_session = PairingSession.objects.filter(
-                target=target,
-                status__in=['waiting', 'verifying_api', 'verifying_hash']
-            ).order_by('-created_at').first()
+            pairing_session = (
+                PairingSession.objects.filter(
+                    target=target,
+                    status__in=["waiting", "verifying_api", "verifying_hash"],
+                )
+                .order_by("-created_at")
+                .first()
+            )
 
             if pairing_session and not pairing_session.is_expired:
                 # Aggiorna sessione
                 pairing_session.phase_1_verified = True
                 pairing_session.phase_2_verified = True
-                pairing_session.status = 'success'
+                pairing_session.status = "success"
                 pairing_session.agent_ip = ip_address
                 pairing_session.agent_hostname = hostname
                 pairing_session.agent_mac = mac_address
@@ -305,7 +339,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 pairing_session.save()
 
                 # Aggiorna target con gruppo
-                target.status = 'online'
+                target.status = "online"
                 target.last_seen = timezone.now()
                 target.gruppo = group  # Salva il gruppo
                 target.save()
@@ -328,10 +362,10 @@ class AgentConsumer(AsyncWebsocketConsumer):
         connection, created = AgentConnection.objects.update_or_create(
             target=target,
             defaults={
-                'websocket_channel': self.channel_name,
-                'is_online': True,
-                'last_heartbeat': timezone.now()
-            }
+                "websocket_channel": self.channel_name,
+                "is_online": True,
+                "last_heartbeat": timezone.now(),
+            },
         )
         return connection
 
@@ -347,14 +381,14 @@ class AgentConsumer(AsyncWebsocketConsumer):
         if self.target:
             AgentHeartbeat.objects.create(
                 target=self.target,
-                cpu_percent=system_stats.get('cpu_percent', 0),
-                memory_percent=system_stats.get('memory_percent', 0),
-                disk_percent=system_stats.get('disk_percent', 0),
-                bytes_sent=system_stats.get('bytes_sent', 0),
-                bytes_recv=system_stats.get('bytes_recv', 0),
-                active_rules_count=system_stats.get('active_rules_count', 0),
-                blocked_ips_count=system_stats.get('blocked_ips_count', 0),
-                raw_data=system_stats
+                cpu_percent=system_stats.get("cpu_percent", 0),
+                memory_percent=system_stats.get("memory_percent", 0),
+                disk_percent=system_stats.get("disk_percent", 0),
+                bytes_sent=system_stats.get("bytes_sent", 0),
+                bytes_recv=system_stats.get("bytes_recv", 0),
+                active_rules_count=system_stats.get("active_rules_count", 0),
+                blocked_ips_count=system_stats.get("blocked_ips_count", 0),
+                raw_data=system_stats,
             )
 
     @database_sync_to_async
@@ -363,11 +397,11 @@ class AgentConsumer(AsyncWebsocketConsumer):
         if self.target:
             ThreatLog.objects.create(
                 target=self.target,
-                source_ip=threat.get('source_ip'),
-                threat_score=threat.get('threat_score', 0),
-                classification=threat.get('classification', 'MEDIUM'),
-                attack_type=threat.get('attack_type', 'unknown'),
-                details=threat.get('details', {})
+                source_ip=threat.get("source_ip"),
+                threat_score=threat.get("threat_score", 0),
+                classification=threat.get("classification", "MEDIUM"),
+                attack_type=threat.get("attack_type", "unknown"),
+                details=threat.get("details", {}),
             )
 
     @database_sync_to_async
@@ -376,9 +410,9 @@ class AgentConsumer(AsyncWebsocketConsumer):
         if self.target:
             Alert.objects.create(
                 target=self.target,
-                severity='critical',
+                severity="critical",
                 title=f"Critical Threat Detected: {threat.get('attack_type', 'Unknown')}",
-                message=f"Source IP: {threat.get('source_ip')} - Threat Score: {threat.get('threat_score')}"
+                message=f"Source IP: {threat.get('source_ip')} - Threat Score: {threat.get('threat_score')}",
             )
 
     @database_sync_to_async
@@ -387,11 +421,11 @@ class AgentConsumer(AsyncWebsocketConsumer):
         try:
             command = AgentCommand.objects.get(command_id=command_id)
 
-            if command_status == 'success':
+            if command_status == "success":
                 command.mark_success(result)
-            elif command_status == 'failed':
-                command.mark_failed(error or 'Unknown error')
-            elif command_status == 'executing':
+            elif command_status == "failed":
+                command.mark_failed(error or "Unknown error")
+            elif command_status == "executing":
                 command.mark_executing()
 
         except AgentCommand.DoesNotExist:

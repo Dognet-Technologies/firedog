@@ -2,6 +2,7 @@
 Models per l'app Audit
 Audit logging per tutte le operazioni critiche
 """
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -12,20 +13,21 @@ class AuditLog(models.Model):
     """
     Log di audit per tutte le operazioni critiche del sistema
     """
+
     ACTION_CHOICES = [
-        ('create', 'Create'),
-        ('update', 'Update'),
-        ('delete', 'Delete'),
-        ('install', 'Install'),
-        ('uninstall', 'Uninstall'),
-        ('rule_add', 'Rule Add'),
-        ('rule_remove', 'Rule Remove'),
-        ('fetch', 'Fetch Data'),
-        ('scan', 'Network Scan'),
-        ('approve', 'Approve Change'),
-        ('login', 'Login'),
-        ('logout', 'Logout'),
-        ('error', 'Error'),
+        ("create", "Create"),
+        ("update", "Update"),
+        ("delete", "Delete"),
+        ("install", "Install"),
+        ("uninstall", "Uninstall"),
+        ("rule_add", "Rule Add"),
+        ("rule_remove", "Rule Remove"),
+        ("fetch", "Fetch Data"),
+        ("scan", "Network Scan"),
+        ("approve", "Approve Change"),
+        ("login", "Login"),
+        ("logout", "Logout"),
+        ("error", "Error"),
     ]
 
     # Utente che ha eseguito l'azione
@@ -34,8 +36,8 @@ class AuditLog(models.Model):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name='audit_logs',
-        help_text="Utente che ha eseguito l'azione"
+        related_name="audit_logs",
+        help_text="Utente che ha eseguito l'azione",
     )
 
     # Azione eseguita
@@ -43,146 +45,136 @@ class AuditLog(models.Model):
         max_length=50,
         choices=ACTION_CHOICES,
         db_index=True,
-        help_text="Tipo di azione eseguita"
+        help_text="Tipo di azione eseguita",
     )
 
     # Oggetto target (generic foreign key)
     content_type = models.ForeignKey(
-        ContentType,
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE
+        ContentType, null=True, blank=True, on_delete=models.CASCADE
     )
-    object_id = models.PositiveIntegerField(
-        null=True,
-        blank=True
-    )
-    content_object = GenericForeignKey('content_type', 'object_id')
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    content_object = GenericForeignKey("content_type", "object_id")
 
     # Dettagli operazione
-    description = models.TextField(
-        help_text="Descrizione dell'operazione"
-    )
+    description = models.TextField(help_text="Descrizione dell'operazione")
 
     # Dati prima/dopo (per tracking modifiche)
     old_values = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="Valori prima della modifica"
+        null=True, blank=True, help_text="Valori prima della modifica"
     )
 
     new_values = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="Valori dopo la modifica"
+        null=True, blank=True, help_text="Valori dopo la modifica"
     )
 
     # Metadata
     ip_address = models.GenericIPAddressField(
-        null=True,
-        blank=True,
-        help_text="IP da cui è stata eseguita l'azione"
+        null=True, blank=True, help_text="IP da cui è stata eseguita l'azione"
     )
 
     user_agent = models.CharField(
         max_length=512,
         blank=True,
         null=True,  # ← AGGIUNGI QUESTO
-        default='',  # ← AGGIUNGI QUESTO
-        help_text="User agent del client"
+        default="",  # ← AGGIUNGI QUESTO
+        help_text="User agent del client",
     )
 
     # Risultato
     success = models.BooleanField(
-        default=True,
-        db_index=True,
-        help_text="Indica se l'operazione è riuscita"
+        default=True, db_index=True, help_text="Indica se l'operazione è riuscita"
     )
 
     error_message = models.TextField(
-        blank=True,
-        help_text="Messaggio di errore se l'operazione è fallita"
+        blank=True, help_text="Messaggio di errore se l'operazione è fallita"
     )
 
     # Timestamp
     created_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-        help_text="Quando l'azione è stata eseguita"
+        auto_now_add=True, db_index=True, help_text="Quando l'azione è stata eseguita"
     )
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['user', 'created_at']),
-            models.Index(fields=['action', 'success']),
-            models.Index(fields=['content_type', 'object_id']),
-            models.Index(fields=['-created_at']),
+            models.Index(fields=["user", "created_at"]),
+            models.Index(fields=["action", "success"]),
+            models.Index(fields=["content_type", "object_id"]),
+            models.Index(fields=["-created_at"]),
         ]
-        verbose_name = 'Audit Log'
-        verbose_name_plural = 'Audit Logs'
+        verbose_name = "Audit Log"
+        verbose_name_plural = "Audit Logs"
 
     def __str__(self):
-        user_info = self.user.username if self.user else 'System'
+        user_info = self.user.username if self.user else "System"
         status = "✓" if self.success else "✗"
         return f"{status} {user_info} - {self.action} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
 
-# class FirewallRule(models.Model):
-#     """Regola iptables snapshot"""
+    # class FirewallRule(models.Model):
+    #     """Regola iptables snapshot"""
 
-#     CHAIN_CHOICES = [
-#         ("INPUT", "Input"),
-#         ("OUTPUT", "Output"),
-#         ("FORWARD", "Forward"),
-#     ]
+    #     CHAIN_CHOICES = [
+    #         ("INPUT", "Input"),
+    #         ("OUTPUT", "Output"),
+    #         ("FORWARD", "Forward"),
+    #     ]
 
-#     target = models.ForeignKey(Target, on_delete=models.CASCADE, related_name="rules")
-#     chain = models.CharField(max_length=10, choices=CHAIN_CHOICES)
-#     rule_number = models.IntegerField()
+    #     target = models.ForeignKey(Target, on_delete=models.CASCADE, related_name="rules")
+    #     chain = models.CharField(max_length=10, choices=CHAIN_CHOICES)
+    #     rule_number = models.IntegerField()
 
-#     protocol = models.CharField(max_length=10, blank=True)
-#     port = models.IntegerField(null=True, blank=True)
-#     source_ip = models.GenericIPAddressField(null=True, blank=True)
-#     dest_ip = models.GenericIPAddressField(null=True, blank=True)
-#     action = models.CharField(max_length=20)
-#     comment = models.TextField(blank=True)
+    #     protocol = models.CharField(max_length=10, blank=True)
+    #     port = models.IntegerField(null=True, blank=True)
+    #     source_ip = models.GenericIPAddressField(null=True, blank=True)
+    #     dest_ip = models.GenericIPAddressField(null=True, blank=True)
+    #     action = models.CharField(max_length=20)
+    #     comment = models.TextField(blank=True)
 
-#     # Counters
-#     packets = models.BigIntegerField(default=0)
-#     bytes = models.BigIntegerField(default=0)
+    #     # Counters
+    #     packets = models.BigIntegerField(default=0)
+    #     bytes = models.BigIntegerField(default=0)
 
-#     synced_at = models.DateTimeField(auto_now=True)
+    #     synced_at = models.DateTimeField(auto_now=True)
 
-#     class Meta:
-#         db_table = "firewall_rules"
-#         ordering = ["target", "chain", "rule_number"]
-#         unique_together = ["target", "chain", "rule_number"]
+    #     class Meta:
+    #         db_table = "firewall_rules"
+    #         ordering = ["target", "chain", "rule_number"]
+    #         unique_together = ["target", "chain", "rule_number"]
 
-#     def __str__(self):
-#         return f"{self.target.hostname} - {self.chain} #{self.rule_number}"
-
+    #     def __str__(self):
+    #         return f"{self.target.hostname} - {self.chain} #{self.rule_number}"
 
     @classmethod
-    def log_action(cls, action, description, user=None, content_object=None,
-                   old_values=None, new_values=None, ip_address=None,
-                   user_agent=None, success=True, error_message=''):
+    def log_action(
+        cls,
+        action,
+        description,
+        user=None,
+        content_object=None,
+        old_values=None,
+        new_values=None,
+        ip_address=None,
+        user_agent=None,
+        success=True,
+        error_message="",
+    ):
         """
         Helper method per creare un audit log
         """
         log_data = {
-            'action': action,
-            'description': description,
-            'user': user,
-            'old_values': old_values,
-            'new_values': new_values,
-            'ip_address': ip_address,
-            'user_agent': user_agent,
-            'success': success,
-            'error_message': error_message,
+            "action": action,
+            "description": description,
+            "user": user,
+            "old_values": old_values,
+            "new_values": new_values,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "success": success,
+            "error_message": error_message,
         }
 
         if content_object:
-            log_data['content_object'] = content_object
+            log_data["content_object"] = content_object
 
         return cls.objects.create(**log_data)
 

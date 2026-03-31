@@ -8,8 +8,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('agent_manager', '0001_initial'),
+        ("agent_manager", "0001_initial"),
     ]
 
-    operations = [
-    ]
+    operations = []
