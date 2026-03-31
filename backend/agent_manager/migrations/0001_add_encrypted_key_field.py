@@ -1,23 +1,15 @@
-# Generated manually - Add encrypted_key and last_used_at fields
+# Migration originalmente creata manualmente per aggiungere encrypted_key e last_used_at.
+# Questi campi sono già inclusi in 0001_initial, quindi questa migration è ora un no-op
+# che serve solo a preservare la storia della migration nei DB esistenti.
 
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        # Nessuna dipendenza dato che è la prima migration
+        ('agent_manager', '0001_initial'),
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='agentapikey',
-            name='encrypted_key',
-            field=models.TextField(blank=True, help_text='API key criptata (recuperabile con password admin)', null=True),
-        ),
-        migrations.AddField(
-            model_name='agentapikey',
-            name='last_used_at',
-            field=models.DateTimeField(blank=True, help_text='Ultimo utilizzo della chiave', null=True),
-        ),
     ]
