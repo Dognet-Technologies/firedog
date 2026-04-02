@@ -2,5 +2,5 @@ from django.apps import AppConfig
 
 
 class IntegrityConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'integrity'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "integrity"

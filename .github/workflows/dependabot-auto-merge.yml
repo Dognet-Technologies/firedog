@@ -1,0 +1,83 @@
+name: Dependabot Auto-Merge
+
+# pull_request_target runs in base branch context and has write access,
+# which is required for Dependabot PRs (pull_request runs read-only for bots).
+on:
+  pull_request_target:
+    branches: [main, stabile]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+
+    steps:
+      - name: Classify update type
+        id: meta
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const prNumber = context.payload.pull_request.number;
+
+            // Match "from X.Y.Z to A.B.C" to detect major bumps
+            const match = title.match(/from ([\d.]+) to ([\d.]+)/i);
+            let shouldAutoMerge = false;
+            if (match) {
+              const fromMajor = parseInt(match[1].split('.')[0]);
+              const toMajor = parseInt(match[2].split('.')[0]);
+              shouldAutoMerge = (fromMajor === toMajor); // only minor/patch
+            }
+
+            core.setOutput('should_auto_merge', String(shouldAutoMerge));
+            core.setOutput('pr_number', String(prNumber));
+            core.setOutput('pr_node_id', context.payload.pull_request.node_id);
+            console.log(`PR #${prNumber} "${title}" → auto_merge=${shouldAutoMerge}`);
+
+      - name: Approve (minor/patch updates only)
+        if: steps.meta.outputs.should_auto_merge == 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number('${{ steps.meta.outputs.pr_number }}'),
+              event: 'APPROVE',
+              body: 'Auto-approved by Dependabot auto-merge workflow (minor/patch update).'
+            });
+
+      - name: Enable auto-merge (minor/patch updates only)
+        if: steps.meta.outputs.should_auto_merge == 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.graphql(`
+              mutation($prId: ID!) {
+                enablePullRequestAutoMerge(input: {
+                  pullRequestId: $prId,
+                  mergeMethod: SQUASH
+                }) { pullRequest { autoMergeRequest { enabledAt } } }
+              }
+            `, { prId: '${{ steps.meta.outputs.pr_node_id }}' });
+            console.log('Auto-merge enabled for PR #${{ steps.meta.outputs.pr_number }}');
+
+      - name: Comment on major version bumps
+        if: steps.meta.outputs.should_auto_merge == 'false'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number('${{ steps.meta.outputs.pr_number }}'),
+              body: '⚠️ **Major version bump** — manual review required before merging.'
+            });

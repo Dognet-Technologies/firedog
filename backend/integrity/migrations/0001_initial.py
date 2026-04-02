@@ -15,32 +15,166 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='FileIntegrity',
+            name="FileIntegrity",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('file_path', models.CharField(db_index=True, help_text='Path completo del file monitorato', max_length=512, unique=True)),
-                ('file_type', models.CharField(blank=True, help_text='Tipo di file (python, config, script, etc.)', max_length=50)),
-                ('sha512_hash', models.CharField(help_text='Hash SHA512 del contenuto del file', max_length=128)),
-                ('previous_hash', models.CharField(blank=True, help_text='Hash precedente per confronto', max_length=128)),
-                ('file_size', models.PositiveBigIntegerField(help_text='Dimensione del file in bytes')),
-                ('file_permissions', models.CharField(blank=True, help_text='Permessi del file (es. 0644)', max_length=10)),
-                ('file_owner', models.CharField(blank=True, help_text='Proprietario del file', max_length=100)),
-                ('status', models.CharField(choices=[('ok', 'OK'), ('modified', 'Modified'), ('missing', 'Missing'), ('new', 'New')], db_index=True, default='ok', help_text='Stato corrente del file', max_length=20)),
-                ('last_checked', models.DateTimeField(auto_now=True, help_text='Ultimo controllo effettuato')),
-                ('last_modified', models.DateTimeField(blank=True, help_text='Ultima modifica rilevata del file', null=True)),
-                ('change_detected_at', models.DateTimeField(blank=True, help_text='Quando è stata rilevata una modifica', null=True)),
-                ('is_change_approved', models.BooleanField(default=False, help_text="Modifica approvata dall'amministratore")),
-                ('approved_at', models.DateTimeField(blank=True, help_text='Quando la modifica è stata approvata', null=True)),
-                ('change_notes', models.TextField(blank=True, help_text='Note sulla modifica')),
-                ('alert_sent', models.BooleanField(default=False, help_text='Alert inviato per questa modifica')),
-                ('created_at', models.DateTimeField(auto_now_add=True, help_text='Quando il file è stato aggiunto al monitoring')),
-                ('approved_by', models.ForeignKey(blank=True, help_text='Utente che ha approvato la modifica', null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='approved_changes', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "file_path",
+                    models.CharField(
+                        db_index=True,
+                        help_text="Path completo del file monitorato",
+                        max_length=512,
+                        unique=True,
+                    ),
+                ),
+                (
+                    "file_type",
+                    models.CharField(
+                        blank=True,
+                        help_text="Tipo di file (python, config, script, etc.)",
+                        max_length=50,
+                    ),
+                ),
+                (
+                    "sha512_hash",
+                    models.CharField(
+                        help_text="Hash SHA512 del contenuto del file", max_length=128
+                    ),
+                ),
+                (
+                    "previous_hash",
+                    models.CharField(
+                        blank=True,
+                        help_text="Hash precedente per confronto",
+                        max_length=128,
+                    ),
+                ),
+                (
+                    "file_size",
+                    models.PositiveBigIntegerField(
+                        help_text="Dimensione del file in bytes"
+                    ),
+                ),
+                (
+                    "file_permissions",
+                    models.CharField(
+                        blank=True,
+                        help_text="Permessi del file (es. 0644)",
+                        max_length=10,
+                    ),
+                ),
+                (
+                    "file_owner",
+                    models.CharField(
+                        blank=True, help_text="Proprietario del file", max_length=100
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("ok", "OK"),
+                            ("modified", "Modified"),
+                            ("missing", "Missing"),
+                            ("new", "New"),
+                        ],
+                        db_index=True,
+                        default="ok",
+                        help_text="Stato corrente del file",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "last_checked",
+                    models.DateTimeField(
+                        auto_now=True, help_text="Ultimo controllo effettuato"
+                    ),
+                ),
+                (
+                    "last_modified",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Ultima modifica rilevata del file",
+                        null=True,
+                    ),
+                ),
+                (
+                    "change_detected_at",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Quando è stata rilevata una modifica",
+                        null=True,
+                    ),
+                ),
+                (
+                    "is_change_approved",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Modifica approvata dall'amministratore",
+                    ),
+                ),
+                (
+                    "approved_at",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Quando la modifica è stata approvata",
+                        null=True,
+                    ),
+                ),
+                (
+                    "change_notes",
+                    models.TextField(blank=True, help_text="Note sulla modifica"),
+                ),
+                (
+                    "alert_sent",
+                    models.BooleanField(
+                        default=False, help_text="Alert inviato per questa modifica"
+                    ),
+                ),
+                (
+                    "created_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        help_text="Quando il file è stato aggiunto al monitoring",
+                    ),
+                ),
+                (
+                    "approved_by",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Utente che ha approvato la modifica",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="approved_changes",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'File Integrity',
-                'verbose_name_plural': 'File Integrity Records',
-                'ordering': ['-change_detected_at', 'file_path'],
-                'indexes': [models.Index(fields=['status', 'is_change_approved'], name='integrity_f_status_57370c_idx'), models.Index(fields=['last_checked'], name='integrity_f_last_ch_396d9b_idx'), models.Index(fields=['change_detected_at'], name='integrity_f_change__0d73a7_idx')],
+                "verbose_name": "File Integrity",
+                "verbose_name_plural": "File Integrity Records",
+                "ordering": ["-change_detected_at", "file_path"],
+                "indexes": [
+                    models.Index(
+                        fields=["status", "is_change_approved"],
+                        name="integrity_f_status_57370c_idx",
+                    ),
+                    models.Index(
+                        fields=["last_checked"], name="integrity_f_last_ch_396d9b_idx"
+                    ),
+                    models.Index(
+                        fields=["change_detected_at"],
+                        name="integrity_f_change__0d73a7_idx",
+                    ),
+                ],
             },
         ),
     ]

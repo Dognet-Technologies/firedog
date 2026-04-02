@@ -15,55 +15,166 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Dashboard',
+            name="Dashboard",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(help_text='Nome della dashboard', max_length=255)),
-                ('description', models.TextField(blank=True, help_text='Descrizione della dashboard')),
-                ('is_default', models.BooleanField(default=False, help_text="Dashboard di default per l'utente")),
-                ('is_public', models.BooleanField(default=False, help_text='Dashboard visibile ad altri utenti')),
-                ('layout_config', models.JSONField(default=dict, help_text='Configurazione layout per react-grid-layout')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('user', models.ForeignKey(help_text='Proprietario della dashboard', on_delete=django.db.models.deletion.CASCADE, related_name='dashboards', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "name",
+                    models.CharField(help_text="Nome della dashboard", max_length=255),
+                ),
+                (
+                    "description",
+                    models.TextField(
+                        blank=True, help_text="Descrizione della dashboard"
+                    ),
+                ),
+                (
+                    "is_default",
+                    models.BooleanField(
+                        default=False, help_text="Dashboard di default per l'utente"
+                    ),
+                ),
+                (
+                    "is_public",
+                    models.BooleanField(
+                        default=False, help_text="Dashboard visibile ad altri utenti"
+                    ),
+                ),
+                (
+                    "layout_config",
+                    models.JSONField(
+                        default=dict,
+                        help_text="Configurazione layout per react-grid-layout",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        help_text="Proprietario della dashboard",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="dashboards",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Dashboard',
-                'verbose_name_plural': 'Dashboards',
-                'ordering': ['-is_default', '-updated_at'],
+                "verbose_name": "Dashboard",
+                "verbose_name_plural": "Dashboards",
+                "ordering": ["-is_default", "-updated_at"],
             },
         ),
         migrations.CreateModel(
-            name='Widget',
+            name="Widget",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(help_text='Titolo del widget', max_length=255)),
-                ('widget_type', models.CharField(choices=[('threat_summary', 'Threat Summary'), ('threat_chart', 'Threat Chart'), ('target_status', 'Target Status'), ('recent_threats', 'Recent Threats'), ('top_attackers', 'Top Attackers'), ('rule_count', 'Rule Count'), ('traffic_stats', 'Traffic Stats'), ('activity_timeline', 'Activity Timeline'), ('geo_map', 'Geographic Map'), ('custom', 'Custom Widget')], help_text='Tipo di widget', max_length=50)),
-                ('config', models.JSONField(default=dict, help_text='Configurazione specifica del widget (filtri, opzioni, ecc.)')),
-                ('grid_position', models.JSONField(default=dict, help_text='Posizione nel grid layout {x, y, w, h}')),
-                ('is_visible', models.BooleanField(default=True, help_text='Widget visibile nella dashboard')),
-                ('refresh_interval', models.PositiveIntegerField(default=60, help_text='Intervallo di refresh in secondi (0 = manuale)')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('dashboard', models.ForeignKey(help_text='Dashboard a cui appartiene il widget', on_delete=django.db.models.deletion.CASCADE, related_name='widgets', to='dashboards.dashboard')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "title",
+                    models.CharField(help_text="Titolo del widget", max_length=255),
+                ),
+                (
+                    "widget_type",
+                    models.CharField(
+                        choices=[
+                            ("threat_summary", "Threat Summary"),
+                            ("threat_chart", "Threat Chart"),
+                            ("target_status", "Target Status"),
+                            ("recent_threats", "Recent Threats"),
+                            ("top_attackers", "Top Attackers"),
+                            ("rule_count", "Rule Count"),
+                            ("traffic_stats", "Traffic Stats"),
+                            ("activity_timeline", "Activity Timeline"),
+                            ("geo_map", "Geographic Map"),
+                            ("custom", "Custom Widget"),
+                        ],
+                        help_text="Tipo di widget",
+                        max_length=50,
+                    ),
+                ),
+                (
+                    "config",
+                    models.JSONField(
+                        default=dict,
+                        help_text="Configurazione specifica del widget (filtri, opzioni, ecc.)",
+                    ),
+                ),
+                (
+                    "grid_position",
+                    models.JSONField(
+                        default=dict, help_text="Posizione nel grid layout {x, y, w, h}"
+                    ),
+                ),
+                (
+                    "is_visible",
+                    models.BooleanField(
+                        default=True, help_text="Widget visibile nella dashboard"
+                    ),
+                ),
+                (
+                    "refresh_interval",
+                    models.PositiveIntegerField(
+                        default=60,
+                        help_text="Intervallo di refresh in secondi (0 = manuale)",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "dashboard",
+                    models.ForeignKey(
+                        help_text="Dashboard a cui appartiene il widget",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="widgets",
+                        to="dashboards.dashboard",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Widget',
-                'verbose_name_plural': 'Widgets',
-                'ordering': ['dashboard', 'created_at'],
-                'indexes': [models.Index(fields=['dashboard', 'is_visible'], name='dashboards__dashboa_62440f_idx'), models.Index(fields=['widget_type'], name='dashboards__widget__5bfe57_idx')],
+                "verbose_name": "Widget",
+                "verbose_name_plural": "Widgets",
+                "ordering": ["dashboard", "created_at"],
+                "indexes": [
+                    models.Index(
+                        fields=["dashboard", "is_visible"],
+                        name="dashboards__dashboa_62440f_idx",
+                    ),
+                    models.Index(
+                        fields=["widget_type"], name="dashboards__widget__5bfe57_idx"
+                    ),
+                ],
             },
         ),
         migrations.AddIndex(
-            model_name='dashboard',
-            index=models.Index(fields=['user', 'is_default'], name='dashboards__user_id_a56050_idx'),
+            model_name="dashboard",
+            index=models.Index(
+                fields=["user", "is_default"], name="dashboards__user_id_a56050_idx"
+            ),
         ),
         migrations.AddIndex(
-            model_name='dashboard',
-            index=models.Index(fields=['is_public'], name='dashboards__is_publ_24a3fc_idx'),
+            model_name="dashboard",
+            index=models.Index(
+                fields=["is_public"], name="dashboards__is_publ_24a3fc_idx"
+            ),
         ),
         migrations.AlterUniqueTogether(
-            name='dashboard',
-            unique_together={('user', 'name')},
+            name="dashboard",
+            unique_together={("user", "name")},
         ),
     ]
