@@ -13,16 +13,16 @@ def migrate_old_groups(apps, schema_editor):
     - 'queue' -> 'cache' (message queue come cache)
     - 'other' -> 'custom' (altro diventa personalizzato)
     """
-    Target = apps.get_model('targets', 'Target')
+    Target = apps.get_model("targets", "Target")
 
     # Mappatura vecchi valori -> nuovi valori
     mapping = {
-        'mail': 'web',
-        'backup': 'storage',
-        'monitoring': 'web',
-        'application': 'web',
-        'queue': 'cache',
-        'other': 'custom',
+        "mail": "web",
+        "backup": "storage",
+        "monitoring": "web",
+        "application": "web",
+        "queue": "cache",
+        "other": "custom",
     }
 
     for old_value, new_value in mapping.items():
@@ -49,7 +49,6 @@ class Migration(migrations.Migration):
     operations = [
         # Prima eseguiamo la migrazione dei dati
         migrations.RunPython(migrate_old_groups, reverse_migration),
-
         # Poi aggiorniamo le scelte del campo
         migrations.AlterField(
             model_name="target",
