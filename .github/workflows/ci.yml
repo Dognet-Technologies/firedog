@@ -114,7 +114,7 @@ jobs:
       - name: Python dependency audit (pip-audit)
         run: |
           pip install pip-audit
-          pip-audit -r backend/requirements.txt || true
+          pip-audit -r backend/requirements.txt
 
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
@@ -129,4 +129,4 @@ jobs:
 
       - name: NPM security audit (high+)
         working-directory: frontend
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=high
