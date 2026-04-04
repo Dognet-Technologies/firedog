@@ -10,35 +10,165 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('targets', '0001_initial'),
+        ("targets", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ThreatLog',
+            name="ThreatLog",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('source_ip', models.GenericIPAddressField(db_index=True, help_text='IP sorgente della minaccia', validators=[django.core.validators.validate_ipv46_address])),
-                ('dest_port', models.PositiveIntegerField(blank=True, help_text='Porta di destinazione attaccata', null=True, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(65535)])),
-                ('protocol', models.CharField(blank=True, help_text='Protocollo utilizzato', max_length=10)),
-                ('threat_score', models.PositiveIntegerField(db_index=True, help_text='Punteggio della minaccia (0-100)', validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(100)])),
-                ('severity', models.CharField(choices=[('low', 'Low'), ('medium', 'Medium'), ('high', 'High'), ('critical', 'Critical')], db_index=True, help_text='Livello di gravità', max_length=10)),
-                ('packet_count', models.PositiveIntegerField(default=1, help_text='Numero di pacchetti bloccati')),
-                ('reasons', models.JSONField(default=list, help_text='Motivi del threat score (lista di stringhe)')),
-                ('description', models.TextField(blank=True, help_text='Descrizione dettagliata della minaccia')),
-                ('country_code', models.CharField(blank=True, help_text="Codice paese ISO dell'IP sorgente", max_length=2)),
-                ('is_blocked', models.BooleanField(db_index=True, default=False, help_text="Indica se l'IP è stato bloccato")),
-                ('is_resolved', models.BooleanField(db_index=True, default=False, help_text='Indica se la minaccia è stata risolta/gestita')),
-                ('resolved_at', models.DateTimeField(blank=True, help_text='Quando la minaccia è stata risolta', null=True)),
-                ('detected_at', models.DateTimeField(auto_now_add=True, db_index=True, help_text='Quando la minaccia è stata rilevata')),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('target', models.ForeignKey(help_text='Target che ha rilevato la minaccia', on_delete=django.db.models.deletion.CASCADE, related_name='threats', to='targets.target')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "source_ip",
+                    models.GenericIPAddressField(
+                        db_index=True,
+                        help_text="IP sorgente della minaccia",
+                        validators=[django.core.validators.validate_ipv46_address],
+                    ),
+                ),
+                (
+                    "dest_port",
+                    models.PositiveIntegerField(
+                        blank=True,
+                        help_text="Porta di destinazione attaccata",
+                        null=True,
+                        validators=[
+                            django.core.validators.MinValueValidator(1),
+                            django.core.validators.MaxValueValidator(65535),
+                        ],
+                    ),
+                ),
+                (
+                    "protocol",
+                    models.CharField(
+                        blank=True, help_text="Protocollo utilizzato", max_length=10
+                    ),
+                ),
+                (
+                    "threat_score",
+                    models.PositiveIntegerField(
+                        db_index=True,
+                        help_text="Punteggio della minaccia (0-100)",
+                        validators=[
+                            django.core.validators.MinValueValidator(0),
+                            django.core.validators.MaxValueValidator(100),
+                        ],
+                    ),
+                ),
+                (
+                    "severity",
+                    models.CharField(
+                        choices=[
+                            ("low", "Low"),
+                            ("medium", "Medium"),
+                            ("high", "High"),
+                            ("critical", "Critical"),
+                        ],
+                        db_index=True,
+                        help_text="Livello di gravità",
+                        max_length=10,
+                    ),
+                ),
+                (
+                    "packet_count",
+                    models.PositiveIntegerField(
+                        default=1, help_text="Numero di pacchetti bloccati"
+                    ),
+                ),
+                (
+                    "reasons",
+                    models.JSONField(
+                        default=list,
+                        help_text="Motivi del threat score (lista di stringhe)",
+                    ),
+                ),
+                (
+                    "description",
+                    models.TextField(
+                        blank=True, help_text="Descrizione dettagliata della minaccia"
+                    ),
+                ),
+                (
+                    "country_code",
+                    models.CharField(
+                        blank=True,
+                        help_text="Codice paese ISO dell'IP sorgente",
+                        max_length=2,
+                    ),
+                ),
+                (
+                    "is_blocked",
+                    models.BooleanField(
+                        db_index=True,
+                        default=False,
+                        help_text="Indica se l'IP è stato bloccato",
+                    ),
+                ),
+                (
+                    "is_resolved",
+                    models.BooleanField(
+                        db_index=True,
+                        default=False,
+                        help_text="Indica se la minaccia è stata risolta/gestita",
+                    ),
+                ),
+                (
+                    "resolved_at",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Quando la minaccia è stata risolta",
+                        null=True,
+                    ),
+                ),
+                (
+                    "detected_at",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        db_index=True,
+                        help_text="Quando la minaccia è stata rilevata",
+                    ),
+                ),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "target",
+                    models.ForeignKey(
+                        help_text="Target che ha rilevato la minaccia",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="threats",
+                        to="targets.target",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Threat Log',
-                'verbose_name_plural': 'Threat Logs',
-                'ordering': ['-detected_at', '-threat_score'],
-                'indexes': [models.Index(fields=['target', 'detected_at'], name='threats_thr_target__f5bfbd_idx'), models.Index(fields=['target', 'threat_score'], name='threats_thr_target__3e8ce2_idx'), models.Index(fields=['source_ip', 'detected_at'], name='threats_thr_source__bb088c_idx'), models.Index(fields=['severity', 'is_resolved'], name='threats_thr_severit_fbc6c6_idx')],
+                "verbose_name": "Threat Log",
+                "verbose_name_plural": "Threat Logs",
+                "ordering": ["-detected_at", "-threat_score"],
+                "indexes": [
+                    models.Index(
+                        fields=["target", "detected_at"],
+                        name="threats_thr_target__f5bfbd_idx",
+                    ),
+                    models.Index(
+                        fields=["target", "threat_score"],
+                        name="threats_thr_target__3e8ce2_idx",
+                    ),
+                    models.Index(
+                        fields=["source_ip", "detected_at"],
+                        name="threats_thr_source__bb088c_idx",
+                    ),
+                    models.Index(
+                        fields=["severity", "is_resolved"],
+                        name="threats_thr_severit_fbc6c6_idx",
+                    ),
+                ],
             },
         ),
     ]

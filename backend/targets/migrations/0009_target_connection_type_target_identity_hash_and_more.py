@@ -6,28 +6,57 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('targets', '0008_firewallstats'),
+        ("targets", "0008_firewallstats"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='target',
-            name='connection_type',
-            field=models.CharField(choices=[('agent', 'Dog Agent'), ('ssh', 'SSH (Legacy)')], default='agent', help_text='Tipo di connessione al target', max_length=10),
+            model_name="target",
+            name="connection_type",
+            field=models.CharField(
+                choices=[("agent", "Dog Agent"), ("ssh", "SSH (Legacy)")],
+                default="agent",
+                help_text="Tipo di connessione al target",
+                max_length=10,
+            ),
         ),
         migrations.AddField(
-            model_name='target',
-            name='identity_hash',
-            field=models.CharField(blank=True, help_text='SHA512 hash di ip+hostname+mac per pairing agent', max_length=128, null=True, unique=True),
+            model_name="target",
+            name="identity_hash",
+            field=models.CharField(
+                blank=True,
+                help_text="SHA512 hash di ip+hostname+mac per pairing agent",
+                max_length=128,
+                null=True,
+                unique=True,
+            ),
         ),
         migrations.AddField(
-            model_name='target',
-            name='mac_address',
-            field=models.CharField(blank=True, help_text='MAC address del target (formato AA:BB:CC:DD:EE:FF)', max_length=17),
+            model_name="target",
+            name="mac_address",
+            field=models.CharField(
+                blank=True,
+                help_text="MAC address del target (formato AA:BB:CC:DD:EE:FF)",
+                max_length=17,
+            ),
         ),
         migrations.AlterField(
-            model_name='target',
-            name='status',
-            field=models.CharField(choices=[('unpaired', 'Unpaired'), ('pairing', 'Pairing'), ('pending', 'Pending'), ('installing', 'Installing'), ('online', 'Online'), ('offline', 'Offline'), ('error', 'Error')], db_index=True, default='pending', help_text='Stato corrente del target', max_length=20),
+            model_name="target",
+            name="status",
+            field=models.CharField(
+                choices=[
+                    ("unpaired", "Unpaired"),
+                    ("pairing", "Pairing"),
+                    ("pending", "Pending"),
+                    ("installing", "Installing"),
+                    ("online", "Online"),
+                    ("offline", "Offline"),
+                    ("error", "Error"),
+                ],
+                db_index=True,
+                default="pending",
+                help_text="Stato corrente del target",
+                max_length=20,
+            ),
         ),
     ]

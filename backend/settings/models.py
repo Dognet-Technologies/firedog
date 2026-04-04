@@ -1,72 +1,71 @@
-""" 
+"""
 Models per Settings App
 Gestione configurazioni sistema e chiavi SSH
 """
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 import hashlib
 
+
 class SystemSettings(models.Model):
     """
     Configurazioni di sistema persistenti
     Ogni impostazione è memorizzata come coppia key-value
     """
+
     CATEGORY_CHOICES = [
-        ('general', 'Generale'),
-        ('appearance', 'Aspetto'),
-        ('notifications', 'Notifiche'),
-        ('security', 'Sicurezza'),
-        ('monitoring', 'Monitoraggio'),
+        ("general", "Generale"),
+        ("appearance", "Aspetto"),
+        ("notifications", "Notifiche"),
+        ("security", "Sicurezza"),
+        ("monitoring", "Monitoraggio"),
     ]
-    
+
     key = models.CharField(
         max_length=100,
         unique=True,
         db_index=True,
-        help_text="Chiave univoca dell'impostazione"
+        help_text="Chiave univoca dell'impostazione",
     )
-    
-    value = models.JSONField(
-        help_text="Valore dell'impostazione (JSON)"
-    )
-    
+
+    value = models.JSONField(help_text="Valore dell'impostazione (JSON)")
+
     category = models.CharField(
         max_length=50,
         choices=CATEGORY_CHOICES,
-        default='general',
-        help_text="Categoria dell'impostazione"
+        default="general",
+        help_text="Categoria dell'impostazione",
     )
-    
+
     description = models.TextField(
-        blank=True,
-        help_text="Descrizione dell'impostazione"
+        blank=True, help_text="Descrizione dell'impostazione"
     )
-    
+
     is_public = models.BooleanField(
-        default=True,
-        help_text="Se True, visibile a tutti gli utenti autenticati"
+        default=True, help_text="Se True, visibile a tutti gli utenti autenticati"
     )
-    
+
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='settings_updates'
+        related_name="settings_updates",
     )
-    
+
     class Meta:
-        db_table = 'system_settings'
-        verbose_name = 'System Setting'
-        verbose_name_plural = 'System Settings'
-        ordering = ['category', 'key']
-    
+        db_table = "system_settings"
+        verbose_name = "System Setting"
+        verbose_name_plural = "System Settings"
+        ordering = ["category", "key"]
+
     def __str__(self):
         return f"{self.category}.{self.key}"
-    
+
     @classmethod
     def get_setting(cls, key, default=None):
         """Recupera valore impostazione"""
@@ -75,17 +74,17 @@ class SystemSettings(models.Model):
             return setting.value
         except cls.DoesNotExist:
             return default
-    
+
     @classmethod
-    def set_setting(cls, key, value, category='general', user=None):
+    def set_setting(cls, key, value, category="general", user=None):
         """Imposta valore impostazione"""
         setting, created = cls.objects.update_or_create(
             key=key,
             defaults={
-                'value': value,
-                'category': category,
-                'updated_by': user,
-            }
+                "value": value,
+                "category": category,
+                "updated_by": user,
+            },
         )
         return setting
 
@@ -95,97 +94,83 @@ class SSHKey(models.Model):
     Chiavi SSH per connessione ai target
     Supporta scope globale, per gruppo o per target specifico
     """
+
     KEY_TYPE_CHOICES = [
-        ('ed25519', 'Ed25519'),
-        ('rsa', 'RSA'),
-        ('ecdsa', 'ECDSA'),
+        ("ed25519", "Ed25519"),
+        ("rsa", "RSA"),
+        ("ecdsa", "ECDSA"),
     ]
-    
+
     SCOPE_CHOICES = [
-        ('global', 'Globale'),
-        ('group', 'Gruppo'),
-        ('target', 'Target'),
+        ("global", "Globale"),
+        ("group", "Gruppo"),
+        ("target", "Target"),
     ]
-    
-    name = models.CharField(
-        max_length=255,
-        help_text="Nome descrittivo della chiave"
-    )
-    
+
+    name = models.CharField(max_length=255, help_text="Nome descrittivo della chiave")
+
     key_type = models.CharField(
         max_length=20,
         choices=KEY_TYPE_CHOICES,
-        default='ed25519',
-        help_text="Tipo di chiave SSH"
+        default="ed25519",
+        help_text="Tipo di chiave SSH",
     )
-    
+
     key_size = models.IntegerField(
         null=True,
         blank=True,
         validators=[MinValueValidator(2048), MaxValueValidator(8192)],
-        help_text="Dimensione chiave RSA (bit)"
+        help_text="Dimensione chiave RSA (bit)",
     )
-    
-    public_key = models.TextField(
-        help_text="Chiave pubblica SSH"
-    )
-    
-    private_key = models.TextField(
-        help_text="Chiave privata SSH (encrypted)"
-    )
-    
+
+    public_key = models.TextField(help_text="Chiave pubblica SSH")
+
+    private_key = models.TextField(help_text="Chiave privata SSH (encrypted)")
+
     fingerprint = models.CharField(
-        max_length=255,
-        unique=True,
-        help_text="Fingerprint SHA256 della chiave"
+        max_length=255, unique=True, help_text="Fingerprint SHA256 della chiave"
     )
-    
+
     scope = models.CharField(
         max_length=20,
         choices=SCOPE_CHOICES,
-        default='global',
-        help_text="Ambito di utilizzo della chiave"
+        default="global",
+        help_text="Ambito di utilizzo della chiave",
     )
-    
+
     scope_value = models.CharField(
         max_length=255,
         blank=True,
         null=True,
-        help_text="Valore dello scope (nome gruppo o ID target)"
+        help_text="Valore dello scope (nome gruppo o ID target)",
     )
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='ssh_keys_created'
+        User, on_delete=models.SET_NULL, null=True, related_name="ssh_keys_created"
     )
-    
+
     is_active = models.BooleanField(
-        default=True,
-        help_text="Se False, la chiave non viene utilizzata"
+        default=True, help_text="Se False, la chiave non viene utilizzata"
     )
-    
+
     last_used_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Ultimo utilizzo della chiave"
+        null=True, blank=True, help_text="Ultimo utilizzo della chiave"
     )
-    
+
     class Meta:
-        db_table = 'ssh_keys'
-        verbose_name = 'SSH Key'
-        verbose_name_plural = 'SSH Keys'
-        ordering = ['-created_at']
+        db_table = "ssh_keys"
+        verbose_name = "SSH Key"
+        verbose_name_plural = "SSH Keys"
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['scope', 'scope_value']),
-            models.Index(fields=['fingerprint']),
+            models.Index(fields=["scope", "scope_value"]),
+            models.Index(fields=["fingerprint"]),
         ]
-    
+
     def __str__(self):
         return f"{self.name} ({self.key_type})"
-    
+
     def generate_fingerprint(self):
         """Genera fingerprint SHA256 della chiave pubblica"""
         # Estrai la parte base64 della chiave pubblica
@@ -195,48 +180,44 @@ class SSHKey(models.Model):
             fingerprint = hashlib.sha256(key_data.encode()).hexdigest()
             return f"SHA256:{fingerprint[:32]}..."
         return "Invalid key format"
-    
+
     def save(self, *args, **kwargs):
         """Override save per generare fingerprint automaticamente"""
         if not self.fingerprint:
             self.fingerprint = self.generate_fingerprint()
         super().save(*args, **kwargs)
-    
+
     @property
     def associated_targets_count(self):
         """Conta target associati a questa chiave"""
         from targets.models import Target
-        
-        if self.scope == 'global':
+
+        if self.scope == "global":
             return Target.objects.filter(is_active=True).count()
-        elif self.scope == 'group':
+        elif self.scope == "group":
             return Target.objects.filter(
-                gruppo=self.scope_value,
-                is_active=True
+                gruppo=self.scope_value, is_active=True
             ).count()
-        elif self.scope == 'target':
-            return Target.objects.filter(
-                id=self.scope_value,
-                is_active=True
-            ).count()
-        
+        elif self.scope == "target":
+            return Target.objects.filter(id=self.scope_value, is_active=True).count()
+
         return 0
-    
+
     def get_private_key_path(self):
         """Ritorna path dove salvare la chiave privata sul filesystem"""
         from django.conf import settings
         import os
-        
-        keys_dir = os.path.join(settings.BASE_DIR, 'ssh_keys')
+
+        keys_dir = os.path.join(settings.BASE_DIR, "ssh_keys")
         os.makedirs(keys_dir, exist_ok=True)
-        
+
         filename = f"id_{self.key_type}_{self.id}"
         return os.path.join(keys_dir, filename)
-    
+
     def mark_as_used(self):
         """Aggiorna timestamp ultimo utilizzo"""
         self.last_used_at = timezone.now()
-        self.save(update_fields=['last_used_at'])
+        self.save(update_fields=["last_used_at"])
 
 
 class DatabaseCleanupLog(models.Model):
@@ -244,53 +225,46 @@ class DatabaseCleanupLog(models.Model):
     Log delle operazioni di pulizia database
     Traccia cosa è stato eliminato e quando
     """
+
     CLEANUP_TYPE_CHOICES = [
-        ('audit_logs', 'Audit Logs'),
-        ('threat_logs', 'Threat Logs'),
-        ('statistics', 'Statistics'),
-        ('discovered_hosts', 'Discovered Hosts'),
-        ('all', 'All'),
+        ("audit_logs", "Audit Logs"),
+        ("threat_logs", "Threat Logs"),
+        ("statistics", "Statistics"),
+        ("discovered_hosts", "Discovered Hosts"),
+        ("all", "All"),
     ]
-    
+
     cleanup_type = models.CharField(
         max_length=50,
         choices=CLEANUP_TYPE_CHOICES,
-        help_text="Tipo di pulizia eseguita"
+        help_text="Tipo di pulizia eseguita",
     )
-    
+
     records_deleted = models.IntegerField(
-        default=0,
-        help_text="Numero di record eliminati"
+        default=0, help_text="Numero di record eliminati"
     )
-    
-    retention_days = models.IntegerField(
-        help_text="Giorni di retention applicati"
-    )
-    
+
+    retention_days = models.IntegerField(help_text="Giorni di retention applicati")
+
     executed_at = models.DateTimeField(auto_now_add=True)
     executed_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name='cleanup_executions'
+        User, on_delete=models.SET_NULL, null=True, related_name="cleanup_executions"
     )
-    
+
     success = models.BooleanField(
-        default=True,
-        help_text="Se True, operazione completata con successo"
+        default=True, help_text="Se True, operazione completata con successo"
     )
-    
+
     error_message = models.TextField(
-        blank=True,
-        help_text="Messaggio di errore se success=False"
+        blank=True, help_text="Messaggio di errore se success=False"
     )
-    
+
     class Meta:
-        db_table = 'database_cleanup_logs'
-        verbose_name = 'Database Cleanup Log'
-        verbose_name_plural = 'Database Cleanup Logs'
-        ordering = ['-executed_at']
-    
+        db_table = "database_cleanup_logs"
+        verbose_name = "Database Cleanup Log"
+        verbose_name_plural = "Database Cleanup Logs"
+        ordering = ["-executed_at"]
+
     def __str__(self):
         return f"{self.cleanup_type} - {self.executed_at.strftime('%Y-%m-%d %H:%M')}"
 
@@ -300,267 +274,247 @@ class NotificationConfig(models.Model):
     Configurazione notifiche globali
     Singleton: esiste sempre e solo un record (pk=1)
     """
+
     # Email
     email_enabled = models.BooleanField(
-        default=False,
-        help_text="Abilita notifiche email"
+        default=False, help_text="Abilita notifiche email"
     )
-    
+
     email_recipients = models.JSONField(
-        default=list,
-        help_text="Lista indirizzi email destinatari"
+        default=list, help_text="Lista indirizzi email destinatari"
     )
-    
+
     # SMTP Configuration (salvate in DB)
     smtp_host = models.CharField(
         max_length=255,
         blank=True,
-        default='localhost',
-        help_text="Host SMTP (es. smtp.gmail.com, localhost)"
+        default="localhost",
+        help_text="Host SMTP (es. smtp.gmail.com, localhost)",
     )
-    
+
     smtp_port = models.IntegerField(
         default=587,
         validators=[MinValueValidator(1), MaxValueValidator(65535)],
-        help_text="Porta SMTP (587 per TLS, 465 per SSL, 25 per plain)"
+        help_text="Porta SMTP (587 per TLS, 465 per SSL, 25 per plain)",
     )
-    
+
     smtp_user = models.CharField(
         max_length=255,
         blank=True,
-        default='microcyber',
-        help_text="Username SMTP (es. microcyber)"
+        default="microcyber",
+        help_text="Username SMTP (es. microcyber)",
     )
-    
+
     smtp_password = models.CharField(
-        max_length=500,
-        blank=True,
-        help_text="Password SMTP (salvata encrypted)"
+        max_length=500, blank=True, help_text="Password SMTP (salvata encrypted)"
     )
-    
+
     smtp_use_tls = models.BooleanField(
-        default=True,
-        help_text="Usa STARTTLS per connessione sicura"
+        default=True, help_text="Usa STARTTLS per connessione sicura"
     )
-    
+
     smtp_from_email = models.EmailField(
         blank=True,
-        default='firedog@localhost',
-        help_text="Email mittente per le notifiche"
+        default="firedog@localhost",
+        help_text="Email mittente per le notifiche",
     )
-    
+
     # Slack
     slack_enabled = models.BooleanField(
-        default=False,
-        help_text="Abilita notifiche Slack"
+        default=False, help_text="Abilita notifiche Slack"
     )
-    
+
     slack_webhook_url = models.URLField(
-        blank=True,
-        max_length=500,
-        help_text="URL webhook Slack"
+        blank=True, max_length=500, help_text="URL webhook Slack"
     )
-    
+
     # Discord
     discord_enabled = models.BooleanField(
-        default=False,
-        help_text="Abilita notifiche Discord"
+        default=False, help_text="Abilita notifiche Discord"
     )
-    
+
     discord_webhook_url = models.URLField(
-        blank=True,
-        max_length=500,
-        help_text="URL webhook Discord"
+        blank=True, max_length=500, help_text="URL webhook Discord"
     )
-    
+
     # Trigger Alerts (basati su threatThreshold in SystemSettings)
     alert_on_critical_threat = models.BooleanField(
-        default=True,
-        help_text="Invia alert per minacce critiche"
+        default=True, help_text="Invia alert per minacce critiche"
     )
-    
+
     alert_on_high_threat = models.BooleanField(
-        default=True,
-        help_text="Invia alert per minacce high"
+        default=True, help_text="Invia alert per minacce high"
     )
-    
+
     alert_on_target_offline = models.BooleanField(
-        default=True,
-        help_text="Invia alert quando target va offline"
+        default=True, help_text="Invia alert quando target va offline"
     )
-    
+
     target_offline_threshold_minutes = models.IntegerField(
         default=5,
         validators=[MinValueValidator(1), MaxValueValidator(60)],
-        help_text="Minuti prima di considerare target offline"
+        help_text="Minuti prima di considerare target offline",
     )
-    
+
     alert_on_ssh_error = models.BooleanField(
-        default=True,
-        help_text="Invia alert per errori SSH"
+        default=True, help_text="Invia alert per errori SSH"
     )
-    
+
     alert_on_install_success = models.BooleanField(
-        default=False,
-        help_text="Invia alert per installazioni completate"
+        default=False, help_text="Invia alert per installazioni completate"
     )
-    
+
     alert_on_install_failed = models.BooleanField(
-        default=True,
-        help_text="Invia alert per installazioni fallite"
+        default=True, help_text="Invia alert per installazioni fallite"
     )
-    
+
     # Anti-flood
     cooldown_minutes = models.IntegerField(
         default=60,
         validators=[MinValueValidator(5), MaxValueValidator(1440)],
-        help_text="Cooldown tra notifiche dello stesso tipo (minuti)"
+        help_text="Cooldown tra notifiche dello stesso tipo (minuti)",
     )
-    
+
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='notification_config_updates'
+        related_name="notification_config_updates",
     )
-    
+
     class Meta:
-        db_table = 'notification_config'
-        verbose_name = 'Notification Configuration'
-        verbose_name_plural = 'Notification Configurations'
-    
+        db_table = "notification_config"
+        verbose_name = "Notification Configuration"
+        verbose_name_plural = "Notification Configurations"
+
     def __str__(self):
         return f"NotificationConfig (updated: {self.updated_at})"
-    
+
     @classmethod
     def get_config(cls):
         """Ottieni o crea configurazione singleton"""
         config, created = cls.objects.get_or_create(pk=1)
         return config
-    
+
     def save(self, *args, **kwargs):
         """Forza pk=1 (singleton) e encrypta password"""
         self.pk = 1
-        
+
         # Encrypta password SMTP se presente
-        if self.smtp_password and not self.smtp_password.startswith('gAAAAAB'):
+        if self.smtp_password and not self.smtp_password.startswith("gAAAAAB"):
             self.smtp_password = self._encrypt_password(self.smtp_password)
-        
+
         super().save(*args, **kwargs)
-    
+
     def _encrypt_password(self, password):
         """Encrypta password usando Fernet (symmetric encryption)"""
         from cryptography.fernet import Fernet
         from django.conf import settings
-        
+
         # Usa SECRET_KEY come base per encryption key
-        key = settings.SECRET_KEY[:32].encode().ljust(32, b'0')
+        key = settings.SECRET_KEY[:32].encode().ljust(32, b"0")
         from base64 import urlsafe_b64encode
+
         fernet_key = urlsafe_b64encode(key)
-        
+
         cipher = Fernet(fernet_key)
         encrypted = cipher.encrypt(password.encode())
         return encrypted.decode()
-    
+
     def get_decrypted_smtp_password(self):
         """Decripta password SMTP per uso"""
         if not self.smtp_password:
-            return ''
-        
+            return ""
+
         # Se non è encrypted, ritorna così com'è
-        if not self.smtp_password.startswith('gAAAAAB'):
+        if not self.smtp_password.startswith("gAAAAAB"):
             return self.smtp_password
-        
+
         try:
             from cryptography.fernet import Fernet
             from django.conf import settings
-            
-            key = settings.SECRET_KEY[:32].encode().ljust(32, b'0')
+
+            key = settings.SECRET_KEY[:32].encode().ljust(32, b"0")
             from base64 import urlsafe_b64encode
+
             fernet_key = urlsafe_b64encode(key)
-            
+
             cipher = Fernet(fernet_key)
             decrypted = cipher.decrypt(self.smtp_password.encode())
             return decrypted.decode()
         except Exception as e:
-            return ''
+            return ""
 
 
 class NotificationLog(models.Model):
     """
     Log delle notifiche inviate (per cooldown e audit)
     """
+
     NOTIFICATION_TYPE_CHOICES = [
-        ('email', 'Email'),
-        ('slack', 'Slack'),
-        ('discord', 'Discord'),
+        ("email", "Email"),
+        ("slack", "Slack"),
+        ("discord", "Discord"),
     ]
-    
+
     ALERT_TYPE_CHOICES = [
-        ('threat_critical', 'Critical Threat'),
-        ('threat_high', 'High Threat'),
-        ('target_offline', 'Target Offline'),
-        ('ssh_error', 'SSH Error'),
-        ('install_success', 'Installation Success'),
-        ('install_failed', 'Installation Failed'),
+        ("threat_critical", "Critical Threat"),
+        ("threat_high", "High Threat"),
+        ("target_offline", "Target Offline"),
+        ("ssh_error", "SSH Error"),
+        ("install_success", "Installation Success"),
+        ("install_failed", "Installation Failed"),
     ]
-    
+
     notification_type = models.CharField(
         max_length=20,
         choices=NOTIFICATION_TYPE_CHOICES,
-        help_text="Tipo di notifica inviata"
+        help_text="Tipo di notifica inviata",
     )
-    
+
     alert_type = models.CharField(
-        max_length=50,
-        choices=ALERT_TYPE_CHOICES,
-        help_text="Tipo di alert"
+        max_length=50, choices=ALERT_TYPE_CHOICES, help_text="Tipo di alert"
     )
-    
+
     target = models.ForeignKey(
-        'targets.Target',
+        "targets.Target",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='notifications'
+        related_name="notifications",
     )
-    
+
     recipient = models.CharField(
-        max_length=500,
-        help_text="Destinatario (email o webhook URL)"
+        max_length=500, help_text="Destinatario (email o webhook URL)"
     )
-    
-    message = models.TextField(
-        help_text="Contenuto messaggio inviato"
-    )
-    
+
+    message = models.TextField(help_text="Contenuto messaggio inviato")
+
     success = models.BooleanField(
-        default=True,
-        help_text="Se True, notifica inviata con successo"
+        default=True, help_text="Se True, notifica inviata con successo"
     )
-    
+
     error_message = models.TextField(
-        blank=True,
-        help_text="Messaggio di errore se success=False"
+        blank=True, help_text="Messaggio di errore se success=False"
     )
-    
+
     sent_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
-        db_table = 'notification_logs'
-        verbose_name = 'Notification Log'
-        verbose_name_plural = 'Notification Logs'
-        ordering = ['-sent_at']
+        db_table = "notification_logs"
+        verbose_name = "Notification Log"
+        verbose_name_plural = "Notification Logs"
+        ordering = ["-sent_at"]
         indexes = [
-            models.Index(fields=['alert_type', 'sent_at']),
-            models.Index(fields=['target', 'sent_at']),
+            models.Index(fields=["alert_type", "sent_at"]),
+            models.Index(fields=["target", "sent_at"]),
         ]
-    
+
     def __str__(self):
         return f"{self.alert_type} - {self.notification_type} ({self.sent_at})"
-    
+
     @classmethod
     def can_send_alert(cls, alert_type, target=None):
         """
@@ -569,24 +523,30 @@ class NotificationLog(models.Model):
         """
         config = NotificationConfig.get_config()
         cooldown_minutes = config.cooldown_minutes
-        
+
         cutoff_time = timezone.now() - timedelta(minutes=cooldown_minutes)
-        
+
         # Controlla se esiste già un alert dello stesso tipo nel periodo di cooldown
         query = cls.objects.filter(
-            alert_type=alert_type,
-            sent_at__gte=cutoff_time,
-            success=True
+            alert_type=alert_type, sent_at__gte=cutoff_time, success=True
         )
-        
+
         if target:
             query = query.filter(target=target)
-        
+
         return not query.exists()
-    
+
     @classmethod
-    def log_notification(cls, notification_type, alert_type, recipient, message, 
-                        target=None, success=True, error_message=''):
+    def log_notification(
+        cls,
+        notification_type,
+        alert_type,
+        recipient,
+        message,
+        target=None,
+        success=True,
+        error_message="",
+    ):
         """Helper per creare log notifica"""
         return cls.objects.create(
             notification_type=notification_type,
@@ -595,5 +555,5 @@ class NotificationLog(models.Model):
             recipient=recipient,
             message=message,
             success=success,
-            error_message=error_message
+            error_message=error_message,
         )

@@ -2,6 +2,7 @@
 Custom Permissions per FireDog
 Sistema basato su ruoli: Admin e Reporter
 """
+
 from rest_framework import permissions
 
 
@@ -16,7 +17,8 @@ class IsAdminUser(permissions.BasePermission):
     - Modificare configurazioni
     - Tutto ciò che può fare un Reporter
     """
-    message = 'Solo gli amministratori possono eseguire questa azione.'
+
+    message = "Solo gli amministratori possono eseguire questa azione."
 
     def has_permission(self, request, view):
         # Utente deve essere autenticato
@@ -28,7 +30,7 @@ class IsAdminUser(permissions.BasePermission):
             return True
 
         # Check gruppo Admin
-        return request.user.groups.filter(name='Admin').exists()
+        return request.user.groups.filter(name="Admin").exists()
 
 
 class IsReporterOrAdmin(permissions.BasePermission):
@@ -46,7 +48,8 @@ class IsReporterOrAdmin(permissions.BasePermission):
     - Aggiungere/rimuovere regole
     - Modificare configurazioni
     """
-    message = 'Accesso negato. Richiesti permessi Reporter o superiori.'
+
+    message = "Accesso negato. Richiesti permessi Reporter o superiori."
 
     def has_permission(self, request, view):
         # Utente deve essere autenticato
@@ -58,7 +61,7 @@ class IsReporterOrAdmin(permissions.BasePermission):
             return True
 
         # Check gruppo Reporter o Admin
-        return request.user.groups.filter(name__in=['Admin', 'Reporter']).exists()
+        return request.user.groups.filter(name__in=["Admin", "Reporter"]).exists()
 
 
 class IsAdminOrReadOnly(permissions.BasePermission):
@@ -69,7 +72,8 @@ class IsAdminOrReadOnly(permissions.BasePermission):
     - GET/LIST: Tutti gli utenti autenticati
     - POST/PUT/PATCH/DELETE: Solo Admin
     """
-    message = 'Solo gli amministratori possono modificare questa risorsa.'
+
+    message = "Solo gli amministratori possono modificare questa risorsa."
 
     def has_permission(self, request, view):
         # Utente deve essere autenticato
@@ -85,4 +89,4 @@ class IsAdminOrReadOnly(permissions.BasePermission):
             return True
 
         # Metodi di modifica solo per Admin
-        return request.user.groups.filter(name='Admin').exists()
+        return request.user.groups.filter(name="Admin").exists()

@@ -3,11 +3,12 @@ SSH Manager per FireDog
 Gestione connessioni SSH e trasferimento file via SCP
 Conforme a OWASP/NIST security standards
 """
+
 from core.firewall_output_parser import (
     parse_firewall_stats,
     parse_firewall_rules,
     parse_firewall_threats,
-    parse_firewall_analyze
+    parse_firewall_analyze,
 )
 import paramiko
 import socket
@@ -19,15 +20,18 @@ from contextlib import contextmanager
 from typing import Dict, List, Optional, Tuple
 import logging
 
-logger = logging.getLogger('firedog.ssh')
+logger = logging.getLogger("firedog.ssh")
+
 
 class SSHConnectionError(Exception):
     """Errore di connessione SSH"""
+
     pass
 
 
 class SSHCommandError(Exception):
     """Errore durante esecuzione comando SSH"""
+
     pass
 
 
@@ -36,10 +40,16 @@ class SSHManager:
     Gestore connessioni SSH con supporto SCP
     Utilizza chiavi Ed25519 per autenticazione sicura
     """
-    
-    def __init__(self, host: str, port: int = 22, username: str = 'microcyber',
-                 key_path: Optional[str] = None, password: Optional[str] = None,
-                 timeout: int = 30):
+
+    def __init__(
+        self,
+        host: str,
+        port: int = 22,
+        username: str = "microcyber",
+        key_path: Optional[str] = None,
+        password: Optional[str] = None,
+        timeout: int = 30,
+    ):
         """
         Inizializza SSHManager
 
@@ -66,8 +76,10 @@ class SSHManager:
 
         # Valida che almeno uno tra password e chiave sia presente
         if not self.password and not os.path.exists(self.key_path):
-            raise FileNotFoundError(f"Chiave SSH non trovata e nessuna password fornita: {self.key_path}")
-    
+            raise FileNotFoundError(
+                f"Chiave SSH non trovata e nessuna password fornita: {self.key_path}"
+            )
+
     def connect(self) -> bool:
         """
         Stabilisce connessione SSH
@@ -84,7 +96,7 @@ class SSHManager:
             self.client = paramiko.SSHClient()
 
             # Carica chiavi host conosciute (se esistono)
-            known_hosts_path = os.path.expanduser('~/.ssh/known_hosts')
+            known_hosts_path = os.path.expanduser("~/.ssh/known_hosts")
             if os.path.exists(known_hosts_path):
                 self.client.load_host_keys(known_hosts_path)
 
@@ -96,7 +108,9 @@ class SSHManager:
             # Determina metodo autenticazione
             if self.password:
                 # Autenticazione con password (prima installazione)
-                logger.info(f"Connessione a {self.username}@{self.host}:{self.port} (password auth)")
+                logger.info(
+                    f"Connessione a {self.username}@{self.host}:{self.port} (password auth)"
+                )
                 self.client.connect(
                     hostname=self.host,
                     port=self.port,
@@ -105,17 +119,21 @@ class SSHManager:
                     timeout=self.timeout,
                     allow_agent=False,
                     look_for_keys=False,
-                    compress=True
+                    compress=True,
                 )
             else:
                 # Autenticazione con chiave pubblica (normale)
                 try:
-                    private_key = paramiko.Ed25519Key.from_private_key_file(self.key_path)
+                    private_key = paramiko.Ed25519Key.from_private_key_file(
+                        self.key_path
+                    )
                 except Exception as e:
                     logger.error(f"Errore caricamento chiave SSH: {e}")
                     raise SSHConnectionError(f"Impossibile caricare chiave SSH: {e}")
 
-                logger.info(f"Connessione a {self.username}@{self.host}:{self.port} (key auth)")
+                logger.info(
+                    f"Connessione a {self.username}@{self.host}:{self.port} (key auth)"
+                )
                 self.client.connect(
                     hostname=self.host,
                     port=self.port,
@@ -124,7 +142,7 @@ class SSHManager:
                     timeout=self.timeout,
                     allow_agent=False,
                     look_for_keys=False,
-                    compress=True
+                    compress=True,
                 )
 
             logger.info(f"Connessione stabilita con {self.host}")
@@ -142,7 +160,7 @@ class SSHManager:
         except Exception as e:
             logger.error(f"Errore imprevisto connettendo a {self.host}: {e}")
             raise SSHConnectionError(f"Errore connessione: {e}")
-    
+
     def disconnect(self):
         """Chiude connessione SSH e SFTP"""
         if self.sftp:
@@ -151,196 +169,197 @@ class SSHManager:
             except:
                 pass
             self.sftp = None
-        
+
         if self.client:
             try:
                 self.client.close()
             except:
                 pass
             self.client = None
-        
+
         logger.info(f"Disconnesso da {self.host}")
-    
+
     def execute_command(self, command: str, sudo: bool = False) -> Tuple[int, str, str]:
         """
         Esegue comando sul target
-        
+
         Args:
             command: Comando da eseguire
             sudo: Esegui con sudo (default False)
-            
+
         Returns:
             Tuple[int, str, str]: (exit_code, stdout, stderr)
-            
+
         Raises:
             SSHCommandError: Se comando fallisce
         """
         if not self.client:
             raise SSHConnectionError("Non connesso. Chiamare connect() prima.")
-        
+
         try:
             # Aggiungi sudo se richiesto
             if sudo:
                 command = f"sudo {command}"
-            
+
             logger.debug(f"Eseguo comando: {command}")
-            
+
             # Esegui comando
             stdin, stdout, stderr = self.client.exec_command(
-                command,
-                timeout=self.timeout
+                command, timeout=self.timeout
             )
-            
+
             # Leggi output
             exit_code = stdout.channel.recv_exit_status()
-            stdout_data = stdout.read().decode('utf-8', errors='replace')
-            stderr_data = stderr.read().decode('utf-8', errors='replace')
-            
+            stdout_data = stdout.read().decode("utf-8", errors="replace")
+            stderr_data = stderr.read().decode("utf-8", errors="replace")
+
             if exit_code != 0:
                 logger.warning(f"Comando fallito (exit {exit_code}): {stderr_data}")
             else:
                 logger.debug(f"Comando completato con successo")
-            
+
             return exit_code, stdout_data, stderr_data
-            
+
         except socket.timeout:
             raise SSHCommandError(f"Timeout esecuzione comando: {command}")
         except Exception as e:
             raise SSHCommandError(f"Errore esecuzione comando: {e}")
-    
+
     def _get_sftp(self) -> paramiko.SFTPClient:
         """Ottiene client SFTP (lazy initialization)"""
         if not self.client:
             raise SSHConnectionError("Non connesso. Chiamare connect() prima.")
-        
+
         if not self.sftp:
             self.sftp = self.client.open_sftp()
-        
+
         return self.sftp
-    
+
     def upload_file(self, local_path: str, remote_path: str) -> bool:
         """
         Carica file sul target via SCP
-        
+
         Args:
             local_path: Path del file locale
             remote_path: Path di destinazione sul target
-            
+
         Returns:
             bool: True se upload riuscito
         """
         try:
             sftp = self._get_sftp()
-            
+
             logger.info(f"Upload {local_path} -> {self.host}:{remote_path}")
             sftp.put(local_path, remote_path)
             logger.info(f"Upload completato")
-            
+
             return True
-            
+
         except FileNotFoundError as e:
             logger.error(f"File non trovato: {e}")
             raise
         except Exception as e:
             logger.error(f"Errore upload file: {e}")
             raise SSHCommandError(f"Errore upload: {e}")
-    
+
     def download_file(self, remote_path: str, local_path: str) -> bool:
         """
         Scarica file dal target via SCP
-        
+
         Args:
             remote_path: Path del file sul target
             local_path: Path di destinazione locale
-            
+
         Returns:
             bool: True se download riuscito
         """
         try:
             sftp = self._get_sftp()
-            
+
             logger.info(f"Download {self.host}:{remote_path} -> {local_path}")
             sftp.get(remote_path, local_path)
             logger.info(f"Download completato")
-            
+
             return True
-            
+
         except FileNotFoundError as e:
             logger.error(f"File remoto non trovato: {e}")
             raise
         except Exception as e:
             logger.error(f"Errore download file: {e}")
             raise SSHCommandError(f"Errore download: {e}")
-    
+
     def upload_directory(self, local_dir: str, remote_dir: str) -> bool:
         """
         Carica directory ricorsivamente sul target
-        
+
         Args:
             local_dir: Path directory locale
             remote_dir: Path directory remota
-            
+
         Returns:
             bool: True se upload riuscito
         """
         try:
             sftp = self._get_sftp()
             local_path = Path(local_dir)
-            
+
             if not local_path.exists():
                 raise FileNotFoundError(f"Directory locale non trovata: {local_dir}")
-            
+
             logger.info(f"Upload directory {local_dir} -> {self.host}:{remote_dir}")
-            
+
             # Crea directory remota se non esiste
             try:
                 sftp.stat(remote_dir)
             except FileNotFoundError:
                 sftp.mkdir(remote_dir)
-            
+
             # Upload ricorsivo
-            for item in local_path.rglob('*'):
+            for item in local_path.rglob("*"):
                 if item.is_file():
                     # Calcola path relativo
                     rel_path = item.relative_to(local_path)
-                    remote_file_path = os.path.join(remote_dir, str(rel_path)).replace('\\', '/')
-                    
+                    remote_file_path = os.path.join(remote_dir, str(rel_path)).replace(
+                        "\\", "/"
+                    )
+
                     # Crea directory intermedie
                     remote_file_dir = os.path.dirname(remote_file_path)
                     self._ensure_remote_dir(sftp, remote_file_dir)
-                    
+
                     # Upload file
                     logger.debug(f"Upload {item} -> {remote_file_path}")
                     sftp.put(str(item), remote_file_path)
-            
+
             logger.info(f"Upload directory completato")
             return True
-            
+
         except Exception as e:
             logger.error(f"Errore upload directory: {e}")
             raise SSHCommandError(f"Errore upload directory: {e}")
-    
+
     def _ensure_remote_dir(self, sftp: paramiko.SFTPClient, remote_dir: str):
         """Crea directory remota ricorsivamente se non esiste"""
         dirs = []
         dir_path = remote_dir
-        
+
         # Trova directory da creare
-        while dir_path and dir_path != '/':
+        while dir_path and dir_path != "/":
             try:
                 sftp.stat(dir_path)
                 break
             except FileNotFoundError:
                 dirs.append(dir_path)
                 dir_path = os.path.dirname(dir_path)
-        
+
         # Crea directory in ordine
         for dir_to_create in reversed(dirs):
             try:
                 sftp.mkdir(dir_to_create)
             except:
                 pass
-    
+
     def file_exists(self, remote_path: str) -> bool:
         """Verifica se file esiste sul target"""
         try:
@@ -352,14 +371,14 @@ class SSHManager:
         except Exception as e:
             logger.error(f"Errore verifica esistenza file: {e}")
             return False
-    
+
     def check_user_exists(self, username: str) -> bool:
         """
         Verifica se utente esiste sul target
-        
+
         Args:
             username: Nome utente da verificare
-            
+
         Returns:
             bool: True se utente esiste
         """
@@ -368,21 +387,22 @@ class SSHManager:
             return exit_code == 0
         except:
             return False
-    
+
     def __enter__(self):
         """Context manager: connessione automatica"""
         self.connect()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager: disconnessione automatica"""
         self.disconnect()
         return False
 
+
 def get_statistics(self) -> Optional[Dict]:
     """
     Ottieni statistiche firewall (VERSIONE AGGIORNATA)
-    
+
     Returns:
         Dict con statistiche parsate o None se errore
     """
@@ -393,8 +413,9 @@ def get_statistics(self) -> Optional[Dict]:
         if exit_code == 0:
             # Usa il parser per convertire output testuale in dict
             from core.firewall_output_parser import parse_firewall_stats
+
             stats = parse_firewall_stats(stdout)
-            
+
             if stats:
                 logger.info(f"Stats retrieved: {stats['input_packets']} input packets")
                 return stats
@@ -413,10 +434,10 @@ def get_statistics(self) -> Optional[Dict]:
 def get_threats(self, min_score: int = 30) -> List[Dict]:
     """
     Ottieni lista minacce rilevate (NUOVO METODO)
-    
+
     Args:
         min_score: Score minimo per includere minaccia (default 30)
-        
+
     Returns:
         List[Dict] con minacce parsate
     """
@@ -426,8 +447,9 @@ def get_threats(self, min_score: int = 30) -> List[Dict]:
 
         if exit_code == 0:
             from core.firewall_output_parser import parse_firewall_threats
+
             threats = parse_firewall_threats(stdout)
-            
+
             logger.info(f"Retrieved {len(threats)} threats (score >= {min_score})")
             return threats
 
@@ -442,10 +464,10 @@ def get_threats(self, min_score: int = 30) -> List[Dict]:
 def get_firewall_rules(self, chain: str = None) -> List[Dict]:
     """
     Ottieni regole iptables (VERSIONE AGGIORNATA)
-    
+
     Args:
         chain: Nome chain specifica (INPUT, OUTPUT, FORWARD) o None per tutte
-        
+
     Returns:
         List[Dict] con regole parsate
     """
@@ -459,8 +481,9 @@ def get_firewall_rules(self, chain: str = None) -> List[Dict]:
 
         if exit_code == 0:
             from core.firewall_output_parser import parse_firewall_rules
+
             rules = parse_firewall_rules(stdout, chain)
-            
+
             logger.info(f"Retrieved {len(rules)} firewall rules")
             return rules
 
@@ -475,10 +498,10 @@ def get_firewall_rules(self, chain: str = None) -> List[Dict]:
 def analyze_traffic(self, hours: int = 1) -> Optional[Dict]:
     """
     Analizza traffico bloccato (NUOVO METODO)
-    
+
     Args:
         hours: Numero ore da analizzare
-        
+
     Returns:
         Dict con analisi traffico o None se errore
     """
@@ -488,10 +511,13 @@ def analyze_traffic(self, hours: int = 1) -> Optional[Dict]:
 
         if exit_code == 0:
             from core.firewall_output_parser import parse_firewall_analyze
+
             analysis = parse_firewall_analyze(stdout)
-            
+
             if analysis:
-                logger.info(f"Traffic analyzed: {analysis['total_packets']} packets in {hours}h")
+                logger.info(
+                    f"Traffic analyzed: {analysis['total_packets']} packets in {hours}h"
+                )
                 return analysis
             else:
                 logger.warning("Failed to parse analyze output")
@@ -505,13 +531,17 @@ def analyze_traffic(self, hours: int = 1) -> Optional[Dict]:
         return None
 
 
-
 @contextmanager
-def ssh_connection(host: str, port: int = 22, username: str = 'microcyber',
-                   key_path: Optional[str] = None, timeout: int = 30):
+def ssh_connection(
+    host: str,
+    port: int = 22,
+    username: str = "microcyber",
+    key_path: Optional[str] = None,
+    timeout: int = 30,
+):
     """
     Context manager per connessioni SSH
-    
+
     Usage:
         with ssh_connection('192.168.1.100') as ssh:
             ssh.execute_command('ls -la')
