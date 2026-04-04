@@ -279,7 +279,7 @@ Documentazione completa per l'installazione e configurazione di FireDog.
 /opt/firedog/.env                    # Variabili ambiente (chmod 600)
 
 # Agent
-/etc/dog-agent/config.yaml          # Contiene API key (chmod 600)
+/etc/dog-agent/agent.conf           # Contiene API key (chmod 600)
 ```
 
 ### Best Practices
@@ -460,14 +460,29 @@ docker exec -it firedog-backend python manage.py createsuperuser
 ```bash
 pip3 install dog-agent
 mkdir -p /etc/dog-agent
-cat > /etc/dog-agent/config.yaml << EOF
-server:
-  host: "firedog-ip"
-  port: 8001
-  protocol: "wss"
-  api_key: "your-key"
-agent:
-  group: "default"
+cat > /etc/dog-agent/agent.conf << 'EOF'
+{
+  "server": {
+    "url": "wss://firedog-ip:8001",
+    "api_key": "your-key",
+    "verify_ssl": false
+  },
+  "agent": {
+    "name": "",
+    "group": "default",
+    "log_level": "INFO",
+    "log_path": "/var/log/dog-agent/agent.log",
+    "notification_interval": 30
+  },
+  "monitoring": {
+    "check_integrity": false,
+    "integrity_files": []
+  },
+  "intervention": {
+    "mode": "manual",
+    "threat_threshold": 75
+  }
+}
 EOF
 systemctl enable --now dog-agent
 ```

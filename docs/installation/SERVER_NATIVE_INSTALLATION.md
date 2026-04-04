@@ -263,24 +263,39 @@ pip install --upgrade pip setuptools wheel
 # Assicurati che venv sia attivo
 source /opt/firedog/backend/venv/bin/activate
 
-# Installa dipendenze
+# IMPORTANTE: Con Python 3.13, psycopg2-binary non è compatibile
+# Usa psycopg (psycopg3) invece
 cd /opt/firedog/backend
-pip install -r requirements.txt
 
-# Se non c'è requirements.txt, installa manualmente:
+# Installa dipendenze base
 pip install \
-    django==4.2 \
+    django \
     djangorestframework \
     django-cors-headers \
-    psycopg2-binary \
+    'psycopg[binary]' \
     channels \
     channels-redis \
     daphne \
-    celery \
+    'celery[redis]' \
     redis \
     cryptography \
     python-dotenv \
-    gunicorn
+    gunicorn \
+    django-filter \
+    djangorestframework-simplejwt \
+    django-celery-beat \
+    django-celery-results \
+    paramiko \
+    websockets \
+    psutil \
+    requests \
+    python-decouple \
+    pyyaml \
+    pillow \
+    pyjwt
+
+# Se requirements.txt esiste ma contiene psycopg2-binary,
+# installa le dipendenze manualmente come sopra
 ```
 
 ### 4.6 Configura Django Settings
@@ -335,6 +350,120 @@ EOF
 vim /opt/firedog/backend/.env
 ```
 
+### 4.6.1 Correggi Encoding File Python (IMPORTANTE)
+
+```bash
+# IMPORTANTE: Alcuni file Python potrebbero avere encoding ISO-8859-1
+# invece di UTF-8, causando errori di sintassi con Python 3.13
+
+# Come root, verifica e converti file con encoding errato
+cd /opt/firedog/backend
+
+# Converti file agent_manager/tasks.py se necessario
+if file -i agent_manager/tasks.py | grep -q 'iso-8859'; then
+    iconv -f ISO-8859-1 -t UTF-8 agent_manager/tasks.py -o agent_manager/tasks.py.utf8
+    mv agent_manager/tasks.py.utf8 agent_manager/tasks.py
+    chown firedog:firedog agent_manager/tasks.py
+fi
+
+# Verifica altri file Python se necessario
+find . -name "*.py" -type f -exec file -i {} \; | grep iso-8859 | cut -d: -f1 | while read f; do
+    echo "Converting $f to UTF-8..."
+    iconv -f ISO-8859-1 -t UTF-8 "$f" -o "${f}.utf8"
+    mv "${f}.utf8" "$f"
+    chown firedog:firedog "$f"
+done
+```
+
+### 4.6.2 Configura Django Settings per HTTP (senza HTTPS)
+
+```bash
+# IMPORTANTE: Per installazioni senza SSL/HTTPS, devi disabilitare
+# i redirect HTTPS e configurare CORS correttamente
+
+cd /opt/firedog/backend
+
+# Disabilita SECURE_SSL_REDIRECT
+sed -i 's/SECURE_SSL_REDIRECT = True/SECURE_SSL_REDIRECT = False/' firedog/settings.py
+sed -i 's/CSRF_COOKIE_SECURE = True/CSRF_COOKIE_SECURE = False/' firedog/settings.py
+sed -i 's/SESSION_COOKIE_SECURE = True/SESSION_COOKIE_SECURE = False/' firedog/settings.py
+
+# Aggiungi IP del server a CORS_ALLOWED_ORIGINS
+# Trova la riga CORS_ALLOWED_ORIGINS = [ e aggiungi il tuo IP
+# Esempio per IP 10.99.201.6:
+sed -i '/CORS_ALLOWED_ORIGINS = \[/a\    "http://10.99.201.6",' firedog/settings.py
+
+# Nota: Sostituisci 10.99.201.6 con il tuo IP server reale
+```
+
+### 4.6.3 Configura Redis per WebSocket (CHANNEL_LAYERS)
+
+```bash
+# IMPORTANTE: CHANNEL_LAYERS deve includere la password Redis
+
+cd /opt/firedog/backend
+
+# Aggiorna CHANNEL_LAYERS con autenticazione Redis
+# Modifica firedog/settings.py manualmente o usa sed:
+python3 << 'PYFIX'
+import re
+
+with open('firedog/settings.py', 'r') as f:
+    content = f.read()
+
+# Trova e sostituisci CHANNEL_LAYERS
+old_pattern = r'CHANNEL_LAYERS = \{[^}]+\{[^}]+\"hosts\": \[[^\]]+\]'
+new_config = '''CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": ["redis://:FireDog2024!RedisPass@127.0.0.1:6379/1"]'''
+
+content = re.sub(old_pattern, new_config, content)
+
+with open('firedog/settings.py', 'w') as f:
+    f.write(content)
+
+print("CHANNEL_LAYERS updated with Redis authentication")
+PYFIX
+
+# NOTA: Assicurati che la password Redis corrisponda a quella in .env
+```
+
+### 4.6.4 Correggi WSGI Configuration
+
+```bash
+# IMPORTANTE: Il file wsgi.py potrebbe contenere configurazione ASGI
+# invece di WSGI, causando errori con Gunicorn
+
+cd /opt/firedog/backend
+
+# Backup originale
+cp firedog/wsgi.py firedog/wsgi.py.bak
+
+# Crea WSGI corretto
+cat > firedog/wsgi.py << 'WSGI'
+"""
+WSGI config for firedog project.
+
+It exposes the WSGI callable as a module-level variable named ``application``.
+
+For more information on this file, see
+https://docs.djangoproject.com/en/4.2/howto/deployment/wsgi/
+"""
+
+import os
+
+from django.core.wsgi import get_wsgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'firedog.settings')
+
+application = get_wsgi_application()
+WSGI
+
+chown firedog:firedog firedog/wsgi.py
+```
+
 ### 4.7 Esegui Migrazioni Database
 
 ```bash
@@ -342,6 +471,12 @@ vim /opt/firedog/backend/.env
 su - firedog
 cd /opt/firedog/backend
 source venv/bin/activate
+
+# NOTA: Se ci sono conflitti di migrazione (agent_manager),
+# rimuovi la migrazione conflittuale:
+if [ -f agent_manager/migrations/0001_add_encrypted_key_field.py ]; then
+    rm agent_manager/migrations/0001_add_encrypted_key_field.py
+fi
 
 # Esegui migrazioni
 python manage.py migrate
@@ -671,7 +806,35 @@ systemctl restart nginx
 systemctl enable nginx
 ```
 
-### 7.3 Configurazione SSL con Let's Encrypt (Opzionale)
+### 7.3 Correggi Path Static Files per React Frontend (IMPORTANTE)
+
+**NOTA**: Il file Nginx sopra punta `/static/` a `/opt/firedog/backend/staticfiles/`, ma i file JS/CSS di React sono in `/opt/firedog/frontend/build/static/`. Devi correggere:
+
+```bash
+# Modifica configurazione Nginx
+vim /etc/nginx/sites-available/firedog
+
+# Trova la sezione:
+#   location /static/ {
+#       alias /opt/firedog/backend/staticfiles/;
+#
+# Cambia in:
+#   location /static/ {
+#       alias /opt/firedog/frontend/build/static/;
+
+# Oppure usa sed per modificare automaticamente:
+sed -i 's|alias /opt/firedog/backend/staticfiles/|alias /opt/firedog/frontend/build/static/|' /etc/nginx/sites-available/firedog
+
+# Verifica configurazione
+nginx -t
+
+# Riavvia Nginx
+systemctl restart nginx
+```
+
+**Spiegazione**: Il frontend React viene buildato in `/opt/firedog/frontend/build/` e i suoi static files (JS, CSS, immagini) sono in `build/static/`. Django staticfiles sono separati e servono solo per l'admin panel.
+
+### 7.4 Configurazione SSL con Let's Encrypt (Opzionale)
 
 ```bash
 # Installa Certbot
@@ -925,6 +1088,90 @@ chown -R firedog:firedog /var/run/firedog
 
 # Verifica permessi .env
 chmod 600 /opt/firedog/backend/.env
+```
+
+### Errore "ProtocolTypeRouter.__call__() missing 1 required positional argument: 'send'"
+
+**Problema**: Gunicorn fallisce con errore TypeError su ProtocolTypeRouter
+
+**Causa**: Il file `wsgi.py` contiene configurazione ASGI invece di WSGI
+
+**Soluzione**: Vedi sezione **4.6.4** - Correggi WSGI Configuration
+
+### Frontend mostra schermata bianca
+
+**Problema**: Accedendo a `http://server-ip/` si vede solo una pagina bianca
+
+**Possibili cause e soluzioni**:
+
+```bash
+# 1. Verifica che il frontend sia stato buildato
+ls -la /opt/firedog/frontend/build/
+# Dovresti vedere: index.html, static/, asset-manifest.json
+
+# 2. Se build/ è vuoto, rebuilda il frontend
+cd /opt/firedog/frontend
+sudo -u firedog npm install
+sudo -u firedog npm run build
+
+# 3. Verifica che Nginx punti al path corretto
+cat /etc/nginx/sites-available/firedog | grep "root"
+# Dovrebbe essere: root /opt/firedog/frontend/build;
+
+# 4. Verifica che static files siano accessibili
+curl http://localhost/static/js/main.*.js
+# Non dovrebbe dare 404
+
+# 5. Se hai 301 redirect verso HTTPS, disabilita SSL redirect
+# Vedi sezione 4.6.2
+```
+
+### Login failed / CORS errors
+
+**Problema**: Login fallisce o console browser mostra errori CORS
+
+**Soluzione**:
+
+```bash
+# 1. Verifica CORS_ALLOWED_ORIGINS in settings.py
+grep -A5 "CORS_ALLOWED_ORIGINS" /opt/firedog/backend/firedog/settings.py
+
+# Deve includere l'IP del server:
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://127.0.0.1:3000",
+#     "http://10.99.201.6",  # <-- Il tuo IP
+# ]
+
+# 2. Se manca, vedi sezione 4.6.2 per aggiungerlo
+
+# 3. Riavvia Gunicorn
+systemctl restart firedog-gunicorn
+```
+
+### Redis authentication error nel WebSocket
+
+**Problema**: Daphne log mostra `redis.exceptions.AuthenticationError`
+
+**Soluzione**: Vedi sezione **4.6.3** - Configura Redis per WebSocket (CHANNEL_LAYERS)
+
+### Migration conflicts
+
+**Problema**: `python manage.py migrate` fallisce con "Conflicting migrations detected"
+
+**Soluzione**:
+
+```bash
+cd /opt/firedog/backend
+
+# Trova il file conflicting indicato nell'errore
+# Esempio: 0001_add_encrypted_key_field.py in agent_manager
+
+# Rimuovi il file conflicting più vecchio
+rm agent_manager/migrations/0001_add_encrypted_key_field.py
+
+# Esegui nuovamente migrate
+sudo -u firedog venv/bin/python manage.py migrate
 ```
 
 ---

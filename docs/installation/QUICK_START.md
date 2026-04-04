@@ -140,37 +140,48 @@ pip3 install .
 
 ### Step 3: Configura Agent
 
+**IMPORTANTE: L'agent usa formato JSON, NON YAML!**
+
 ```bash
 # Crea directory
 mkdir -p /etc/dog-agent
 
-# Crea configurazione
-cat > /etc/dog-agent/config.yaml << EOF
-server:
-  host: "FIREDOG_SERVER_IP"  # ← Sostituisci con IP server
-  port: 8001
-  protocol: "wss"
-  api_key: "TUA_API_KEY_QUI"  # ← Sostituisci con chiave generata
-
-agent:
-  group: "production"  # ← Scegli gruppo (production, development, etc)
-  log_level: "INFO"
-
-monitoring:
-  interval: 30
-
-threat_detection:
-  enabled: true
-  threshold: 75
-
-firewall:
-  enabled: true
-  backend: "iptables"
+# Crea configurazione (formato JSON)
+cat > /etc/dog-agent/agent.conf << 'EOF'
+{
+  "server": {
+    "url": "wss://FIREDOG_SERVER_IP:8001",
+    "api_key": "TUA_API_KEY_QUI",
+    "verify_ssl": true
+  },
+  "agent": {
+    "name": "",
+    "group": "production",
+    "log_level": "INFO",
+    "log_path": "/var/log/dog-agent/agent.log",
+    "notification_interval": 30
+  },
+  "monitoring": {
+    "check_integrity": false,
+    "integrity_files": [],
+    "pcap_path_input": "/var/log/ulog/syslogemu.log",
+    "pcap_path_output": "/tmp/firedog-analysis.json"
+  },
+  "intervention": {
+    "mode": "manual",
+    "threat_threshold": 75
+  }
+}
 EOF
 
 # Imposta permessi
-chmod 600 /etc/dog-agent/config.yaml
+chmod 600 /etc/dog-agent/agent.conf
 ```
+
+**Note importanti:**
+- Il file DEVE chiamarsi `agent.conf` (non `config.yaml`)
+- Il formato è **JSON** (non YAML)
+- `server.url` deve essere WebSocket completo: `wss://IP:8001` (o `ws://` per HTTP)
 
 ### Step 4: Crea Servizio Systemd
 
@@ -243,11 +254,14 @@ I gruppi permettono di gestire multiple macchine contemporaneamente.
 
 ```bash
 # Sul target
-vim /etc/dog-agent/config.yaml
+vim /etc/dog-agent/agent.conf
 
-# Modifica:
-agent:
-  group: "web-servers"  # ← Cambia gruppo
+# Modifica (JSON format):
+{
+  "agent": {
+    "group": "web-servers"
+  }
+}
 
 # Riavvia
 systemctl restart dog-agent
@@ -336,7 +350,7 @@ systemctl restart dog-agent
 dog-agent start --debug --foreground
 
 # Verifica config
-cat /etc/dog-agent/config.yaml
+cat /etc/dog-agent/agent.conf
 
 # Verifica connettività verso server
 telnet firedog-server 8001
@@ -364,7 +378,7 @@ docker compose logs db
 
 ```bash
 # Verifica config
-cat /etc/dog-agent/config.yaml | grep -E "(host|api_key)"
+cat /etc/dog-agent/agent.conf | grep -E "(url|api_key)"
 
 # Test connessione
 ping firedog-server-ip
@@ -450,7 +464,7 @@ Backup automatico giornaliero
    - Firewall: apri solo porte necessarie (80, 443, 8001)
 
 2. **Agent**:
-   - Proteggi API key: `chmod 600 /etc/dog-agent/config.yaml`
+   - Proteggi API key: `chmod 600 /etc/dog-agent/agent.conf`
    - Non condividere API key tra ambienti
    - Usa gruppi per separare production/development
    - Monitora log regolarmente

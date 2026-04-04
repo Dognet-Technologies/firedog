@@ -105,6 +105,37 @@ cd /opt/dog-agent
 pip3 install websockets psutil cryptography pyyaml
 ```
 
+### 2.4 Conversione UTF-8 dei File Python (IMPORTANTE!)
+
+**NOTA**: Alcuni file Python dell'agent potrebbero avere encoding ISO-8859-1 che causa errori con Python 3.9+. Convertili in UTF-8:
+
+```bash
+# Installa iconv se non presente
+apt install -y libc-bin
+
+# Converti i file problematici
+cd /opt/dog-agent
+
+# Lista file da convertire (se presenti)
+for file in integrity_monitor.py websocket_client.py; do
+  if [ -f "$file" ]; then
+    echo "Converting $file to UTF-8..."
+    iconv -f ISO-8859-1 -t UTF-8 "$file" -o "${file}.utf8"
+    mv "${file}.utf8" "$file"
+  fi
+done
+
+# Verifica encoding
+file *.py
+```
+
+Se vedi errori tipo:
+```
+SyntaxError: (unicode error) 'utf-8' codec can't decode byte 0xe0
+```
+
+Significa che il file ha encoding sbagliato e va convertito con iconv.
+
 ---
 
 ## 3. Configurazione Agent
@@ -120,57 +151,48 @@ mkdir -p /var/lib/dog-agent
 
 ### 3.2 File di Configurazione
 
-Crea il file `/etc/dog-agent/config.yaml`:
+**IMPORTANTE: L'agent usa formato JSON, NON YAML!**
+
+Crea il file `/etc/dog-agent/agent.conf` (NON config.yaml):
 
 ```bash
-cat > /etc/dog-agent/config.yaml << 'EOF'
-# Dog Agent Configuration
-
-# Server Configuration
-server:
-  host: "firedog-server.domain.com"  # SOSTITUISCI con IP/hostname del server
-  port: 8001
-  protocol: "wss"  # ws per HTTP, wss per HTTPS
-  api_key: "YOUR_API_KEY_HERE"  # SOSTITUISCI con API key dal server
-
-# Agent Configuration
-agent:
-  name: ""  # Lascia vuoto per usare hostname
-  group: "default"  # Gruppo di appartenenza (es: production, development, dmz)
-  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
-  log_file: "/var/log/dog-agent/agent.log"
-  pid_file: "/var/run/dog-agent.pid"
-
-# Monitoring Configuration
-monitoring:
-  interval: 30  # Secondi tra ogni heartbeat
-  collect_metrics: true
-  metrics_history: 100  # Numero di sample da mantenere in memoria
-
-# Threat Detection Configuration
-threat_detection:
-  enabled: true
-  threshold: 75  # Soglia di minaccia (0-100)
-  check_interval: 60  # Secondi tra ogni controllo
-  max_failed_login: 5  # Numero max tentativi login falliti
-  scan_ports: true
-  scan_processes: true
-
-# Firewall Configuration
-firewall:
-  enabled: true
-  backend: "iptables"  # iptables o nftables
-  auto_apply: true  # Applica automaticamente le regole ricevute
-  backup_rules: true  # Backup regole prima di modifiche
-
-# Reconnection Configuration
-reconnection:
-  enabled: true
-  initial_delay: 5  # Secondi prima del primo tentativo
-  max_delay: 300  # Massimo delay tra tentativi (5 minuti)
-  backoff_multiplier: 2  # Moltiplicatore per exponential backoff
+cat > /etc/dog-agent/agent.conf << 'EOF'
+{
+  "server": {
+    "url": "ws://firedog-server-ip:8001",
+    "api_key": "YOUR_API_KEY_HERE",
+    "verify_ssl": false
+  },
+  "agent": {
+    "name": "",
+    "group": "default",
+    "log_level": "INFO",
+    "log_path": "/var/log/dog-agent/agent.log",
+    "notification_interval": 30
+  },
+  "monitoring": {
+    "check_integrity": false,
+    "integrity_files": [],
+    "pcap_path_input": "/var/log/ulog/syslogemu.log",
+    "pcap_path_output": "/tmp/firedog-analysis.json"
+  },
+  "intervention": {
+    "mode": "manual",
+    "threat_threshold": 75
+  }
+}
 EOF
+
+# Imposta permessi corretti
+chmod 600 /etc/dog-agent/agent.conf
 ```
+
+**Note importanti:**
+- Il file DEVE chiamarsi `agent.conf` (non `config.yaml`)
+- Il formato è **JSON** (non YAML)
+- `server.url` deve essere il WebSocket completo: `ws://IP:8001` (o `wss://` per HTTPS)
+- Per HTTP usa `ws://`, per HTTPS usa `wss://`
+- Sostituisci `firedog-server-ip` con l'IP reale del server (es: `10.99.201.6`)
 
 ### 3.3 Configurazione API Key
 
@@ -184,9 +206,9 @@ Poi inseriscila nel config:
 
 ```bash
 # Modifica config con la tua API key
-vim /etc/dog-agent/config.yaml
-# Sostituisci: api_key: "YOUR_API_KEY_HERE"
-# Con:        api_key: "la-tua-chiave-generata-dal-server"
+vim /etc/dog-agent/agent.conf
+# Sostituisci: "api_key": "YOUR_API_KEY_HERE"
+# Con:        "api_key": "la-tua-chiave-generata-dal-server"
 ```
 
 ### 3.4 Configurazione Gruppo (Opzionale)
@@ -195,15 +217,16 @@ Per organizzare i target in gruppi:
 
 ```bash
 # Modifica il gruppo nel config
-vim /etc/dog-agent/config.yaml
+vim /etc/dog-agent/agent.conf
 
-# Esempi di gruppi:
-# agent:
-#   group: "production"      # Server di produzione
-#   group: "development"     # Server di sviluppo
-#   group: "dmz"            # Server in DMZ
-#   group: "web-servers"    # Web server
-#   group: "db-servers"     # Database server
+# Esempi di gruppi in formato JSON:
+# "agent": {
+#   "group": "production"      # Server di produzione
+#   "group": "development"     # Server di sviluppo
+#   "group": "dmz"            # Server in DMZ
+#   "group": "web-servers"    # Web server
+#   "group": "db-servers"     # Database server
+# }
 ```
 
 I gruppi permettono di inviare comandi a tutti i target appartenenti allo stesso gruppo.
@@ -232,7 +255,7 @@ ExecStop=/usr/local/bin/dog-agent stop
 PIDFile=/var/run/dog-agent.pid
 
 # Configurazione
-Environment="DOG_AGENT_CONFIG=/etc/dog-agent/config.yaml"
+Environment="DOG_AGENT_CONFIG=/etc/dog-agent/agent.conf"
 
 # Restart policy
 Restart=always
@@ -337,7 +360,7 @@ journalctl -u dog-agent -f
 
 ```bash
 # Modifica config
-vim /etc/dog-agent/config.yaml
+vim /etc/dog-agent/agent.conf
 
 # Riavvia per applicare modifiche
 systemctl restart dog-agent
@@ -392,7 +415,7 @@ rm -rf /var/lib/dog-agent
 
 ```bash
 # 1. Verifica configurazione
-cat /etc/dog-agent/config.yaml | grep -A5 "server:"
+cat /etc/dog-agent/agent.conf | grep -A3 "server"
 
 # 2. Verifica connettività rete
 ping firedog-server
@@ -414,7 +437,7 @@ nslookup firedog-server
 
 ```bash
 # 1. Verifica API key nel config
-cat /etc/dog-agent/config.yaml | grep api_key
+cat /etc/dog-agent/agent.conf | grep api_key
 
 # 2. Rigenera API key sul server
 # - Vai su Settings → Agent API Keys
@@ -441,8 +464,8 @@ df -h
 top
 
 # 3. Aumenta log level
-# In /etc/dog-agent/config.yaml:
-#   log_level: "DEBUG"
+# In /etc/dog-agent/agent.conf:
+#   "log_level": "DEBUG"
 
 # 4. Riavvia
 systemctl restart dog-agent
@@ -468,6 +491,44 @@ systemctl daemon-reload
 systemctl restart dog-agent
 ```
 
+### Errore "Identity hash verification failed"
+
+**Problema**: Agent si connette ma pairing fallisce con `Identity hash verification failed`
+
+**Soluzioni**:
+
+```bash
+# 1. Verifica log agent per trovare l'identity hash
+journalctl -u dog-agent -n 100 | grep "identity_hash"
+
+# Dovresti vedere qualcosa come:
+# "identity_hash": "abc123def456..."
+
+# 2. Accedi al database del server FireDog
+# Sul server (10.99.201.6):
+sudo -u postgres psql -d firedog
+
+# 3. Trova il target
+SELECT id, hostname, ip_address, status, identity_hash FROM targets_target;
+
+# 4. Aggiorna identity_hash e status
+UPDATE targets_target
+SET identity_hash = 'HASH_DAI_LOG_AGENT',
+    status = 'active'
+WHERE hostname = 'HOSTNAME_AGENT';
+
+# 5. Esci dal database
+\q
+
+# 6. Riavvia agent
+systemctl restart dog-agent
+
+# 7. Verifica connessione
+journalctl -u dog-agent -f
+```
+
+**Nota**: Dopo l'aggiornamento, il target dovrebbe apparire online nella web interface con pallino verde.
+
 ---
 
 ## 9. Installazione Multipla (Script Automatico)
@@ -490,27 +551,31 @@ pip3 install dog-agent
 
 # Configurazione
 mkdir -p /etc/dog-agent
-cat > /etc/dog-agent/config.yaml << CONF
-server:
-  host: "$SERVER_HOST"
-  port: 8001
-  protocol: "wss"
-  api_key: "$API_KEY"
-
-agent:
-  group: "$AGENT_GROUP"
-  log_level: "INFO"
-
-monitoring:
-  interval: 30
-
-threat_detection:
-  enabled: true
-  threshold: 75
-
-firewall:
-  enabled: true
-  backend: "iptables"
+cat > /etc/dog-agent/agent.conf << CONF
+{
+  "server": {
+    "url": "wss://$SERVER_HOST:8001",
+    "api_key": "$API_KEY",
+    "verify_ssl": true
+  },
+  "agent": {
+    "name": "",
+    "group": "$AGENT_GROUP",
+    "log_level": "INFO",
+    "log_path": "/var/log/dog-agent/agent.log",
+    "notification_interval": 30
+  },
+  "monitoring": {
+    "check_integrity": false,
+    "integrity_files": [],
+    "pcap_path_input": "/var/log/ulog/syslogemu.log",
+    "pcap_path_output": "/tmp/firedog-analysis.json"
+  },
+  "intervention": {
+    "mode": "manual",
+    "threat_threshold": 75
+  }
+}
 CONF
 
 # Servizio
@@ -564,7 +629,7 @@ done
 
 1. **Sicurezza API Key**:
    - Non condividere l'API key
-   - Usa permessi file appropriati: `chmod 600 /etc/dog-agent/config.yaml`
+   - Usa permessi file appropriati: `chmod 600 /etc/dog-agent/agent.conf`
 
 2. **Gruppi Logici**:
    - Organizza target in gruppi significativi
@@ -580,7 +645,7 @@ done
 
 5. **Backup Configurazione**:
    ```bash
-   cp /etc/dog-agent/config.yaml /etc/dog-agent/config.yaml.backup
+   cp /etc/dog-agent/agent.conf /etc/dog-agent/agent.conf.backup
    ```
 
 ---
