@@ -1,6 +1,6 @@
 """
 Integrity Monitor per Dog Agent
-Verifica integrit‡ file con SHA512
+Verifica integrit√† file con SHA512
 """
 import hashlib
 import logging
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class IntegrityMonitor:
-    """Monitora integrit‡ file critici"""
+    """Monitora integrit√† file critici"""
 
     def __init__(self, monitored_files: List[str]):
         """
@@ -46,7 +46,7 @@ class IntegrityMonitor:
 
     def check_integrity(self) -> List[Dict]:
         """
-        Verifica integrit‡ di tutti i file
+        Verifica integrit√† di tutti i file
         Returns: Lista di file modificati
         """
         modified_files = []

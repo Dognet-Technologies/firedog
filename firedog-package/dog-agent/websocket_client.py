@@ -59,7 +59,7 @@ class WebSocketClient:
         """
         Invia messaggio al server
         Args:
-            data: Dizionario da inviare (verr‡ convertito in JSON)
+            data: Dizionario da inviare (verr√† convertito in JSON)
         """
         if not self.connected or not self.websocket:
             logger.warning("Cannot send: not connected")
