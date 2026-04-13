@@ -2,12 +2,15 @@
  * Targets Management Page - Table View with Gruppo
  */
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import apiService from '../services/api';
 import type { Target, TargetCreate } from '../types';
 import './Targets.css';
 import { useNotifications } from '../contexts/NotificationContext';
 import CollapsibleTerminalPanel from '../components/CollapsibleTerminalPanel';
 import TabbedTerminalManager, { TerminalOperation } from '../components/TabbedTerminalManager';
+import PageHeader from '../components/shared/PageHeader';
+import StatusDot from '../components/shared/StatusDot';
 
 type SortField = 'ip_address' | 'hostname' | 'firedog_version' | 'last_seen' | 'status' | 'gruppo';
 type SortDirection = 'asc' | 'desc';

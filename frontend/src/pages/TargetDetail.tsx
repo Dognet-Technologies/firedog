@@ -1,0 +1,794 @@
+/**
+ * TargetDetail Page
+ * Hero header + TabBar + tab content for a single target
+ */
+import React, { useEffect, useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line } from 'recharts';
+import apiService from '../services/api';
+import type { Target, FirewallRule, ThreatLog, FileIntegrity } from '../types';
+import { useNotifications } from '../contexts/NotificationContext';
+import StatusDot from '../components/shared/StatusDot';
+import SeverityBadge from '../components/shared/SeverityBadge';
+import ScoreBar from '../components/shared/ScoreBar';
+import TabBar from '../components/shared/TabBar';
+import './TargetDetail.css';
+
+type TabId = 'overview' | 'rules' | 'threats' | 'integrity' | 'traffic' | 'config';
+
+const TABS = [
+  { id: 'overview' as TabId, label: 'Overview' },
+  { id: 'rules' as TabId, label: 'Rules' },
+  { id: 'threats' as TabId, label: 'Threats' },
+  { id: 'integrity' as TabId, label: 'Integrity' },
+  { id: 'traffic' as TabId, label: 'Traffic' },
+  { id: 'config' as TabId, label: 'Config' },
+];
+
+const formatDate = (ts: string | null): string => {
+  if (!ts) return '—';
+  return new Intl.DateTimeFormat('it-IT', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  }).format(new Date(ts));
+};
+
+const formatRelative = (ts: string | null): string => {
+  if (!ts) return '—';
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+};
+
+const truncateHash = (hash: string): string => {
+  if (!hash) return '—';
+  return `${hash.slice(0, 8)}...${hash.slice(-8)}`;
+};
+
+// Mock traffic data (TODO: replace with real API call)
+const generateMockTraffic = () => {
+  const data = [];
+  for (let i = 23; i >= 0; i--) {
+    data.push({
+      time: `${i}h`,
+      in: Math.floor(Math.random() * 800 + 200),
+      out: Math.floor(Math.random() * 400 + 100),
+    });
+  }
+  return data;
+};
+
+const TargetDetail: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { showToast, showConfirm } = useNotifications();
+
+  const [target, setTarget] = useState<Target | null>(null);
+  const [rules, setRules] = useState<FirewallRule[]>([]);
+  const [threats, setThreats] = useState<ThreatLog[]>([]);
+  const [integrity, setIntegrity] = useState<FileIntegrity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
+
+  // Config form state
+  const [configForm, setConfigForm] = useState({ hostname: '', description: '', ip_address: '' });
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // TODO: replace with real API call
+  const [trafficData] = useState(generateMockTraffic());
+
+  const targetId = id ? parseInt(id, 10) : null;
+
+  useEffect(() => {
+    if (targetId) {
+      loadAll(targetId);
+    }
+  }, [targetId]);
+
+  const loadAll = async (tid: number) => {
+    setLoading(true);
+    try {
+      const [targetData, rulesData, threatsData, integrityData] = await Promise.all([
+        apiService.getTarget(tid),
+        apiService.getRules(tid),
+        apiService.getThreats({ target: tid, limit: 50 }),
+        apiService.getFileIntegrity(),
+      ]);
+      setTarget(targetData);
+      setConfigForm({
+        hostname: targetData.hostname || '',
+        description: targetData.description || '',
+        ip_address: targetData.ip_address || '',
+      });
+      setRules(rulesData.results);
+      setThreats(threatsData.results);
+      // Filter integrity records for this target (by target id on each record)
+      const filtered = integrityData.results.filter((f) => (f as unknown as { target: number }).target === tid);
+      setIntegrity(filtered);
+    } catch (err) {
+      console.error('TargetDetail loadAll error:', err);
+      showToast({ type: 'error', title: 'Error', message: 'Failed to load target data' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteRule = async (ruleId: number) => {
+    showConfirm({
+      title: 'Delete Rule',
+      message: 'Are you sure you want to delete this firewall rule?',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          await apiService.deleteRule(ruleId);
+          setRules((prev) => prev.filter((r) => r.id !== ruleId));
+          showToast({ type: 'success', title: 'Rule deleted', message: 'Firewall rule removed' });
+        } catch (err) {
+          console.error('deleteRule error:', err);
+          showToast({ type: 'error', title: 'Error', message: 'Failed to delete rule' });
+        }
+      },
+    });
+  };
+
+  const handleSaveConfig = async () => {
+    if (!target) return;
+    if (!configForm.ip_address.trim()) {
+      showToast({ type: 'warning', title: 'Validation', message: 'IP address is required' });
+      return;
+    }
+    // Basic IP validation
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipRegex.test(configForm.ip_address)) {
+      showToast({ type: 'error', title: 'Invalid format', message: 'Use format: 192.168.1.1' });
+      return;
+    }
+    try {
+      setSavingConfig(true);
+      const updated = await apiService.updateTarget(target.id, {
+        hostname: configForm.hostname,
+        description: configForm.description,
+        ip_address: configForm.ip_address,
+      });
+      setTarget(updated);
+      showToast({ type: 'success', title: 'Saved', message: 'Target configuration updated' });
+    } catch (err) {
+      console.error('updateTarget error:', err);
+      showToast({ type: 'error', title: 'Error', message: 'Failed to save configuration' });
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleDeleteTarget = async () => {
+    if (!target) return;
+    try {
+      await apiService.deleteTarget(target.id);
+      showToast({ type: 'success', title: 'Deleted', message: `Target ${target.hostname || target.ip_address} deleted` });
+      navigate('/targets');
+    } catch (err) {
+      console.error('deleteTarget error:', err);
+      showToast({ type: 'error', title: 'Error', message: 'Failed to delete target' });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="loading-state">
+        <div className="spinner" />
+        <p>Loading target...</p>
+      </div>
+    );
+  }
+
+  if (!target) {
+    return (
+      <div className="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+        <h3>Target not found</h3>
+        <p>The target you are looking for does not exist.</p>
+        <Link to="/targets" className="td-btn td-btn-primary">Back to Targets</Link>
+      </div>
+    );
+  }
+
+  const inputRules = rules.filter((r) => r.chain === 'INPUT');
+  const outputRules = rules.filter((r) => r.chain === 'OUTPUT');
+  const forwardRules = rules.filter((r) => r.chain === 'FORWARD');
+
+  const criticalCount = threats.filter((t) => t.severity === 'critical').length;
+  const unresolvedCount = threats.filter((t) => !t.is_resolved).length;
+
+  const getStatusText = (status: string): string => {
+    const map: Record<string, string> = {
+      online: 'Online',
+      offline: 'Offline',
+      error: 'Error',
+      installing: 'Installing',
+      pending: 'Pending',
+    };
+    return map[status] || status;
+  };
+
+  const getActionBadgeClass = (action: string): string => {
+    if (action === 'ACCEPT') return 'action-accept';
+    if (action === 'DROP') return 'action-drop';
+    return 'action-reject';
+  };
+
+  const getIntegrityStatusClass = (status: string): string => {
+    if (status === 'ok') return 'integrity-ok';
+    if (status === 'modified') return 'integrity-modified';
+    if (status === 'missing') return 'integrity-missing';
+    return 'integrity-new';
+  };
+
+  const renderRulesSection = (sectionRules: FirewallRule[], chain: string) => {
+    if (sectionRules.length === 0) return null;
+    return (
+      <div className="td-rules-section" key={chain}>
+        <h3 className="td-section-title">{chain} chain</h3>
+        <div className="td-table-wrapper">
+          <table className="td-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Protocol</th>
+                <th>Port</th>
+                <th>Source IP</th>
+                <th>Dest IP</th>
+                <th>Action</th>
+                <th>Comment</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sectionRules.map((rule, idx) => (
+                <tr key={rule.id}>
+                  <td className="td-cell-muted">{rule.rule_number ?? idx + 1}</td>
+                  <td>{rule.protocol.toUpperCase()}</td>
+                  <td className="td-mono">{rule.port ?? '—'}</td>
+                  <td className="td-mono">{rule.source_ip || '—'}</td>
+                  <td className="td-mono">{rule.dest_ip || '—'}</td>
+                  <td>
+                    <span className={`action-badge ${getActionBadgeClass(rule.action)}`}>{rule.action}</span>
+                  </td>
+                  <td className="td-cell-muted">{rule.comment || '—'}</td>
+                  <td>
+                    <button
+                      className="td-btn-icon td-btn-icon-danger"
+                      onClick={() => handleDeleteRule(rule.id)}
+                      title="Delete rule"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4h6v2" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="target-detail">
+      {/* ===== HERO HEADER ===== */}
+      <div className="td-hero">
+        <div className="td-hero-top">
+          <Link to="/targets" className="td-back-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            Targets
+          </Link>
+        </div>
+        <div className="td-hero-body">
+          <div className="td-hero-identity">
+            <div className="td-hero-name">
+              <StatusDot status={target.status as 'online' | 'offline' | 'error' | 'installing' | 'pending'} />
+              <h1>{target.hostname || target.ip_address}</h1>
+              <span className="td-status-text">{getStatusText(target.status)}</span>
+            </div>
+            <div className="td-hero-meta">
+              <span className="td-meta-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="3" width="20" height="7" rx="1" />
+                  <rect x="2" y="14" width="20" height="7" rx="1" />
+                </svg>
+                {target.ip_address}
+              </span>
+              {target.target_groups && target.target_groups.length > 0 && (
+                <span className="td-meta-item">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                    <polyline points="2 17 12 22 22 17" />
+                  </svg>
+                  {target.target_groups.map((g) => g.name).join(', ')}
+                </span>
+              )}
+              {target.firedog_version && (
+                <span className="td-meta-item">v{target.firedog_version}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="td-hero-stats">
+            <div className="td-stat-chip">
+              <span className="td-stat-chip-value">{threats.length}</span>
+              <span className="td-stat-chip-label">Threats</span>
+            </div>
+            <div className="td-stat-chip td-stat-chip-danger">
+              <span className="td-stat-chip-value">{criticalCount}</span>
+              <span className="td-stat-chip-label">Critical</span>
+            </div>
+            <div className="td-stat-chip">
+              <span className="td-stat-chip-value">{rules.length}</span>
+              <span className="td-stat-chip-label">Rules</span>
+            </div>
+          </div>
+
+          <div className="td-hero-actions">
+            <button className="td-btn td-btn-secondary" onClick={() => {}}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              Sync Rules
+            </button>
+            <button className="td-btn td-btn-secondary" onClick={() => {}}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 11 12 14 22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+              Check Integrity
+            </button>
+            <button className="td-btn td-btn-primary" onClick={() => setActiveTab('config')}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              Edit Target
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== TAB BAR ===== */}
+      <div className="td-tabs">
+        <TabBar
+          tabs={TABS}
+          activeTab={activeTab}
+          onChange={(id) => setActiveTab(id as TabId)}
+        />
+      </div>
+
+      {/* ===== TAB CONTENT ===== */}
+      <div className="td-content">
+        {/* ---- OVERVIEW ---- */}
+        {activeTab === 'overview' && (
+          <div className="td-overview">
+            <div className="td-stat-cards">
+              <div className="td-stat-card">
+                <div className="td-stat-card-label">CPU Usage</div>
+                <div className="td-stat-card-value">—</div>
+                <div className="td-stat-card-sub">TODO: replace with real API call</div>
+              </div>
+              <div className="td-stat-card">
+                <div className="td-stat-card-label">Memory</div>
+                <div className="td-stat-card-value">—</div>
+                <div className="td-stat-card-sub">TODO: replace with real API call</div>
+              </div>
+              <div className="td-stat-card">
+                <div className="td-stat-card-label">Traffic</div>
+                <div className="td-stat-card-value">—</div>
+                <div className="td-stat-card-sub">TODO: replace with real API call</div>
+              </div>
+              <div className="td-stat-card">
+                <div className="td-stat-card-label">Firewall</div>
+                <div className="td-stat-card-value">
+                  <StatusDot status={target.status as 'online' | 'offline' | 'error' | 'installing' | 'pending'} />
+                </div>
+                <div className="td-stat-card-sub">Last seen: {formatRelative(target.last_seen)}</div>
+              </div>
+            </div>
+
+            <div className="td-overview-row2">
+              <div className="td-chart-card">
+                <h3 className="td-card-title">Traffic (24h)</h3>
+                <ResponsiveContainer width="100%" height={180}>
+                  <AreaChart data={trafficData}>
+                    <defs>
+                      <linearGradient id="tdIn" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--accent-primary)" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="var(--accent-primary)" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="tdOut" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--status-warning)" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="var(--status-warning)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="time" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                    <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                    <CartesianGrid stroke="var(--border-primary)" strokeDasharray="3 3" />
+                    <Tooltip
+                      contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: '8px' }}
+                    />
+                    <Area type="monotone" dataKey="in" stroke="var(--accent-primary)" fill="url(#tdIn)" name="Inbound" />
+                    <Area type="monotone" dataKey="out" stroke="var(--status-warning)" fill="url(#tdOut)" name="Outbound" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="td-list-card">
+                <h3 className="td-card-title">Recent Threats</h3>
+                {threats.length === 0 ? (
+                  <div className="td-empty-mini">No threats detected</div>
+                ) : (
+                  <div className="td-threat-list">
+                    {threats.slice(0, 8).map((threat) => (
+                      <div key={threat.id} className="td-threat-item">
+                        <SeverityBadge severity={threat.severity} />
+                        <span className="td-threat-ip td-mono">{threat.source_ip}</span>
+                        <span className="td-threat-time">{formatRelative(threat.detected_at)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="td-overview-row3">
+              <div className="td-mini-card">
+                <h3 className="td-card-title">Rules Summary</h3>
+                <div className="td-rules-summary">
+                  <div className="td-rules-summary-item">
+                    <span className="td-rules-summary-chain">INPUT</span>
+                    <span className="td-rules-summary-count">{inputRules.length}</span>
+                  </div>
+                  <div className="td-rules-summary-item">
+                    <span className="td-rules-summary-chain">OUTPUT</span>
+                    <span className="td-rules-summary-count">{outputRules.length}</span>
+                  </div>
+                  <div className="td-rules-summary-item">
+                    <span className="td-rules-summary-chain">FORWARD</span>
+                    <span className="td-rules-summary-count">{forwardRules.length}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="td-mini-card">
+                <h3 className="td-card-title">Integrity Status</h3>
+                <div className="td-integrity-summary">
+                  {['ok', 'modified', 'missing', 'new'].map((s) => {
+                    const count = integrity.filter((f) => f.status === s).length;
+                    return (
+                      <div key={s} className="td-integrity-summary-item">
+                        <span className={`integrity-badge integrity-${s}`}>{s}</span>
+                        <span className="td-integrity-summary-count">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="td-mini-card">
+                <h3 className="td-card-title">Threat Distribution</h3>
+                <div className="td-threat-dist">
+                  {(['critical', 'high', 'medium', 'low'] as const).map((sev) => {
+                    const count = threats.filter((t) => t.severity === sev).length;
+                    return (
+                      <div key={sev} className="td-threat-dist-item">
+                        <SeverityBadge severity={sev} />
+                        <span className="td-threat-dist-count">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---- RULES ---- */}
+        {activeTab === 'rules' && (
+          <div className="td-rules">
+            <div className="td-section-header">
+              <h2>Firewall Rules</h2>
+              <span className="td-section-count">{rules.length} rules</span>
+            </div>
+            {rules.length === 0 ? (
+              <div className="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                <h3>No rules</h3>
+                <p>No firewall rules configured for this target.</p>
+              </div>
+            ) : (
+              <>
+                {renderRulesSection(inputRules, 'INPUT')}
+                {renderRulesSection(outputRules, 'OUTPUT')}
+                {renderRulesSection(forwardRules, 'FORWARD')}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ---- THREATS ---- */}
+        {activeTab === 'threats' && (
+          <div className="td-threats">
+            <div className="td-section-header">
+              <h2>Threats</h2>
+              <span className="td-section-count">{unresolvedCount} unresolved / {threats.length} total</span>
+            </div>
+            {threats.length === 0 ? (
+              <div className="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                </svg>
+                <h3>No threats</h3>
+                <p>No threats detected for this target.</p>
+              </div>
+            ) : (
+              <div className="td-table-wrapper">
+                <table className="td-table">
+                  <thead>
+                    <tr>
+                      <th>Severity</th>
+                      <th>Source IP</th>
+                      <th>Score</th>
+                      <th>Protocol</th>
+                      <th>Port</th>
+                      <th>Detected</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {threats.map((threat) => (
+                      <tr key={threat.id} className={`td-threat-row td-threat-row-${threat.severity}`}>
+                        <td><SeverityBadge severity={threat.severity} /></td>
+                        <td className="td-mono">{threat.source_ip}</td>
+                        <td><ScoreBar score={threat.threat_score} /></td>
+                        <td>{threat.protocol}</td>
+                        <td className="td-mono">{threat.dest_port ?? '—'}</td>
+                        <td>{formatRelative(threat.detected_at)}</td>
+                        <td>
+                          {threat.is_resolved ? (
+                            <span className="badge-resolved">Resolved</span>
+                          ) : (
+                            <span className="badge-active">Active</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---- INTEGRITY ---- */}
+        {activeTab === 'integrity' && (
+          <div className="td-integrity">
+            <div className="td-section-header">
+              <h2>File Integrity</h2>
+              <span className="td-section-count">{integrity.length} files monitored</span>
+            </div>
+
+            <h3 className="td-section-subtitle">Config Files</h3>
+            {integrity.length === 0 ? (
+              <div className="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <polyline points="9 11 12 14 22 4" />
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                </svg>
+                <h3>No integrity data</h3>
+                <p>No file integrity records for this target.</p>
+              </div>
+            ) : (
+              <div className="td-table-wrapper">
+                <table className="td-table">
+                  <thead>
+                    <tr>
+                      <th>Path</th>
+                      <th>Status</th>
+                      <th>Hash</th>
+                      <th>Size</th>
+                      <th>Permissions</th>
+                      <th>Last Checked</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {integrity.map((file) => (
+                      <tr key={file.id}>
+                        <td className="td-mono">{file.file_path}</td>
+                        <td>
+                          <span className={`integrity-badge ${getIntegrityStatusClass(file.status)}`}>
+                            {file.status}
+                          </span>
+                        </td>
+                        <td className="td-mono td-cell-muted">{truncateHash(file.sha512_hash)}</td>
+                        <td>{file.file_size ? `${(file.file_size / 1024).toFixed(1)} KB` : '—'}</td>
+                        <td className="td-mono">{file.file_permissions || '—'}</td>
+                        <td>{formatRelative(file.last_checked)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---- TRAFFIC ---- */}
+        {activeTab === 'traffic' && (
+          <div className="td-traffic">
+            <div className="td-section-header">
+              <h2>Traffic Analysis</h2>
+              <span className="td-cell-muted" style={{ fontSize: 'var(--font-xs)' }}>TODO: replace with real API call</span>
+            </div>
+
+            <div className="td-charts-grid">
+              <div className="td-chart-card td-chart-card-full">
+                <h3 className="td-card-title">Traffic In/Out (24h)</h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart data={trafficData}>
+                    <defs>
+                      <linearGradient id="tdIn2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--accent-primary)" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="var(--accent-primary)" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="tdOut2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--status-warning)" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="var(--status-warning)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="time" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                    <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                    <CartesianGrid stroke="var(--border-primary)" strokeDasharray="3 3" />
+                    <Tooltip
+                      contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: '8px' }}
+                    />
+                    <Area type="monotone" dataKey="in" stroke="var(--accent-primary)" fill="url(#tdIn2)" name="Inbound" />
+                    <Area type="monotone" dataKey="out" stroke="var(--status-warning)" fill="url(#tdOut2)" name="Outbound" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="td-chart-card">
+                <h3 className="td-card-title">Protocol Distribution</h3>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={[
+                    { name: 'TCP', value: 65 },
+                    { name: 'UDP', value: 25 },
+                    { name: 'ICMP', value: 10 },
+                  ]}>
+                    <XAxis dataKey="name" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                    <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                    <CartesianGrid stroke="var(--border-primary)" strokeDasharray="3 3" />
+                    <Tooltip
+                      contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: '8px' }}
+                    />
+                    <Bar dataKey="value" fill="var(--accent-primary)" radius={[4, 4, 0, 0]} name="%" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="td-chart-card">
+                <h3 className="td-card-title">Connections over time</h3>
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={trafficData.map((d) => ({ ...d, conn: Math.floor((d.in + d.out) / 20) }))}>
+                    <XAxis dataKey="time" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                    <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                    <CartesianGrid stroke="var(--border-primary)" strokeDasharray="3 3" />
+                    <Tooltip
+                      contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: '8px' }}
+                    />
+                    <Line type="monotone" dataKey="conn" stroke="var(--status-success)" dot={false} name="Connections" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---- CONFIG ---- */}
+        {activeTab === 'config' && (
+          <div className="td-config">
+            <div className="td-section-header">
+              <h2>Configuration</h2>
+            </div>
+
+            <div className="td-config-form">
+              <div className="td-form-group">
+                <label className="td-label">Hostname</label>
+                <input
+                  type="text"
+                  className="td-input"
+                  value={configForm.hostname}
+                  onChange={(e) => setConfigForm({ ...configForm, hostname: e.target.value })}
+                  placeholder="e.g. web-server-01"
+                />
+              </div>
+
+              <div className="td-form-group">
+                <label className="td-label">IP Address</label>
+                <input
+                  type="text"
+                  className="td-input"
+                  value={configForm.ip_address}
+                  onChange={(e) => setConfigForm({ ...configForm, ip_address: e.target.value })}
+                  placeholder="e.g. 192.168.1.10"
+                />
+              </div>
+
+              <div className="td-form-group">
+                <label className="td-label">Description</label>
+                <textarea
+                  className="td-input td-textarea"
+                  value={configForm.description}
+                  onChange={(e) => setConfigForm({ ...configForm, description: e.target.value })}
+                  placeholder="Target description"
+                  rows={3}
+                />
+              </div>
+
+              <div className="td-config-actions">
+                <button
+                  className="td-btn td-btn-primary"
+                  onClick={handleSaveConfig}
+                  disabled={savingConfig}
+                >
+                  {savingConfig ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+
+            <div className="td-danger-zone">
+              <h3>Danger Zone</h3>
+              <p>Permanently delete this target and all associated data. This action cannot be undone.</p>
+              {showDeleteConfirm ? (
+                <div className="td-delete-confirm">
+                  <p>Are you absolutely sure? Type the target name to confirm.</p>
+                  <div className="td-delete-confirm-actions">
+                    <button className="td-btn td-btn-danger" onClick={handleDeleteTarget}>
+                      Yes, delete target
+                    </button>
+                    <button className="td-btn td-btn-secondary" onClick={() => setShowDeleteConfirm(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button className="td-btn td-btn-danger" onClick={() => setShowDeleteConfirm(true)}>
+                  Delete Target
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default TargetDetail;

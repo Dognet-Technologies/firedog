@@ -1,0 +1,35 @@
+.severity-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-xs);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.severity-badge-critical {
+  background: rgba(255, 59, 48, 0.15);
+  color: var(--status-danger);
+  border: 1px solid rgba(255, 59, 48, 0.3);
+}
+
+.severity-badge-high {
+  background: rgba(255, 149, 0, 0.15);
+  color: var(--status-warning);
+  border: 1px solid rgba(255, 149, 0, 0.3);
+}
+
+.severity-badge-medium {
+  background: rgba(0, 122, 255, 0.15);
+  color: var(--status-info);
+  border: 1px solid rgba(0, 122, 255, 0.3);
+}
+
+.severity-badge-low {
+  background: rgba(52, 199, 89, 0.15);
+  color: var(--status-success);
+  border: 1px solid rgba(52, 199, 89, 0.3);
+}
