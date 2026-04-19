@@ -115,7 +115,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const renderIcon = (iconName: string) => {
-    const icons: { [key: string]: JSX.Element } = {
+    const icons: { [key: string]: React.ReactElement } = {
       dashboard: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="3" y="3" width="7" height="7" />

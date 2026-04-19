@@ -58,164 +58,60 @@ const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
   return <>{children}</>;
 };
 
+// Wrapper che applica TargetProvider solo alle route protette
+const ProtectedWithTarget: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <TargetProvider>
+    <NotificationProvider>
+      {children}
+    </NotificationProvider>
+  </TargetProvider>
+);
+
 function App() {
   return (
     <AuthProvider>
-      <TargetProvider>
-        <NotificationProvider>
-          <Router>
-            <Routes>
+      <Router>
+        <Routes>
 
-              {/* Protected Routes */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Navigate to="/dashboard" replace />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-              {/* Public Routes */}
-              <Route
-                path="/login"
-                element={
-                  <PublicRoute>
-                    <Login />
-                  </PublicRoute>
-                }
-              />
-              <Route
-                path="/discovery"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Discovery />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Dashboard />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/targets"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Targets />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route 
-                path="firewall/rules" 
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Rules />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-                />
-              <Route 
-                path="/logs" 
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <LogsPage />
-                    </Layout>
-                  </ProtectedRoute>
-                } 
-              />
+          {/* Public Routes */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            }
+          />
 
-              {/* Audit Logs */}
-              <Route 
-                path="/audit" 
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Audit />
-                    </Layout>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route
-                  path="/firewall/blocked"
-                  element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <BlockedIPs />
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/firewall/whitelist"
-                  element={
-                    <ProtectedRoute>
-                      <Layout>
-                        <Whitelist />
-                      </Layout>
-                    </ProtectedRoute>
-                  }
-                />
-              <Route 
-                path="/threats" 
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Threats />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-                />
-              <Route 
-                path="/audit" 
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Audit />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-                />
-              {/* Settings Routes */}
-              <Route
-                path="/settings/*"
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Settings />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-              <Route 
-                path="/integrity" 
-                element={
-                  <ProtectedRoute>
-                    <Layout>
-                      <Integrity />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-                />
+          {/* Protected Routes — TargetProvider e NotificationProvider solo qui */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <ProtectedWithTarget>
+                  <Layout>
+                    <Navigate to="/dashboard" replace />
+                  </Layout>
+                </ProtectedWithTarget>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/discovery" element={<ProtectedRoute><ProtectedWithTarget><Layout><Discovery /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><ProtectedWithTarget><Layout><Dashboard /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/targets" element={<ProtectedRoute><ProtectedWithTarget><Layout><Targets /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/firewall/rules" element={<ProtectedRoute><ProtectedWithTarget><Layout><Rules /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/firewall/blocked" element={<ProtectedRoute><ProtectedWithTarget><Layout><BlockedIPs /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/firewall/whitelist" element={<ProtectedRoute><ProtectedWithTarget><Layout><Whitelist /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/logs" element={<ProtectedRoute><ProtectedWithTarget><Layout><LogsPage /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/audit" element={<ProtectedRoute><ProtectedWithTarget><Layout><Audit /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/threats" element={<ProtectedRoute><ProtectedWithTarget><Layout><Threats /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/integrity" element={<ProtectedRoute><ProtectedWithTarget><Layout><Integrity /></Layout></ProtectedWithTarget></ProtectedRoute>} />
+          <Route path="/settings/*" element={<ProtectedRoute><ProtectedWithTarget><Layout><Settings /></Layout></ProtectedWithTarget></ProtectedRoute>} />
 
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </Router>
-        </NotificationProvider>
-       </TargetProvider>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Router>
     </AuthProvider>
   );
 }
