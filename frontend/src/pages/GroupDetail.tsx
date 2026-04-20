@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import apiService from '../services/api';
+import DataTooltip from '../components/shared/DataTooltip';
 import type { Target, FirewallRule, ThreatLog } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
 import StatusDot from '../components/shared/StatusDot';
@@ -324,30 +325,54 @@ const GroupDetail: React.FC = () => {
         {activeTab === 'overview' && (
           <div className="gd-overview">
             <div className="gd-stat-cards">
-              <div className="gd-stat-card">
-                <div className="gd-stat-card-label">Total Targets</div>
-                <div className="gd-stat-card-value">{group.target_count}</div>
-              </div>
-              <div className="gd-stat-card">
-                <div className="gd-stat-card-label">Online</div>
-                <div className="gd-stat-card-value gd-value-success">{onlineCount}</div>
-              </div>
-              <div className="gd-stat-card">
-                <div className="gd-stat-card-label">Offline</div>
-                <div className="gd-stat-card-value gd-value-danger">{offlineCount}</div>
-              </div>
-              <div className="gd-stat-card">
-                <div className="gd-stat-card-label">Total Threats</div>
-                <div className="gd-stat-card-value">{threats.length}</div>
-              </div>
-              <div className="gd-stat-card">
-                <div className="gd-stat-card-label">Critical Threats</div>
-                <div className={`gd-stat-card-value${criticalThreats > 0 ? ' gd-value-danger' : ''}`}>{criticalThreats}</div>
-              </div>
-              <div className="gd-stat-card">
-                <div className="gd-stat-card-label">Total Rules</div>
-                <div className="gd-stat-card-value">{rules.length}</div>
-              </div>
+              <DataTooltip title="Total Targets" type="count"
+                description="Numero di target assegnati a questo gruppo. Ogni target è un sistema con agente FireDog installato. Il contatore riflette la membership corrente nel database."
+                source="TargetGroup.target_count">
+                <div className="gd-stat-card">
+                  <div className="gd-stat-card-label">Total Targets</div>
+                  <div className="gd-stat-card-value">{group.target_count}</div>
+                </div>
+              </DataTooltip>
+              <DataTooltip title="Online" type="count"
+                description="Numero di target con stato 'online' — stanno inviando heartbeat regolari all'agente. Un target passa offline se non si sentono segnali per più di 5 minuti."
+                source="Target.status = 'online' · filtrato per gruppo">
+                <div className="gd-stat-card">
+                  <div className="gd-stat-card-label">Online</div>
+                  <div className="gd-stat-card-value gd-value-success">{onlineCount}</div>
+                </div>
+              </DataTooltip>
+              <DataTooltip title="Offline" type="count"
+                description="Numero di target non raggiungibili: l'agente non ha inviato heartbeat recenti. Potrebbe indicare un problema di rete, un sistema spento o un agente non funzionante."
+                source="Target.status != 'online' · filtrato per gruppo">
+                <div className="gd-stat-card">
+                  <div className="gd-stat-card-label">Offline</div>
+                  <div className="gd-stat-card-value gd-value-danger">{offlineCount}</div>
+                </div>
+              </DataTooltip>
+              <DataTooltip title="Total Threats" type="count"
+                description="Somma di tutti gli eventi di minaccia rilevati su qualsiasi target del gruppo. Comprende minacce attive e risolte, di tutti i livelli di severità. Limite per target: 20 eventi."
+                source="ThreatLog API · aggregato per tutti i member">
+                <div className="gd-stat-card">
+                  <div className="gd-stat-card-label">Total Threats</div>
+                  <div className="gd-stat-card-value">{threats.length}</div>
+                </div>
+              </DataTooltip>
+              <DataTooltip title="Critical Threats" type="count"
+                description="Minacce con severity='critical' su qualsiasi target del gruppo. Richiedono analisi e intervento immediato. Un valore elevato indica esposizione attiva del gruppo ad attacchi mirati."
+                source="ThreatLog.severity = 'critical' · aggregato">
+                <div className="gd-stat-card">
+                  <div className="gd-stat-card-label">Critical Threats</div>
+                  <div className={`gd-stat-card-value${criticalThreats > 0 ? ' gd-value-danger' : ''}`}>{criticalThreats}</div>
+                </div>
+              </DataTooltip>
+              <DataTooltip title="Total Rules" type="count"
+                description="Numero complessivo di regole firewall attive su tutti i target del gruppo (INPUT + OUTPUT + FORWARD). Non indica regole uniche: lo stesso tipo di regola può essere replicato su più target."
+                source="FirewallRule API · aggregato per tutti i member">
+                <div className="gd-stat-card">
+                  <div className="gd-stat-card-label">Total Rules</div>
+                  <div className="gd-stat-card-value">{rules.length}</div>
+                </div>
+              </DataTooltip>
             </div>
 
             <div className="gd-overview-grid">
@@ -563,26 +588,41 @@ const GroupDetail: React.FC = () => {
             ) : (
               <div className="mon-tab-content">
                 <div className="mon-stat-cards">
-                  <div className="mon-stat-card">
-                    <div className="mon-stat-label">Avg Inbound</div>
-                    <div className="mon-stat-value">
-                      {trafficData.length ? Math.round(trafficData.reduce((s, d) => s + d.inbound, 0) / trafficData.length) : 0}
+                  <DataTooltip title="Avg Inbound (per intervallo)" type="avg"
+                    description="Media dei pacchetti in ingresso per intervallo di campionamento (30 min), aggregata su tutti i target del gruppo. Calcolata come somma dei delta di FirewallStats.input_packets divisa per il numero di intervalli."
+                    source="FirewallStats.input_packets · aggregato per gruppo">
+                    <div className="mon-stat-card">
+                      <div className="mon-stat-label">Avg Inbound</div>
+                      <div className="mon-stat-value">
+                        {trafficData.length ? Math.round(trafficData.reduce((s, d) => s + d.inbound, 0) / trafficData.length) : 0}
+                      </div>
+                      <div className="mon-stat-unit">pkts/interval</div>
                     </div>
-                    <div className="mon-stat-unit">pkts/interval</div>
-                  </div>
-                  <div className="mon-stat-card">
-                    <div className="mon-stat-label">Avg Outbound</div>
-                    <div className="mon-stat-value">
-                      {trafficData.length ? Math.round(trafficData.reduce((s, d) => s + d.outbound, 0) / trafficData.length) : 0}
+                  </DataTooltip>
+                  <DataTooltip title="Avg Outbound (per intervallo)" type="avg"
+                    description="Media dei pacchetti in uscita per intervallo, aggregata su tutti i target del gruppo. I contatori cumulativi di FirewallStats.output_packets di tutti i member vengono sommati e divisi per il numero di intervalli."
+                    source="FirewallStats.output_packets · aggregato per gruppo">
+                    <div className="mon-stat-card">
+                      <div className="mon-stat-label">Avg Outbound</div>
+                      <div className="mon-stat-value">
+                        {trafficData.length ? Math.round(trafficData.reduce((s, d) => s + d.outbound, 0) / trafficData.length) : 0}
+                      </div>
+                      <div className="mon-stat-unit">pkts/interval</div>
                     </div>
-                    <div className="mon-stat-unit">pkts/interval</div>
-                  </div>
-                  <div className="mon-stat-card">
-                    <div className="mon-stat-label">Members Contributing</div>
-                    <div className="mon-stat-value">{members.length}</div>
-                    <div className="mon-stat-unit">targets</div>
-                  </div>
+                  </DataTooltip>
+                  <DataTooltip title="Members Contributing" type="count"
+                    description="Numero di target del gruppo da cui sono stati ricevuti dati di monitoraggio. Un target non contribuisce se offline o se non ha record FirewallStats recenti."
+                    source="TargetGroup.targets · con dati FirewallStats disponibili">
+                    <div className="mon-stat-card">
+                      <div className="mon-stat-label">Members Contributing</div>
+                      <div className="mon-stat-value">{members.length}</div>
+                      <div className="mon-stat-unit">targets</div>
+                    </div>
+                  </DataTooltip>
                 </div>
+                <DataTooltip title="Aggregate Traffic (48h)" type="delta"
+                  description="Traffico di rete aggregato di tutti i target del gruppo nelle ultime 48 ore. I dati di FirewallStats di ogni member vengono uniti, ordinati per timestamp e rappresentati come serie unica di delta per intervallo."
+                  source="FirewallStats · tutti i member · delta(input_packets, output_packets)">
                 <div className="mon-chart-card">
                   <div className="mon-card-title">Aggregate Traffic (48h)</div>
                   <ResponsiveContainer width="100%" height={220}>
@@ -606,6 +646,7 @@ const GroupDetail: React.FC = () => {
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
+                </DataTooltip>
               </div>
             )}
           </div>
@@ -619,23 +660,38 @@ const GroupDetail: React.FC = () => {
             ) : (
               <div className="mon-tab-content">
                 <div className="mon-stat-cards">
+                  <DataTooltip title="Avg CPU (ultimo bucket)" type="avg"
+                    description="Media della percentuale CPU tra tutti i target del gruppo nell'ultimo bucket di 5 minuti. Calcolata come media aritmetica di AgentHeartbeat.cpu_percent su tutti i member con dati disponibili."
+                    source="AgentHeartbeat.cpu_percent · media per gruppo">
                   <div className="mon-stat-card">
                     <div className="mon-stat-label">Avg CPU</div>
                     <div className="mon-stat-value">{avgMetrics?.cpu ?? '—'}</div>
                     <div className="mon-stat-unit">%</div>
                   </div>
+                  </DataTooltip>
+                  <DataTooltip title="Avg Memory (ultimo bucket)" type="avg"
+                    description="Media della percentuale RAM utilizzata tra tutti i target del gruppo nell'ultimo bucket di 5 minuti. Media aritmetica di AgentHeartbeat.memory_percent su tutti i member."
+                    source="AgentHeartbeat.memory_percent · media per gruppo">
                   <div className="mon-stat-card">
                     <div className="mon-stat-label">Avg Memory</div>
                     <div className="mon-stat-value">{avgMetrics?.mem ?? '—'}</div>
                     <div className="mon-stat-unit">%</div>
                   </div>
+                  </DataTooltip>
+                  <DataTooltip title="Avg Disk (ultimo bucket)" type="avg"
+                    description="Media della percentuale di disco utilizzato tra tutti i target del gruppo nell'ultimo bucket disponibile. Media aritmetica di AgentHeartbeat.disk_percent su tutti i member."
+                    source="AgentHeartbeat.disk_percent · media per gruppo">
                   <div className="mon-stat-card">
                     <div className="mon-stat-label">Avg Disk</div>
                     <div className="mon-stat-value">{avgMetrics?.disk ?? '—'}</div>
                     <div className="mon-stat-unit">%</div>
                   </div>
+                  </DataTooltip>
                 </div>
                 <div className="mon-grid-2">
+                  <DataTooltip title="Avg CPU Usage (48h)" type="avg"
+                    description="Andamento della CPU media del gruppo nelle ultime 48 ore, bucketizzato a 5 minuti. Ogni punto è la media aritmetica di tutti i campionamenti AgentHeartbeat nel bucket, su tutti i target del gruppo."
+                    source="AgentHeartbeat.cpu_percent · bucket 5m · media per gruppo">
                   <div className="mon-chart-card">
                     <div className="mon-card-title">Avg CPU Usage (48h)</div>
                     <ResponsiveContainer width="100%" height={180}>
@@ -648,6 +704,10 @@ const GroupDetail: React.FC = () => {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
+                  </DataTooltip>
+                  <DataTooltip title="Avg Memory Usage (48h)" type="avg"
+                    description="Andamento della RAM media del gruppo nelle ultime 48 ore, bucketizzato a 5 minuti. Ogni punto è la media di AgentHeartbeat.memory_percent su tutti i target attivi del gruppo nel bucket."
+                    source="AgentHeartbeat.memory_percent · bucket 5m · media per gruppo">
                   <div className="mon-chart-card">
                     <div className="mon-card-title">Avg Memory Usage (48h)</div>
                     <ResponsiveContainer width="100%" height={180}>
@@ -666,6 +726,7 @@ const GroupDetail: React.FC = () => {
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
+                  </DataTooltip>
                 </div>
               </div>
             )}

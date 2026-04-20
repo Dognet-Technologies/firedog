@@ -10,6 +10,7 @@ import type { Target, FirewallRule, ThreatLog, FileIntegrity } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTarget } from '../contexts/TargetContext';
 import StatusDot from '../components/shared/StatusDot';
+import DataTooltip from '../components/shared/DataTooltip';
 import SeverityBadge from '../components/shared/SeverityBadge';
 import ScoreBar from '../components/shared/ScoreBar';
 import TabBar from '../components/shared/TabBar';
@@ -364,18 +365,30 @@ const TargetDetail: React.FC = () => {
           </div>
 
           <div className="td-hero-stats">
-            <div className="td-stat-chip">
-              <span className="td-stat-chip-value">{threats.length}</span>
-              <span className="td-stat-chip-label">Threats</span>
-            </div>
-            <div className="td-stat-chip td-stat-chip-danger">
-              <span className="td-stat-chip-value">{criticalCount}</span>
-              <span className="td-stat-chip-label">Critical</span>
-            </div>
-            <div className="td-stat-chip">
-              <span className="td-stat-chip-value">{rules.length}</span>
-              <span className="td-stat-chip-label">Rules</span>
-            </div>
+            <DataTooltip inline title="Total Threats" type="count"
+              description="Numero totale di minacce rilevate per questo target. Include eventi sia risolti che non risolti, di tutti i livelli di severità."
+              source="ThreatLog API · filtrato per target">
+              <div className="td-stat-chip">
+                <span className="td-stat-chip-value">{threats.length}</span>
+                <span className="td-stat-chip-label">Threats</span>
+              </div>
+            </DataTooltip>
+            <DataTooltip inline title="Critical Threats" type="count"
+              description="Minacce con severity='critical' per questo target. Indicano attacchi ad alto rischio che richiedono analisi e intervento immediato."
+              source="ThreatLog.severity = 'critical'">
+              <div className="td-stat-chip td-stat-chip-danger">
+                <span className="td-stat-chip-value">{criticalCount}</span>
+                <span className="td-stat-chip-label">Critical</span>
+              </div>
+            </DataTooltip>
+            <DataTooltip inline title="Firewall Rules" type="count"
+              description="Numero totale di regole firewall attive per questo target, distribuite nelle chain INPUT (traffico in entrata), OUTPUT (traffico in uscita) e FORWARD (traffico instradato)."
+              source="FirewallRule API · filtrato per target">
+              <div className="td-stat-chip">
+                <span className="td-stat-chip-value">{rules.length}</span>
+                <span className="td-stat-chip-label">Rules</span>
+              </div>
+            </DataTooltip>
           </div>
 
           <div className="td-hero-actions">
@@ -419,31 +432,52 @@ const TargetDetail: React.FC = () => {
         {activeTab === 'overview' && (
           <div className="td-overview">
             <div className="td-stat-cards">
-              <div className="td-stat-card">
-                <div className="td-stat-card-label">CPU Usage</div>
-                <div className="td-stat-card-value">—</div>
-                <div className="td-stat-card-sub">TODO: replace with real API call</div>
-              </div>
-              <div className="td-stat-card">
-                <div className="td-stat-card-label">Memory</div>
-                <div className="td-stat-card-value">—</div>
-                <div className="td-stat-card-sub">TODO: replace with real API call</div>
-              </div>
-              <div className="td-stat-card">
-                <div className="td-stat-card-label">Traffic</div>
-                <div className="td-stat-card-value">—</div>
-                <div className="td-stat-card-sub">TODO: replace with real API call</div>
-              </div>
-              <div className="td-stat-card">
-                <div className="td-stat-card-label">Firewall</div>
-                <div className="td-stat-card-value">
-                  <StatusDot status={target.status as 'online' | 'offline' | 'error' | 'installing' | 'pending'} />
+              <DataTooltip title="CPU Usage" type="last"
+                description="Percentuale di utilizzo CPU al momento dell'ultimo heartbeat. Il valore '—' indica che non sono ancora disponibili dati dal modello AgentHeartbeat per questo target. Visibile nella scheda Performance."
+                source="AgentHeartbeat.cpu_percent">
+                <div className="td-stat-card">
+                  <div className="td-stat-card-label">CPU Usage</div>
+                  <div className="td-stat-card-value">{currentMetrics ? `${currentMetrics.cpu.toFixed(1)}%` : '—'}</div>
+                  <div className="td-stat-card-sub">vai a Performance →</div>
                 </div>
-                <div className="td-stat-card-sub">Last seen: {formatRelative(target.last_seen)}</div>
-              </div>
+              </DataTooltip>
+              <DataTooltip title="Memory Used" type="last"
+                description="Percentuale di RAM utilizzata al momento dell'ultimo heartbeat dell'agente. Valore istantaneo. Dettaglio storico disponibile nella scheda Performance."
+                source="AgentHeartbeat.memory_percent">
+                <div className="td-stat-card">
+                  <div className="td-stat-card-label">Memory</div>
+                  <div className="td-stat-card-value">{currentMetrics ? `${currentMetrics.mem.toFixed(1)}%` : '—'}</div>
+                  <div className="td-stat-card-sub">vai a Performance →</div>
+                </div>
+              </DataTooltip>
+              <DataTooltip title="Traffic (last interval)" type="delta"
+                description="Somma dei pacchetti in ingresso e uscita nell'ultimo intervallo di campionamento. Calcolato come delta di FirewallStats tra i due campioni più recenti. Dettaglio nella scheda Traffic."
+                source="FirewallStats.input_packets + output_packets (ultimo delta)">
+                <div className="td-stat-card">
+                  <div className="td-stat-card-label">Traffic</div>
+                  <div className="td-stat-card-value">
+                    {trafficData.length ? `${(trafficData[trafficData.length - 1].in + trafficData[trafficData.length - 1].out).toLocaleString()}` : '—'}
+                  </div>
+                  <div className="td-stat-card-sub">pkts · ultimo intervallo</div>
+                </div>
+              </DataTooltip>
+              <DataTooltip title="Agent Status" type="last"
+                description="Stato attuale dell'agente FireDog sul target. 'online' significa che l'agente sta inviando heartbeat regolari. 'offline' indica assenza di segnale per più di 5 minuti."
+                source="Target.status · Target.last_seen">
+                <div className="td-stat-card">
+                  <div className="td-stat-card-label">Firewall</div>
+                  <div className="td-stat-card-value">
+                    <StatusDot status={target.status as 'online' | 'offline' | 'error' | 'installing' | 'pending'} />
+                  </div>
+                  <div className="td-stat-card-sub">Last seen: {formatRelative(target.last_seen)}</div>
+                </div>
+              </DataTooltip>
             </div>
 
             <div className="td-overview-row2">
+              <DataTooltip title="Traffic Overview (48h)" type="delta"
+                description="Andamento del traffico di rete nelle ultime 48 ore. Ogni punto è la variazione dei pacchetti rispetto al campione precedente di FirewallStats, campionato ogni 30 minuti. Inbound = pacchetti in entrata, Outbound = in uscita."
+                source="FirewallStats · delta(input_packets, output_packets)">
               <div className="td-chart-card">
                 <h3 className="td-card-title">Traffic (24h)</h3>
                 <ResponsiveContainer width="100%" height={180}>
@@ -469,7 +503,11 @@ const TargetDetail: React.FC = () => {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+              </DataTooltip>
 
+              <DataTooltip title="Recent Threats" type="count"
+                description="Ultimi 8 eventi di minaccia rilevati per questo target, ordinati per data di rilevamento. Ogni riga mostra il livello di severità, l'IP sorgente e il tempo relativo all'evento."
+                source="ThreatLog API · ultimi 50 per target">
               <div className="td-list-card">
                 <h3 className="td-card-title">Recent Threats</h3>
                 {threats.length === 0 ? (
@@ -486,9 +524,13 @@ const TargetDetail: React.FC = () => {
                   </div>
                 )}
               </div>
+              </DataTooltip>
             </div>
 
             <div className="td-overview-row3">
+              <DataTooltip title="Rules Summary" type="count"
+                description="Distribuzione delle regole firewall per chain: INPUT (pacchetti in entrata al sistema), OUTPUT (pacchetti generati dal sistema), FORWARD (pacchetti in transito da instradare). Un numero alto di regole INPUT è normale per server esposti."
+                source="FirewallRule API · raggruppato per chain">
               <div className="td-mini-card">
                 <h3 className="td-card-title">Rules Summary</h3>
                 <div className="td-rules-summary">
@@ -506,7 +548,11 @@ const TargetDetail: React.FC = () => {
                   </div>
                 </div>
               </div>
+              </DataTooltip>
 
+              <DataTooltip title="File Integrity Status" type="count"
+                description="Stato del monitoraggio dell'integrità dei file critici sul target. 'ok' = nessuna modifica; 'modified' = file alterato rispetto alla baseline; 'missing' = file atteso non trovato; 'new' = file non previsto rilevato."
+                source="FileIntegrity API · filtrato per target">
               <div className="td-mini-card">
                 <h3 className="td-card-title">Integrity Status</h3>
                 <div className="td-integrity-summary">
@@ -521,7 +567,11 @@ const TargetDetail: React.FC = () => {
                   })}
                 </div>
               </div>
+              </DataTooltip>
 
+              <DataTooltip title="Threat Distribution" type="count"
+                description="Distribuzione delle minacce per livello di severità: critical (blocco immediato), high (attenzione elevata), medium (monitoraggio), low (informativo). Comprende sia minacce attive che risolte."
+                source="ThreatLog.severity · filtrato per target">
               <div className="td-mini-card">
                 <h3 className="td-card-title">Threat Distribution</h3>
                 <div className="td-threat-dist">
@@ -536,6 +586,7 @@ const TargetDetail: React.FC = () => {
                   })}
                 </div>
               </div>
+              </DataTooltip>
             </div>
           </div>
         )}
@@ -696,6 +747,9 @@ const TargetDetail: React.FC = () => {
             </div>
 
             <div className="td-charts-grid">
+              <DataTooltip title="Traffic In/Out (48h)" type="delta"
+                description="Andamento dei pacchetti di rete nelle ultime 48 ore, campionato ogni 30 minuti. Ogni punto è la variazione (delta) rispetto al campione precedente dei contatori cumulativi di FirewallStats. Inbound = ingresso, Outbound = uscita."
+                source="FirewallStats.input_packets + output_packets (delta)">
               <div className="td-chart-card td-chart-card-full">
                 <h3 className="td-card-title">Traffic In/Out (24h)</h3>
                 <ResponsiveContainer width="100%" height={200}>
@@ -721,7 +775,11 @@ const TargetDetail: React.FC = () => {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+              </DataTooltip>
 
+              <DataTooltip title="Protocol Distribution" type="rate"
+                description="Distribuzione stimata dei protocolli di rete (TCP, UDP, ICMP). Si tratta di valori statici di default — non derivano da analisi dei pacchetti in tempo reale per questo specifico target."
+                source="Stima statica (non da API)">
               <div className="td-chart-card">
                 <h3 className="td-card-title">Protocol Distribution</h3>
                 <ResponsiveContainer width="100%" height={180}>
@@ -740,7 +798,11 @@ const TargetDetail: React.FC = () => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+              </DataTooltip>
 
+              <DataTooltip title="Connections over time" type="delta"
+                description="Stima del numero di connessioni attive nel tempo, derivata proporzionalmente dal volume di pacchetti: connessioni ≈ (in + out) / 20. Non è un contatore reale di connessioni TCP/UDP."
+                source="Derivato da FirewallStats (stima)">
               <div className="td-chart-card">
                 <h3 className="td-card-title">Connections over time</h3>
                 <ResponsiveContainer width="100%" height={180}>
@@ -755,6 +817,7 @@ const TargetDetail: React.FC = () => {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              </DataTooltip>
             </div>
           </div>
         )}
@@ -771,21 +834,36 @@ const TargetDetail: React.FC = () => {
             ) : (
               <>
                 <div className="td-stat-cards" style={{ marginBottom: '24px' }}>
-                  <div className="td-stat-card">
-                    <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>CPU</div>
-                    <div style={{ fontSize: 'var(--font-xl)', fontWeight: 700 }}>{currentMetrics.cpu.toFixed(1)}%</div>
-                  </div>
-                  <div className="td-stat-card">
-                    <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>Memory</div>
-                    <div style={{ fontSize: 'var(--font-xl)', fontWeight: 700 }}>{currentMetrics.mem.toFixed(1)}%</div>
-                  </div>
-                  <div className="td-stat-card">
-                    <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>Disk</div>
-                    <div style={{ fontSize: 'var(--font-xl)', fontWeight: 700 }}>{currentMetrics.disk.toFixed(1)}%</div>
-                  </div>
+                  <DataTooltip title="CPU Usage (attuale)" type="last"
+                    description="Utilizzo CPU al momento dell'ultimo heartbeat ricevuto. Calcolato su tutti i core. Il trend storico è nel grafico sottostante."
+                    source="AgentHeartbeat.cpu_percent">
+                    <div className="td-stat-card">
+                      <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>CPU</div>
+                      <div style={{ fontSize: 'var(--font-xl)', fontWeight: 700 }}>{currentMetrics.cpu.toFixed(1)}%</div>
+                    </div>
+                  </DataTooltip>
+                  <DataTooltip title="Memory Used (attuale)" type="last"
+                    description="Percentuale di RAM utilizzata al momento dell'ultimo campionamento. Valore istantaneo. Il trend storico è nel grafico sottostante."
+                    source="AgentHeartbeat.memory_percent">
+                    <div className="td-stat-card">
+                      <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>Memory</div>
+                      <div style={{ fontSize: 'var(--font-xl)', fontWeight: 700 }}>{currentMetrics.mem.toFixed(1)}%</div>
+                    </div>
+                  </DataTooltip>
+                  <DataTooltip title="Disk Used (attuale)" type="last"
+                    description="Percentuale di spazio disco utilizzato sull'unità principale del target al momento dell'ultimo heartbeat ricevuto dall'agente."
+                    source="AgentHeartbeat.disk_percent">
+                    <div className="td-stat-card">
+                      <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>Disk</div>
+                      <div style={{ fontSize: 'var(--font-xl)', fontWeight: 700 }}>{currentMetrics.disk.toFixed(1)}%</div>
+                    </div>
+                  </DataTooltip>
                 </div>
 
                 <div className="td-charts-grid">
+                  <DataTooltip title="CPU Usage % (48h)" type="avg"
+                    description="Andamento percentuale della CPU nelle ultime 48 ore. Ogni punto è un campionamento istantaneo ogni 30 minuti, non una media dell'intervallo."
+                    source="AgentHeartbeat.cpu_percent">
                   <div className="td-chart-card td-chart-card-full">
                     <h3 className="td-card-title">CPU Usage %</h3>
                     <ResponsiveContainer width="100%" height={200}>
@@ -798,7 +876,11 @@ const TargetDetail: React.FC = () => {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
+                  </DataTooltip>
 
+                  <DataTooltip title="Memory Usage (48h)" type="avg"
+                    description="Andamento utilizzo RAM in MB nelle ultime 48 ore. Calcolato come memory_percent × 8192 MB (RAM totale ipotizzata). Ogni punto è un campionamento istantaneo di AgentHeartbeat."
+                    source="AgentHeartbeat.memory_percent × 8192">
                   <div className="td-chart-card">
                     <h3 className="td-card-title">Memory Usage (MB)</h3>
                     <ResponsiveContainer width="100%" height={180}>
@@ -817,7 +899,11 @@ const TargetDetail: React.FC = () => {
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
+                  </DataTooltip>
 
+                  <DataTooltip title="CPU Load Average (1m)" type="avg"
+                    description="Stima del load average a 1 minuto, calcolata come cpu_percent / 100 × 4 core. Indica quanti processi sono mediamente in coda di esecuzione. Valore approssimato, non il load reale del kernel."
+                    source="Derivato da AgentHeartbeat.cpu_percent">
                   <div className="td-chart-card">
                     <h3 className="td-card-title">CPU Load Average</h3>
                     <ResponsiveContainer width="100%" height={180}>
@@ -830,6 +916,7 @@ const TargetDetail: React.FC = () => {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
+                  </DataTooltip>
                 </div>
               </>
             )}

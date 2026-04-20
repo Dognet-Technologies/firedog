@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import apiService from '../services/api';
 import type { ThreatStats, Target, Dashboard as DashboardType, Widget as ApiWidget } from '../types';
 import StatusDot from '../components/shared/StatusDot';
+import DataTooltip from '../components/shared/DataTooltip';
 import SeverityBadge from '../components/shared/SeverityBadge';
 import CountryFlag from '../components/shared/CountryFlag';
 import 'react-grid-layout/css/styles.css';
@@ -81,17 +82,36 @@ const generateTrafficMock = (): Array<{ time: string; in: number; out: number }>
 
 const ThreatSummaryWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) => (
   <div className="widget-threat-summary">
-    <div className="wts-number">{stats?.total_threats ?? '—'}</div>
+    <DataTooltip
+      title="Total Threats"
+      type="count"
+      description="Numero totale di eventi di sicurezza rilevati su tutta la flotta. Comprende minacce attive e risolte di tutti i livelli di severità."
+      source="ThreatLog · /api/threats/stats/"
+    >
+      <div className="wts-number">{stats?.total_threats ?? '—'}</div>
+    </DataTooltip>
     <div className="wts-label">Total Threats</div>
     <div className="wts-breakdown">
-      <span className="wts-crit">C: {stats?.critical_threats ?? 0}</span>
-      <span className="wts-high">H: {stats?.high_threats ?? 0}</span>
-      <span className="wts-med">M: {stats?.medium_threats ?? 0}</span>
+      <DataTooltip inline title="Critical Threats" type="count" description="Minacce con severity='critical': attacchi ad alto rischio che richiedono intervento immediato." source="ThreatLog">
+        <span className="wts-crit">C: {stats?.critical_threats ?? 0}</span>
+      </DataTooltip>
+      <DataTooltip inline title="High Threats" type="count" description="Minacce con severity='high': eventi significativi che andrebbero analizzati entro breve." source="ThreatLog">
+        <span className="wts-high">H: {stats?.high_threats ?? 0}</span>
+      </DataTooltip>
+      <DataTooltip inline title="Medium Threats" type="count" description="Minacce con severity='medium': anomalie rilevate che meritano monitoraggio ma non blocco immediato." source="ThreatLog">
+        <span className="wts-med">M: {stats?.medium_threats ?? 0}</span>
+      </DataTooltip>
     </div>
   </div>
 );
 
 const TrafficStatsWidget: React.FC<{ data: Array<{ time: string; in: number; out: number }> }> = ({ data }) => (
+  <DataTooltip
+    title="Network Traffic (24h)"
+    type="delta"
+    description="Traffico di rete inbound/outbound nelle ultime 24 ore. Ogni punto del grafico rappresenta la variazione (delta) dei pacchetti rispetto al campione precedente di FirewallStats, campionato ogni ora."
+    source="FirewallStats API (dati approssimativi)"
+  >
   <ResponsiveContainer width="100%" height="100%">
     <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
       <defs>
@@ -114,6 +134,7 @@ const TrafficStatsWidget: React.FC<{ data: Array<{ time: string; in: number; out
       <Area type="monotone" dataKey="out" stroke="var(--status-success)" fill="url(#tOut)" name="Outbound" />
     </AreaChart>
   </ResponsiveContainer>
+  </DataTooltip>
 );
 
 const TargetStatusWidget: React.FC<{ targets: Target[] }> = ({ targets }) => (
@@ -169,7 +190,11 @@ const TopAttackersWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) 
       {attackers.slice(0, 8).map((a, idx) => (
         <div key={idx} className="wta-item">
           <span className="wta-ip">{a.source_ip}</span>
-          <span className="wta-count">{a.count}</span>
+          <DataTooltip inline title="Attacchi da questo IP" type="count"
+            description="Numero di eventi di minaccia registrati per questo indirizzo IP sorgente nel periodo selezionato. Un singolo IP può generare più eventi in sessioni distinte."
+            source="ThreatLog.source_ip">
+            <span className="wta-count">{a.count}</span>
+          </DataTooltip>
         </div>
       ))}
     </div>
@@ -212,10 +237,18 @@ const GeoMapWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) => {
       {geoData.map((g) => (
         <div key={g.country} className="wg-item">
           <CountryFlag countryCode={g.country} showName />
-          <div className="wg-bar-wrap">
-            <div className="wg-bar" style={{ width: `${g.pct}%` }} />
-          </div>
-          <span className="wg-count">{g.count}</span>
+          <DataTooltip inline title={`Attacchi da ${g.country}`} type="count"
+            description={`Numero stimato di minacce provenienti da questo paese (${g.pct}% del totale), basato sulla geolocalizzazione degli IP sorgente rilevati nei log. Dato approssimativo.`}
+            source="GeoIP lookup · ThreatLog.source_ip (dati demo)">
+            <div className="wg-bar-wrap">
+              <div className="wg-bar" style={{ width: `${g.pct}%` }} />
+            </div>
+          </DataTooltip>
+          <DataTooltip inline title={`Conteggio assoluto · ${g.country}`} type="count"
+            description="Numero assoluto di eventi minaccia attribuiti a questo paese nel periodo selezionato."
+            source="ThreatLog (dati demo)">
+            <span className="wg-count">{g.count}</span>
+          </DataTooltip>
         </div>
       ))}
     </div>

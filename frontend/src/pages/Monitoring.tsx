@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { Link } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
+import DataTooltip from '../components/shared/DataTooltip';
 import TabBar from '../components/shared/TabBar';
 import apiService from '../services/api';
 import type { Target } from '../types';
@@ -104,23 +105,38 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
       {loading && <div className="mon-loading">Caricamento dati traffico…</div>}
 
       <div className="mon-stat-cards">
-        <div className="mon-stat-card">
-          <div className="mon-stat-label">Total Inbound</div>
-          <div className="mon-stat-value">{fmt(totalIn)}</div>
-          <div className="mon-stat-unit">packets</div>
-        </div>
-        <div className="mon-stat-card">
-          <div className="mon-stat-label">Total Outbound</div>
-          <div className="mon-stat-value">{fmt(totalOut)}</div>
-          <div className="mon-stat-unit">packets</div>
-        </div>
-        <div className="mon-stat-card mon-stat-danger">
-          <div className="mon-stat-label">Forwarded</div>
-          <div className="mon-stat-value">{fmt(totalDropped)}</div>
-          <div className="mon-stat-unit">packets</div>
-        </div>
+        <DataTooltip title="Total Inbound" type="sum"
+          description="Somma di tutti i pacchetti in ingresso rilevati dall'agente nelle ultime 48 ore. Calcolato come delta cumulativo tra campioni consecutivi di FirewallStats ogni 30 minuti."
+          source="FirewallStats.input_packets">
+          <div className="mon-stat-card">
+            <div className="mon-stat-label">Total Inbound</div>
+            <div className="mon-stat-value">{fmt(totalIn)}</div>
+            <div className="mon-stat-unit">packets</div>
+          </div>
+        </DataTooltip>
+        <DataTooltip title="Total Outbound" type="sum"
+          description="Somma di tutti i pacchetti in uscita nelle ultime 48 ore. Derivato da delta consecutivi di FirewallStats.output_packets campionati ogni 30 minuti."
+          source="FirewallStats.output_packets">
+          <div className="mon-stat-card">
+            <div className="mon-stat-label">Total Outbound</div>
+            <div className="mon-stat-value">{fmt(totalOut)}</div>
+            <div className="mon-stat-unit">packets</div>
+          </div>
+        </DataTooltip>
+        <DataTooltip title="Forwarded Packets" type="sum"
+          description="Pacchetti transitati attraverso la chain FORWARD del firewall, cioè pacchetti instradati da un'interfaccia all'altra. Può indicare traffico NAT o routing inter-segmento."
+          source="FirewallStats.forward_packets">
+          <div className="mon-stat-card mon-stat-danger">
+            <div className="mon-stat-label">Forwarded</div>
+            <div className="mon-stat-value">{fmt(totalDropped)}</div>
+            <div className="mon-stat-unit">packets</div>
+          </div>
+        </DataTooltip>
       </div>
 
+      <DataTooltip title="Inbound / Outbound Traffic (48h)" type="delta"
+        description="Andamento del traffico di rete nelle ultime 48 ore, campionato ogni 30 minuti. Ogni punto rappresenta i pacchetti transitati nell'intervallo, calcolato come differenza tra valori consecutivi dei contatori cumulativi FirewallStats."
+        source="FirewallStats API · delta(input_packets, output_packets)">
       <div className="mon-chart-card">
         <h3 className="mon-card-title">Inbound / Outbound Traffic</h3>
         <ResponsiveContainer width="100%" height={220}>
@@ -145,8 +161,12 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
           </AreaChart>
         </ResponsiveContainer>
       </div>
+      </DataTooltip>
 
       <div className="mon-grid-2">
+        <DataTooltip title="Protocol Distribution" type="rate"
+          description="Distribuzione percentuale stimata dei protocolli di rete nel traffico totale (TCP, UDP, ICMP, altri). Nota: si tratta di una stima statica basata su valori tipici — non deriva da deep packet inspection in tempo reale."
+          source="Stima statica (non da API)">
         <div className="mon-chart-card">
           <h3 className="mon-card-title">Protocol Distribution</h3>
           <ResponsiveContainer width="100%" height={180}>
@@ -159,7 +179,11 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        </DataTooltip>
 
+        <DataTooltip title="Top IP Addresses by Volume" type="sum"
+          description="Indirizzi IP con il maggiore volume di traffico stimato nel periodo. I conteggi sono derivati proporzionalmente dai totali cumulativi di FirewallStats — rappresentano volumi relativi, non metriche per-IP precise."
+          source="Stima da FirewallStats.input_packets (proporzionale)">
         <div className="mon-card">
           <h3 className="mon-card-title">Top IP Addresses by Volume</h3>
           <div className="mon-table-wrapper">
@@ -187,6 +211,7 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
             </table>
           </div>
         </div>
+        </DataTooltip>
       </div>
     </div>
   );
@@ -260,22 +285,37 @@ const PerformanceTab: React.FC<PerformanceTabProps> = ({ targetId }) => {
       {loading && <div className="mon-loading">Caricamento metriche…</div>}
 
       <div className="mon-stat-cards">
-        <div className="mon-stat-card">
-          <div className="mon-stat-label">Current CPU</div>
-          <div className="mon-stat-value">{currentCpu.toFixed(1)}%</div>
-          <div className="mon-stat-unit">Avg {avgCPU}%</div>
-        </div>
-        <div className="mon-stat-card">
-          <div className="mon-stat-label">Memory Used</div>
-          <div className="mon-stat-value">{currentMem.toFixed(1)}%</div>
-          <div className="mon-stat-unit">{lastMem ? `${(lastMem.used / 1024).toFixed(1)} / ${(lastMem.total / 1024).toFixed(1)} GB` : '—'}</div>
-        </div>
-        <div className="mon-stat-card">
-          <div className="mon-stat-label">Disk Used</div>
-          <div className="mon-stat-value">{currentDisk.toFixed(1)}%</div>
-        </div>
+        <DataTooltip title="CPU Usage (attuale)" type="last"
+          description="Percentuale di utilizzo CPU al momento dell'ultimo heartbeat ricevuto dall'agente FireDog. Calcolato su tutti i core disponibili. La riga sottostante mostra la media nelle ultime 48 ore."
+          source="AgentHeartbeat.cpu_percent">
+          <div className="mon-stat-card">
+            <div className="mon-stat-label">Current CPU</div>
+            <div className="mon-stat-value">{currentCpu.toFixed(1)}%</div>
+            <div className="mon-stat-unit">Avg {avgCPU}%</div>
+          </div>
+        </DataTooltip>
+        <DataTooltip title="Memory Used (attuale)" type="last"
+          description="Percentuale di RAM utilizzata al momento dell'ultimo campionamento. Il valore è istantaneo, non mediato. La stima in GB si basa su 8 GB di RAM totale ipotizzata."
+          source="AgentHeartbeat.memory_percent">
+          <div className="mon-stat-card">
+            <div className="mon-stat-label">Memory Used</div>
+            <div className="mon-stat-value">{currentMem.toFixed(1)}%</div>
+            <div className="mon-stat-unit">{lastMem ? `${(lastMem.used / 1024).toFixed(1)} / ${(lastMem.total / 1024).toFixed(1)} GB` : '—'}</div>
+          </div>
+        </DataTooltip>
+        <DataTooltip title="Disk Used (attuale)" type="last"
+          description="Percentuale di spazio disco utilizzato sull'unità principale del target, rilevata dall'agente al momento dell'ultimo heartbeat."
+          source="AgentHeartbeat.disk_percent">
+          <div className="mon-stat-card">
+            <div className="mon-stat-label">Disk Used</div>
+            <div className="mon-stat-value">{currentDisk.toFixed(1)}%</div>
+          </div>
+        </DataTooltip>
       </div>
 
+      <DataTooltip title="CPU Usage % (48h)" type="avg"
+        description="Andamento percentuale della CPU nelle ultime 48 ore, con un campionamento ogni 30 minuti. Ogni punto è un valore istantaneo al momento del campionamento, non una media dell'intervallo."
+        source="AgentHeartbeat.cpu_percent">
       <div className="mon-chart-card">
         <h3 className="mon-card-title">CPU Usage %</h3>
         <ResponsiveContainer width="100%" height={200}>
@@ -288,8 +328,12 @@ const PerformanceTab: React.FC<PerformanceTabProps> = ({ targetId }) => {
           </LineChart>
         </ResponsiveContainer>
       </div>
+      </DataTooltip>
 
       <div className="mon-grid-2">
+        <DataTooltip title="Memory Usage (48h)" type="avg"
+          description="Andamento dell'utilizzo RAM in MB nelle ultime 48 ore. Calcolato come memory_percent × 8192 MB (RAM totale ipotizzata). Ogni punto è un campione istantaneo di AgentHeartbeat."
+          source="AgentHeartbeat.memory_percent × 8192">
         <div className="mon-chart-card">
           <h3 className="mon-card-title">Memory Usage (MB)</h3>
           <ResponsiveContainer width="100%" height={180}>
@@ -308,7 +352,11 @@ const PerformanceTab: React.FC<PerformanceTabProps> = ({ targetId }) => {
             </AreaChart>
           </ResponsiveContainer>
         </div>
+        </DataTooltip>
 
+        <DataTooltip title="CPU Load Average (1m)" type="avg"
+          description="Stima del load average a 1 minuto, derivata proporzionalmente dalla CPU: load1 = cpu_percent / 100 × 4 core. Indica quanti processi sono mediamente in coda di esecuzione."
+          source="Derivato da AgentHeartbeat.cpu_percent">
         <div className="mon-chart-card">
           <h3 className="mon-card-title">CPU Load Average</h3>
           <ResponsiveContainer width="100%" height={180}>
@@ -321,6 +369,7 @@ const PerformanceTab: React.FC<PerformanceTabProps> = ({ targetId }) => {
             </LineChart>
           </ResponsiveContainer>
         </div>
+        </DataTooltip>
       </div>
     </div>
   );
