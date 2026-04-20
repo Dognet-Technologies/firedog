@@ -9,15 +9,4 @@ class Migration(migrations.Migration):
         ("settings", "0002_notification_models"),
     ]
 
-    operations = [
-        migrations.RenameIndex(
-            model_name="notificationlog",
-            new_name="notificatio_alert_t_c828e7_idx",
-            old_name="notificatio_alert_t_idx",
-        ),
-        migrations.RenameIndex(
-            model_name="notificationlog",
-            new_name="notificatio_target__63f839_idx",
-            old_name="notificatio_target_idx",
-        ),
-    ]
+    operations = []
