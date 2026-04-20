@@ -1,29 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import threatsService, { ThreatLog, ThreatStats, ThreatsFilter } from '../services/threats.service';
+import { useTarget } from '../contexts/TargetContext';
 import './Threats.css';
 
 const Threats: React.FC = () => {
+  const { selectedTarget } = useTarget();
+
   const [threats, setThreats] = useState<ThreatLog[]>([]);
   const [stats, setStats] = useState<ThreatStats | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
-  // Filtri
+
+  // Filtri — inizializza con il target globale se presente
   const [filters, setFilters] = useState<ThreatsFilter>({
     severity: undefined,
     is_resolved: false,
     limit: 50,
+    target: selectedTarget?.id,
   });
-  
+
   // Dettaglio minaccia selezionata
   const [selectedThreat, setSelectedThreat] = useState<ThreatLog | null>(null);
   const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
 
+  // Aggiorna il filtro target quando cambia il target globale
+  useEffect(() => {
+    setFilters((prev) => ({ ...prev, target: selectedTarget?.id }));
+  }, [selectedTarget?.id]);
+
   useEffect(() => {
     loadThreats();
     loadStats();
-  }, []);
+  }, [filters.target]);
 
   const loadThreats = async () => {
     setLoading(true);

@@ -8,6 +8,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import apiService from '../services/api';
 import type { Target, FirewallRule, ThreatLog, FileIntegrity } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useTarget } from '../contexts/TargetContext';
 import StatusDot from '../components/shared/StatusDot';
 import SeverityBadge from '../components/shared/SeverityBadge';
 import ScoreBar from '../components/shared/ScoreBar';
@@ -63,6 +64,7 @@ const TargetDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast, showConfirm } = useNotifications();
+  const { setSelectedTarget } = useTarget();
 
   const [target, setTarget] = useState<Target | null>(null);
   const [rules, setRules] = useState<FirewallRule[]>([]);
@@ -544,6 +546,14 @@ const TargetDetail: React.FC = () => {
             <div className="td-section-header">
               <h2>Firewall Rules</h2>
               <span className="td-section-count">{rules.length} rules</span>
+              {target && (
+                <button
+                  className="mon-detail-link"
+                  onClick={() => { setSelectedTarget(target); navigate('/firewall'); }}
+                >
+                  Open in Firewall →
+                </button>
+              )}
             </div>
             {rules.length === 0 ? (
               <div className="empty-state">
@@ -569,6 +579,14 @@ const TargetDetail: React.FC = () => {
             <div className="td-section-header">
               <h2>Threats</h2>
               <span className="td-section-count">{unresolvedCount} unresolved / {threats.length} total</span>
+              {target && (
+                <button
+                  className="mon-detail-link"
+                  onClick={() => { setSelectedTarget(target); navigate('/threats'); }}
+                >
+                  Open in Threats →
+                </button>
+              )}
             </div>
             {threats.length === 0 ? (
               <div className="empty-state">

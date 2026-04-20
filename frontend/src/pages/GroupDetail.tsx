@@ -439,6 +439,7 @@ const GroupDetail: React.FC = () => {
             <div className="gd-section-header">
               <h2>Rules</h2>
               <span className="gd-section-count">{rules.length} total across all members</span>
+              <Link to="/firewall" className="mon-detail-link">Open in Firewall →</Link>
             </div>
             {rules.length === 0 ? (
               <div className="empty-state">
@@ -497,6 +498,7 @@ const GroupDetail: React.FC = () => {
             <div className="gd-section-header">
               <h2>Threats</h2>
               <span className="gd-section-count">{threats.length} total from all members</span>
+              <Link to="/threats" className="mon-detail-link">Open in Threats →</Link>
             </div>
             {threats.length === 0 ? (
               <div className="empty-state">

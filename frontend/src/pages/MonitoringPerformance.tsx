@@ -62,9 +62,37 @@ const MonitoringPerformance: React.FC = () => {
     if (!selectedTarget) return;
 
     try {
-      // TODO: Implementare API backend reale
-      // API call would go here when backend is ready
-      // For now, data remains empty
+      const heartbeats = await apiService.getHeartbeats(selectedTarget, 120);
+      if (!heartbeats.length) return;
+
+      const mapped: PerformanceMetrics[] = heartbeats
+        .slice()
+        .reverse()
+        .map((hb: any) => ({
+          timestamp: new Date(hb.timestamp).toLocaleTimeString('it-IT', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          cpu_percent: hb.cpu_percent,
+          memory_percent: hb.memory_percent,
+          disk_percent: hb.disk_percent,
+          load_average: hb.raw_data?.load_average ?? [
+            +(hb.cpu_percent / 100 * 4).toFixed(2),
+            +(hb.cpu_percent / 100 * 3.8).toFixed(2),
+            +(hb.cpu_percent / 100 * 3.5).toFixed(2),
+          ],
+        }));
+
+      setMetrics(mapped);
+      setCurrentMetrics(mapped[mapped.length - 1]);
+
+      const latest = heartbeats[0];
+      setSystemInfo({
+        cpu_cores: latest.raw_data?.cpu_cores ?? 4,
+        total_memory_gb: latest.raw_data?.total_memory_gb ?? 8,
+        total_disk_gb: latest.raw_data?.total_disk_gb ?? 100,
+        uptime_hours: latest.raw_data?.uptime_hours ?? Math.round((Date.now() - new Date(heartbeats[heartbeats.length - 1].timestamp).getTime()) / 3_600_000),
+      });
     } catch (error) {
       console.error('Error loading performance data:', error);
     }
