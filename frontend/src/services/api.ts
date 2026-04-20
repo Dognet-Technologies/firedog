@@ -281,6 +281,22 @@ class ApiService {
     return response.data;
   }
 
+  // ========== Monitoring ==========
+
+  async getHeartbeats(targetId: number, limit = 96): Promise<any[]> {
+    const response = await this.api.get('/agent/heartbeats/', {
+      params: { target_id: targetId, limit },
+    });
+    return response.data.results ?? response.data;
+  }
+
+  async getFirewallStats(targetId: number, limit = 96): Promise<any[]> {
+    const response = await this.api.get('/firewall-stats/', {
+      params: { target_id: targetId, limit },
+    });
+    return response.data.results ?? response.data;
+  }
+
   // ========== Firewall Rules ==========
 
   async getRules(targetId?: number): Promise<PaginatedResponse<FirewallRule>> {

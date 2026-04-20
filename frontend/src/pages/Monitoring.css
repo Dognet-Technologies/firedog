@@ -188,6 +188,27 @@
   border: 1px solid rgba(50, 215, 75, 0.25);
 }
 
+.mon-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.mon-target-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.mon-empty,
+.mon-loading {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 48px 0;
+  font-size: var(--font-sm);
+}
+
 /* ===== RESPONSIVE ===== */
 
 @media (max-width: 1024px) {

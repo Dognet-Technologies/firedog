@@ -3,7 +3,7 @@ Serializers per l'app Targets
 """
 
 from rest_framework import serializers
-from .models import Target
+from .models import Target, FirewallStats
 
 """
 Serializers per Whitelist e BlockedIPs
@@ -388,3 +388,31 @@ class BlockedIPStatsSerializer(serializers.Serializer):
     total_packets_blocked = serializers.IntegerField()
     top_blocked_ips = serializers.ListField(child=serializers.DictField())
     blocks_by_reason = serializers.DictField()
+
+
+class FirewallStatsSerializer(serializers.ModelSerializer):
+    """Serializer per statistiche firewall (traffico)"""
+
+    target_hostname = serializers.CharField(source="target.hostname", read_only=True)
+
+    class Meta:
+        model = FirewallStats
+        fields = [
+            "id",
+            "target",
+            "target_hostname",
+            "hostname",
+            "firedog_version",
+            "os_version",
+            "kernel_version",
+            "uptime_seconds",
+            "input_packets",
+            "output_packets",
+            "forward_packets",
+            "pcap_input_dropped_bytes",
+            "pcap_output_dropped_bytes",
+            "status",
+            "collected_at",
+            "imported_at",
+        ]
+        read_only_fields = ["id", "imported_at"]

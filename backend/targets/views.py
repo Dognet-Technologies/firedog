@@ -24,13 +24,14 @@ from django.db.models import Count, Sum, Q
 from datetime import timedelta
 import logging
 
-from .models import WhitelistEntry, BlockedIP
+from .models import WhitelistEntry, BlockedIP, FirewallStats
 from .serializers import (
     WhitelistEntrySerializer,
     WhitelistEntryCreateSerializer,
     BlockedIPSerializer,
     BlockedIPCreateSerializer,
     BlockedIPStatsSerializer,
+    FirewallStatsSerializer,
 )
 from targets.models import Target
 from audit.models import AuditLog
@@ -556,3 +557,26 @@ def bulk_update_gruppo(self, request):
     )
 
     return Response({"success": True, "updated_count": updated, "gruppo": gruppo})
+
+
+class FirewallStatsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet read-only per statistiche firewall (traffico).
+    Filtra per target_id e supporta limit per limitare i risultati.
+    GET /api/firewall-stats/?target_id=X&limit=48
+    """
+
+    serializer_class = FirewallStatsSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = FirewallStats.objects.all()
+        target_id = self.request.query_params.get("target_id")
+        if target_id:
+            queryset = queryset.filter(target_id=target_id)
+        try:
+            limit = int(self.request.query_params.get("limit", 100))
+            limit = min(max(limit, 1), 500)
+        except (TypeError, ValueError):
+            limit = 100
+        return queryset[:limit]
