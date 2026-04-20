@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import apiService from '../services/api';
 import type { Target, FirewallRule, ThreatLog } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -25,15 +26,26 @@ interface TargetGroup {
   updated_at: string;
 }
 
-type TabId = 'overview' | 'members' | 'rules' | 'threats' | 'config';
+type TabId = 'overview' | 'members' | 'rules' | 'threats' | 'traffic' | 'performance' | 'config';
 
 const TABS = [
   { id: 'overview' as TabId, label: 'Overview' },
   { id: 'members' as TabId, label: 'Members' },
   { id: 'rules' as TabId, label: 'Rules' },
   { id: 'threats' as TabId, label: 'Threats' },
+  { id: 'traffic' as TabId, label: 'Traffic' },
+  { id: 'performance' as TabId, label: 'Performance' },
   { id: 'config' as TabId, label: 'Config' },
 ];
+
+const CHART_TOOLTIP_STYLE = {
+  contentStyle: {
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--border-primary)',
+    borderRadius: '8px',
+    fontSize: '12px',
+  },
+};
 
 const formatRelative = (ts: string | null): string => {
   if (!ts) return '—';
@@ -60,6 +72,11 @@ const GroupDetail: React.FC = () => {
 
   const [configForm, setConfigForm] = useState({ name: '', description: '' });
   const [savingConfig, setSavingConfig] = useState(false);
+
+  const [trafficData, setTrafficData] = useState<any[]>([]);
+  const [cpuData, setCpuData] = useState<any[]>([]);
+  const [memData, setMemData] = useState<any[]>([]);
+  const [avgMetrics, setAvgMetrics] = useState<{ cpu: number; mem: number; disk: number } | null>(null);
 
   const groupId = id ? parseInt(id, 10) : null;
 
@@ -99,6 +116,74 @@ const GroupDetail: React.FC = () => {
         );
         setThreats(allThreats);
         setRules(allRules);
+
+        // Fetch monitoring data (firewall stats + heartbeats) from all members in parallel
+        const allStats: any[] = [];
+        const allHeartbeats: any[] = [];
+        await Promise.all(
+          groupTargets.map(async (t) => {
+            try {
+              const [stats, hbs] = await Promise.all([
+                apiService.getFirewallStats(t.id, 48),
+                apiService.getHeartbeats(t.id, 48),
+              ]);
+              allStats.push(...stats);
+              allHeartbeats.push(...hbs);
+            } catch {
+              // skip individual target failures
+            }
+          })
+        );
+
+        // Aggregate traffic: sort by timestamp, compute packet deltas per bucket
+        if (allStats.length > 0) {
+          allStats.sort((a, b) => new Date(a.collected_at).getTime() - new Date(b.collected_at).getTime());
+          const td = allStats.slice(1).map((s, i) => ({
+            time: new Date(s.collected_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            inbound: Math.max(0, (s.input_packets || 0) - (allStats[i].input_packets || 0)),
+            outbound: Math.max(0, (s.output_packets || 0) - (allStats[i].output_packets || 0)),
+          }));
+          setTrafficData(td);
+        }
+
+        // Aggregate performance: average CPU/mem/disk per timestamp bucket across members
+        if (allHeartbeats.length > 0) {
+          allHeartbeats.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          // Bucket by rounded 5-min intervals
+          const buckets = new Map<string, { cpu: number[]; mem: number[]; disk: number[] }>();
+          allHeartbeats.forEach((h) => {
+            const d = new Date(h.timestamp);
+            d.setSeconds(0, 0);
+            d.setMinutes(Math.floor(d.getMinutes() / 5) * 5);
+            const key = d.toISOString();
+            if (!buckets.has(key)) buckets.set(key, { cpu: [], mem: [], disk: [] });
+            const b = buckets.get(key)!;
+            if (h.cpu_percent != null) b.cpu.push(h.cpu_percent);
+            if (h.memory_percent != null) b.mem.push(h.memory_percent);
+            if (h.disk_percent != null) b.disk.push(h.disk_percent);
+          });
+          const avg = (arr: number[]) => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+          const sorted = Array.from(buckets.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+          const cpuPoints = sorted.map(([key, b]) => ({
+            time: new Date(key).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            value: parseFloat(avg(b.cpu).toFixed(1)),
+          }));
+          const memPoints = sorted.map(([key, b]) => ({
+            time: new Date(key).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            value: parseFloat(avg(b.mem).toFixed(1)),
+          }));
+          setCpuData(cpuPoints);
+          setMemData(memPoints);
+
+          const lastBucket = sorted[sorted.length - 1]?.[1];
+          if (lastBucket) {
+            setAvgMetrics({
+              cpu: parseFloat(avg(lastBucket.cpu).toFixed(1)),
+              mem: parseFloat(avg(lastBucket.mem).toFixed(1)),
+              disk: parseFloat(avg(lastBucket.disk).toFixed(1)),
+            });
+          }
+        }
       }
     } catch (err) {
       console.error('GroupDetail loadAll error:', err);
@@ -463,6 +548,123 @@ const GroupDetail: React.FC = () => {
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TRAFFIC */}
+        {activeTab === 'traffic' && (
+          <div className="gd-monitoring">
+            {trafficData.length === 0 ? (
+              <div className="mon-empty">No traffic data available for this group's members.</div>
+            ) : (
+              <div className="mon-tab-content">
+                <div className="mon-stat-cards">
+                  <div className="mon-stat-card">
+                    <div className="mon-stat-label">Avg Inbound</div>
+                    <div className="mon-stat-value">
+                      {trafficData.length ? Math.round(trafficData.reduce((s, d) => s + d.inbound, 0) / trafficData.length) : 0}
+                    </div>
+                    <div className="mon-stat-unit">pkts/interval</div>
+                  </div>
+                  <div className="mon-stat-card">
+                    <div className="mon-stat-label">Avg Outbound</div>
+                    <div className="mon-stat-value">
+                      {trafficData.length ? Math.round(trafficData.reduce((s, d) => s + d.outbound, 0) / trafficData.length) : 0}
+                    </div>
+                    <div className="mon-stat-unit">pkts/interval</div>
+                  </div>
+                  <div className="mon-stat-card">
+                    <div className="mon-stat-label">Members Contributing</div>
+                    <div className="mon-stat-value">{members.length}</div>
+                    <div className="mon-stat-unit">targets</div>
+                  </div>
+                </div>
+                <div className="mon-chart-card">
+                  <div className="mon-card-title">Aggregate Traffic (48h)</div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={trafficData}>
+                      <defs>
+                        <linearGradient id="gdIn" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="var(--accent-primary)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="var(--accent-primary)" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="gdOut" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="var(--status-success)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="var(--status-success)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+                      <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} interval="preserveStartEnd" />
+                      <YAxis tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} />
+                      <Tooltip {...CHART_TOOLTIP_STYLE} />
+                      <Area type="monotone" dataKey="inbound" stroke="var(--accent-primary)" fill="url(#gdIn)" strokeWidth={2} name="Inbound" />
+                      <Area type="monotone" dataKey="outbound" stroke="var(--status-success)" fill="url(#gdOut)" strokeWidth={2} name="Outbound" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PERFORMANCE */}
+        {activeTab === 'performance' && (
+          <div className="gd-monitoring">
+            {cpuData.length === 0 ? (
+              <div className="mon-empty">No performance data available for this group's members.</div>
+            ) : (
+              <div className="mon-tab-content">
+                <div className="mon-stat-cards">
+                  <div className="mon-stat-card">
+                    <div className="mon-stat-label">Avg CPU</div>
+                    <div className="mon-stat-value">{avgMetrics?.cpu ?? '—'}</div>
+                    <div className="mon-stat-unit">%</div>
+                  </div>
+                  <div className="mon-stat-card">
+                    <div className="mon-stat-label">Avg Memory</div>
+                    <div className="mon-stat-value">{avgMetrics?.mem ?? '—'}</div>
+                    <div className="mon-stat-unit">%</div>
+                  </div>
+                  <div className="mon-stat-card">
+                    <div className="mon-stat-label">Avg Disk</div>
+                    <div className="mon-stat-value">{avgMetrics?.disk ?? '—'}</div>
+                    <div className="mon-stat-unit">%</div>
+                  </div>
+                </div>
+                <div className="mon-grid-2">
+                  <div className="mon-chart-card">
+                    <div className="mon-card-title">Avg CPU Usage (48h)</div>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={cpuData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+                        <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} interval="preserveStartEnd" />
+                        <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} unit="%" />
+                        <Tooltip {...CHART_TOOLTIP_STYLE} formatter={(v: any) => [`${v}%`, 'CPU']} />
+                        <Line type="monotone" dataKey="value" stroke="var(--accent-primary)" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mon-chart-card">
+                    <div className="mon-card-title">Avg Memory Usage (48h)</div>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <AreaChart data={memData}>
+                        <defs>
+                          <linearGradient id="gdMem" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="var(--status-warning)" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="var(--status-warning)" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+                        <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} interval="preserveStartEnd" />
+                        <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} unit="%" />
+                        <Tooltip {...CHART_TOOLTIP_STYLE} formatter={(v: any) => [`${v}%`, 'Memory']} />
+                        <Area type="monotone" dataKey="value" stroke="var(--status-warning)" fill="url(#gdMem)" strokeWidth={2} name="Memory" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
             )}
           </div>

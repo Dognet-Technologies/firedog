@@ -22,11 +22,11 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
   { id: 'targets', label: 'Targets', icon: 'server', path: '/targets' },
-  { id: 'groups', label: 'Groups', icon: 'layers', path: '/groups' },
+  { id: 'groups', label: 'Groups Monitoring', icon: 'layers', path: '/groups' },
+  { id: 'monitoring', label: 'Target Monitoring', icon: 'activity', path: '/monitoring' },
   { id: 'firewall', label: 'Firewall', icon: 'shield', path: '/firewall' },
   { id: 'threats', label: 'Threats', icon: 'alert', path: '/threats' },
   { id: 'discovery', label: 'Discovery', icon: 'radar', path: '/discovery' },
-  { id: 'monitoring', label: 'Monitoring', icon: 'activity', path: '/monitoring' },
   { id: 'logs', label: 'Logs', icon: 'file-text', path: '/logs' },
 ];
 
@@ -42,11 +42,11 @@ const getPageTitle = (pathname: string): string => {
   if (pathname.startsWith('/targets/') && pathname !== '/targets') return 'Target Detail';
   if (pathname === '/targets') return 'Targets';
   if (pathname.startsWith('/groups/') && pathname !== '/groups') return 'Group Detail';
-  if (pathname === '/groups') return 'Groups';
+  if (pathname === '/groups') return 'Groups Monitoring';
   if (pathname.startsWith('/firewall')) return 'Firewall';
   if (pathname.startsWith('/threats')) return 'Threats';
   if (pathname.startsWith('/discovery')) return 'Discovery';
-  if (pathname.startsWith('/monitoring')) return 'Monitoring';
+  if (pathname.startsWith('/monitoring')) return 'Target Monitoring';
   if (pathname.startsWith('/logs')) return 'Logs';
   if (pathname.startsWith('/settings')) return 'Settings';
   return 'FireDog';

@@ -7,6 +7,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import { Link } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
 import TabBar from '../components/shared/TabBar';
 import apiService from '../services/api';
@@ -367,6 +368,16 @@ const Monitoring: React.FC = () => {
             </option>
           ))}
         </select>
+        {selectedTarget && (
+          <Link to={`/targets/${selectedTarget}`} className="mon-detail-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+            Vai al dettaglio
+          </Link>
+        )}
       </div>
 
       <div className="mon-tabs">

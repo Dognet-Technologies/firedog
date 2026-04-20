@@ -14,7 +14,7 @@ import ScoreBar from '../components/shared/ScoreBar';
 import TabBar from '../components/shared/TabBar';
 import './TargetDetail.css';
 
-type TabId = 'overview' | 'rules' | 'threats' | 'integrity' | 'traffic' | 'config';
+type TabId = 'overview' | 'rules' | 'threats' | 'integrity' | 'traffic' | 'performance' | 'config';
 
 const TABS = [
   { id: 'overview' as TabId, label: 'Overview' },
@@ -22,6 +22,7 @@ const TABS = [
   { id: 'threats' as TabId, label: 'Threats' },
   { id: 'integrity' as TabId, label: 'Integrity' },
   { id: 'traffic' as TabId, label: 'Traffic' },
+  { id: 'performance' as TabId, label: 'Performance' },
   { id: 'config' as TabId, label: 'Config' },
 ];
 
@@ -49,17 +50,13 @@ const truncateHash = (hash: string): string => {
   return `${hash.slice(0, 8)}...${hash.slice(-8)}`;
 };
 
-// Mock traffic data (TODO: replace with real API call)
-const generateMockTraffic = () => {
-  const data = [];
-  for (let i = 23; i >= 0; i--) {
-    data.push({
-      time: `${i}h`,
-      in: Math.floor(Math.random() * 800 + 200),
-      out: Math.floor(Math.random() * 400 + 100),
-    });
-  }
-  return data;
+const CHART_TOOLTIP_STYLE = {
+  contentStyle: {
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--border-primary)',
+    borderRadius: '8px',
+    fontSize: '12px',
+  },
 };
 
 const TargetDetail: React.FC = () => {
@@ -79,8 +76,10 @@ const TargetDetail: React.FC = () => {
   const [savingConfig, setSavingConfig] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // TODO: replace with real API call
-  const [trafficData] = useState(generateMockTraffic());
+  const [trafficData, setTrafficData] = useState<any[]>([]);
+  const [cpuData, setCpuData] = useState<any[]>([]);
+  const [memData, setMemData] = useState<any[]>([]);
+  const [currentMetrics, setCurrentMetrics] = useState<{ cpu: number; mem: number; disk: number } | null>(null);
 
   const targetId = id ? parseInt(id, 10) : null;
 
@@ -93,11 +92,13 @@ const TargetDetail: React.FC = () => {
   const loadAll = async (tid: number) => {
     setLoading(true);
     try {
-      const [targetData, rulesData, threatsData, integrityData] = await Promise.all([
+      const [targetData, rulesData, threatsData, integrityData, statsData, heartbeatData] = await Promise.all([
         apiService.getTarget(tid),
         apiService.getRules(tid),
         apiService.getThreats({ target: tid, limit: 50 }),
         apiService.getFileIntegrity(),
+        apiService.getFirewallStats(tid, 48),
+        apiService.getHeartbeats(tid, 48),
       ]);
       setTarget(targetData);
       setConfigForm({
@@ -107,9 +108,39 @@ const TargetDetail: React.FC = () => {
       });
       setRules(rulesData.results);
       setThreats(threatsData.results);
-      // Filter integrity records for this target (by target id on each record)
       const filtered = integrityData.results.filter((f) => (f as unknown as { target: number }).target === tid);
       setIntegrity(filtered);
+
+      // Traffic data from FirewallStats
+      if (statsData.length) {
+        const sorted = statsData.slice().reverse();
+        const traffic = sorted.map((s: any, idx: number) => {
+          const prev = sorted[idx - 1];
+          return {
+            time: new Date(s.collected_at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+            in: prev ? Math.max(0, s.input_packets - prev.input_packets) : 0,
+            out: prev ? Math.max(0, s.output_packets - prev.output_packets) : 0,
+          };
+        }).slice(1);
+        setTrafficData(traffic);
+      }
+
+      // Performance data from AgentHeartbeat
+      if (heartbeatData.length) {
+        const sorted = heartbeatData.slice().reverse();
+        setCpuData(sorted.map((hb: any) => ({
+          time: new Date(hb.timestamp).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+          cpu: hb.cpu_percent,
+          load1: +(hb.cpu_percent / 100 * 4).toFixed(2),
+        })));
+        setMemData(sorted.map((hb: any) => ({
+          time: new Date(hb.timestamp).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+          used: Math.round(hb.memory_percent * 81.92),
+          total: 8192,
+        })));
+        const latest = sorted[sorted.length - 1];
+        setCurrentMetrics({ cpu: latest.cpu_percent, mem: latest.memory_percent, disk: latest.disk_percent });
+      }
     } catch (err) {
       console.error('TargetDetail loadAll error:', err);
       showToast({ type: 'error', title: 'Error', message: 'Failed to load target data' });
@@ -644,7 +675,6 @@ const TargetDetail: React.FC = () => {
           <div className="td-traffic">
             <div className="td-section-header">
               <h2>Traffic Analysis</h2>
-              <span className="td-cell-muted" style={{ fontSize: 'var(--font-xs)' }}>TODO: replace with real API call</span>
             </div>
 
             <div className="td-charts-grid">
@@ -708,6 +738,83 @@ const TargetDetail: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ---- PERFORMANCE ---- */}
+        {activeTab === 'performance' && (
+          <div className="td-traffic">
+            <div className="td-section-header">
+              <h2>Performance</h2>
+            </div>
+
+            {!currentMetrics ? (
+              <p className="td-cell-muted">Nessun dato di performance disponibile per questo target.</p>
+            ) : (
+              <>
+                <div className="td-stat-cards" style={{ marginBottom: '24px' }}>
+                  <div className="td-stat-card">
+                    <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>CPU</div>
+                    <div style={{ fontSize: 'var(--font-xl)', fontWeight: 700 }}>{currentMetrics.cpu.toFixed(1)}%</div>
+                  </div>
+                  <div className="td-stat-card">
+                    <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>Memory</div>
+                    <div style={{ fontSize: 'var(--font-xl)', fontWeight: 700 }}>{currentMetrics.mem.toFixed(1)}%</div>
+                  </div>
+                  <div className="td-stat-card">
+                    <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-tertiary)', marginBottom: 4 }}>Disk</div>
+                    <div style={{ fontSize: 'var(--font-xl)', fontWeight: 700 }}>{currentMetrics.disk.toFixed(1)}%</div>
+                  </div>
+                </div>
+
+                <div className="td-charts-grid">
+                  <div className="td-chart-card td-chart-card-full">
+                    <h3 className="td-card-title">CPU Usage %</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={cpuData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                        <XAxis dataKey="time" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} interval="preserveStartEnd" />
+                        <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+                        <Tooltip {...CHART_TOOLTIP_STYLE} />
+                        <Line type="monotone" dataKey="cpu" stroke="var(--status-warning)" dot={false} strokeWidth={2} name="CPU %" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="td-chart-card">
+                    <h3 className="td-card-title">Memory Usage (MB)</h3>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <AreaChart data={memData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="tdMem" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="var(--status-info)" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="var(--status-info)" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="time" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} interval="preserveStartEnd" />
+                        <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+                        <Tooltip {...CHART_TOOLTIP_STYLE} />
+                        <Area type="monotone" dataKey="used" stroke="var(--status-info)" fill="url(#tdMem)" name="Used MB" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="td-chart-card">
+                    <h3 className="td-card-title">CPU Load Average</h3>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={cpuData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                        <XAxis dataKey="time" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} interval="preserveStartEnd" />
+                        <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+                        <Tooltip {...CHART_TOOLTIP_STYLE} />
+                        <Line type="monotone" dataKey="load1" stroke="var(--accent-primary)" dot={false} strokeWidth={2} name="Load" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

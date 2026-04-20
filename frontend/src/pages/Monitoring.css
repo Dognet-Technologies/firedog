@@ -195,6 +195,23 @@
   margin-bottom: 20px;
 }
 
+.mon-detail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-sm);
+  color: var(--accent-primary);
+  text-decoration: none;
+  padding: 6px 12px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.mon-detail-link:hover {
+  background: rgba(var(--accent-primary-rgb, 10, 132, 255), 0.1);
+}
+
 .mon-target-label {
   font-size: var(--font-sm);
   color: var(--text-secondary);

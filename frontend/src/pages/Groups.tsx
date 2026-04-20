@@ -74,7 +74,7 @@ const Groups: React.FC = () => {
   return (
     <div className="groups-page">
       <PageHeader
-        title="Groups"
+        title="Groups Monitoring"
         subtitle={`${groups.length} group${groups.length !== 1 ? 's' : ''}`}
         icon={
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
