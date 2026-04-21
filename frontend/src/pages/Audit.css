@@ -17,9 +17,9 @@
 }
 
 .header-left h1 {
-  font-size: 28px;
+  font-size: var(--font-2xl);
   font-weight: 600;
-  color: var(--text-primary, #ffffff);
+  color: var(--text-primary);
   margin: 0 0 8px 0;
 }
 

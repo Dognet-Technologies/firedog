@@ -261,8 +261,17 @@ const Settings: React.FC = () => {
 
   // Apply CSS variables
   useEffect(() => {
+    const r = settings.fontSize / 14;
     document.documentElement.style.setProperty('--font-primary', `'${settings.fontFamily}', sans-serif`);
+    document.documentElement.style.setProperty('--font-xs',   `${Math.round(11 * r)}px`);
+    document.documentElement.style.setProperty('--font-sm',   `${Math.round(13 * r)}px`);
     document.documentElement.style.setProperty('--font-base', `${settings.fontSize}px`);
+    document.documentElement.style.setProperty('--font-md',   `${Math.round(16 * r)}px`);
+    document.documentElement.style.setProperty('--font-lg',   `${Math.round(18 * r)}px`);
+    document.documentElement.style.setProperty('--font-xl',   `${Math.round(20 * r)}px`);
+    document.documentElement.style.setProperty('--font-2xl',  `${Math.round(24 * r)}px`);
+    document.documentElement.style.setProperty('--font-3xl',  `${Math.round(30 * r)}px`);
+    document.documentElement.style.setProperty('--font-4xl',  `${Math.round(36 * r)}px`);
     document.documentElement.style.setProperty('--radius-lg', `${settings.borderRadius}px`);
   }, [settings.fontFamily, settings.fontSize, settings.borderRadius]);
 

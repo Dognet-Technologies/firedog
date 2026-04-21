@@ -26,9 +26,9 @@
   align-items: center;
   gap: 0.75rem;
   margin: 0;
-  font-size: 1.75rem;
+  font-size: var(--font-2xl);
   font-weight: 600;
-  color: #00d9ff;
+  color: var(--text-primary);
 }
 
 .header-left h1 svg {
