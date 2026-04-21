@@ -59,6 +59,12 @@
   font-size: 14px;
   transition: border-color 0.3s;
   box-sizing: border-box;
+  color: #333;
+  background-color: #ffffff;
+}
+
+.form-group input::placeholder {
+  color: #aaa;
 }
 
 .form-group input:focus {

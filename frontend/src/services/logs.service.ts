@@ -3,6 +3,18 @@
  * Gestisce connessione WebSocket e API per log streaming
  */
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+
+function buildWsUrl(path: string): string {
+  // In produzione passa dal reverse proxy nginx (stesso host, schema ws/wss
+  // derivato da http/https). In dev fallback a localhost:8000.
+  if (typeof window !== 'undefined' && window.location && window.location.host) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}${path}`;
+  }
+  return `ws://localhost:8000${path}`;
+}
+
 export interface LogEntry {
   type: 'log' | 'error' | 'connection' | 'clear';
   source?: 'django' | 'celery' | 'application';
@@ -39,7 +51,7 @@ class LogService {
     this.listeners.push(onMessage);
 
     // WebSocket URL con token nell'URL (Django Channels non supporta headers custom)
-    const wsUrl = `ws://localhost:8000/ws/logs/stream/?token=${token}`;
+    const wsUrl = `${buildWsUrl('/ws/logs/stream/')}?token=${token}`;
 
     this.ws = new WebSocket(wsUrl);
 
@@ -102,7 +114,7 @@ class LogService {
   async getHistory(source: string = 'django', lines: number = 100): Promise<string[]> {
     const token = localStorage.getItem('access_token');
     const response = await fetch(
-      `http://localhost:8000/api/logs/?source=${source}&lines=${lines}`,
+      `${API_URL}/logs/?source=${source}&lines=${lines}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -123,7 +135,7 @@ class LogService {
    */
   async getSources(): Promise<LogSource[]> {
     const token = localStorage.getItem('access_token');
-    const response = await fetch('http://localhost:8000/api/logs/sources/', {
+    const response = await fetch(`${API_URL}/logs/sources/`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
