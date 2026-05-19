@@ -25,7 +25,7 @@ export interface Target {
   ip_address: string;
   hostname: string;
   description: string;
-  status: 'pending' | 'installing' | 'online' | 'offline' | 'error';
+  status: 'unpaired' | 'pairing' | 'pending' | 'installing' | 'online' | 'offline' | 'error';
   firedog_version: string;
   ssh_port: number;
   ssh_user: string;
@@ -45,6 +45,7 @@ export interface Target {
 export interface TargetCreate {
   ip_address: string;
   hostname?: string;
+  mac_address?: string;
   description?: string;
   ssh_port?: number;
   ssh_user?: string;

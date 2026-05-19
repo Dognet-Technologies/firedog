@@ -212,6 +212,11 @@ class ApiService {
     return response.data;
   }
 
+  async startPairing(targetId: number): Promise<{ id: number; status: string; expires_at: string }> {
+    const response = await this.api.post('/agent/pairing/start/', { target_id: targetId });
+    return response.data;
+  }
+
   async updateTarget(id: number, data: Partial<Target>): Promise<Target> {
     const response = await this.api.patch(`/targets/${id}/`, data);
     return response.data;

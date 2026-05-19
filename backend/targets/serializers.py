@@ -27,6 +27,7 @@ class TargetSerializer(serializers.ModelSerializer):
             "id",
             "ip_address",
             "hostname",
+            "mac_address",
             "description",
             "status",
             "firedog_version",
@@ -110,6 +111,7 @@ class TargetCreateSerializer(serializers.ModelSerializer):
         fields = [
             "ip_address",
             "hostname",
+            "mac_address",
             "description",
             "ssh_port",
             "ssh_user",
@@ -121,6 +123,19 @@ class TargetCreateSerializer(serializers.ModelSerializer):
         if Target.objects.filter(ip_address=value).exists():
             raise serializers.ValidationError("Questo IP è già registrato come target")
         return value
+
+    def validate_mac_address(self, value):
+        """Normalizza il MAC in lowercase con colon-separator e valida il formato."""
+        if not value:
+            return value
+        import re
+
+        normalized = value.strip().lower().replace("-", ":")
+        if not re.fullmatch(r"([0-9a-f]{2}:){5}[0-9a-f]{2}", normalized):
+            raise serializers.ValidationError(
+                "MAC address non valido (formato atteso AA:BB:CC:DD:EE:FF)"
+            )
+        return normalized
 
     def create(self, validated_data):
         """Crea target e assegna ai gruppi specificati"""

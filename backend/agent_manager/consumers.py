@@ -133,6 +133,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
             # Crea/Aggiorna connessione
             self.connection = await self.create_connection(self.target)
+            group_name = await self.get_target_group_name(self.target)
 
             await self.send(
                 text_data=json.dumps(
@@ -143,7 +144,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
                         "phase_1_verified": True,
                         "phase_2_verified": True,
                         "target_id": self.target.id,
-                        "group": self.target.gruppo or "default",
+                        "group": group_name,
                     }
                 )
             )
@@ -338,11 +339,11 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 pairing_session.completed_at = timezone.now()
                 pairing_session.save()
 
-                # Aggiorna target con gruppo
+                # Aggiorna stato target (il gruppo è gestito dalla relazione
+                # many-to-many TargetGroup, non più dal campo legacy `gruppo`).
                 target.status = "online"
                 target.last_seen = timezone.now()
-                target.gruppo = group  # Salva il gruppo
-                target.save()
+                target.save(update_fields=["status", "last_seen"])
 
                 return pairing_session
 
@@ -355,6 +356,12 @@ class AgentConsumer(AsyncWebsocketConsumer):
     def get_target_by_session(self, session):
         """Ottiene target da sessione"""
         return session.target
+
+    @database_sync_to_async
+    def get_target_group_name(self, target):
+        """Ritorna il nome del primo gruppo associato (o 'default')."""
+        first_group = target.groups.first()
+        return first_group.name if first_group else "default"
 
     @database_sync_to_async
     def create_connection(self, target):

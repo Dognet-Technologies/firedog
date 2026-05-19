@@ -46,6 +46,7 @@ const Targets: React.FC = () => {
   const [formData, setFormData] = useState<TargetCreate & { group_ids?: number[] }>({
     ip_address: '',
     hostname: '',
+    mac_address: '',
     description: '',
     group_ids: [],
   });
@@ -53,6 +54,11 @@ const Targets: React.FC = () => {
   useEffect(() => {
     loadTargets();
     loadGroups();
+    // Auto-refresh dei target ogni 5s (status, last_seen, ecc. cambiano lato server
+    // quando un agent si associa o invia heartbeat). Polling — da sostituire con
+    // una subscription WebSocket dedicata quando il backend espone l'evento.
+    const intervalId = setInterval(loadTargets, 5000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const loadTargets = async () => {
@@ -94,6 +100,7 @@ const Targets: React.FC = () => {
       setFormData({
         ip_address: '',
         hostname: '',
+        mac_address: '',
         description: '',
         group_ids: []
       });
@@ -110,6 +117,23 @@ const Targets: React.FC = () => {
         title: 'Errore',
         message: 'Impossibile creare il target'
       });
+    }
+  };
+
+  const handlePair = async (id: number, label: string) => {
+    try {
+      const session = await apiService.startPairing(id);
+      showToast({
+        type: 'success',
+        title: 'Pairing avviato',
+        message: `Sessione #${session.id} aperta per ${label}. Avvia l'agent entro 3 minuti.`
+      });
+      loadTargets();
+    } catch (error: unknown) {
+      const msg =
+        (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        'Errore avvio pairing (controlla che IP/hostname/MAC siano impostati)';
+      showToast({ type: 'error', title: 'Pairing fallito', message: msg });
     }
   };
 
@@ -398,6 +422,17 @@ const Targets: React.FC = () => {
                   <td className="actions-cell">
                     <div className="action-buttons">
                       <button
+                        onClick={() => handlePair(target.id, target.hostname || target.ip_address)}
+                        className="btn-icon"
+                        title="Open pairing session (3 min) for the agent"
+                        disabled={target.status === 'pairing' || target.status === 'installing'}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M10 14a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                          <path d="M14 10a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                        </svg>
+                      </button>
+                      <button
                         onClick={() => handleDelete(target.id)}
                         className="btn-icon btn-danger"
                         title="Delete Target"
@@ -446,6 +481,20 @@ const Targets: React.FC = () => {
                   onChange={e => setFormData({...formData, hostname: e.target.value})}
                   placeholder="server-01"
                 />
+              </div>
+              <div className="form-group">
+                <label>MAC Address <span className="required">*</span></label>
+                <input
+                  type="text"
+                  value={formData.mac_address || ''}
+                  onChange={e => setFormData({...formData, mac_address: e.target.value})}
+                  placeholder="AA:BB:CC:DD:EE:FF"
+                  pattern="^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$"
+                  required
+                />
+                <small style={{ color: '#888' }}>
+                  Necessario per l'identity hash usato dal pairing dell'agent
+                </small>
               </div>
               <div className="form-group">
                 <label>Gruppi (seleziona uno o più)</label>
