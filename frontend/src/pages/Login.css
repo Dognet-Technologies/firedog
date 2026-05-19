@@ -1,129 +1,246 @@
-.login-container {
+/* ============================================================================
+ * Login — riscritto da zero. Tutte le classi sono prefissate `fd-login__` per
+ * evitare collisioni con il resto del CSS dell'app.
+ *
+ * Principi:
+ * - testo nei campi ha contrasto AA (>= 4.5:1) sul background scelto
+ * - niente blur / glassmorphism sopra al testo
+ * - tutto su una colonna verticale, mobile-friendly
+ * ============================================================================ */
+
+.fd-login {
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(60% 60% at 50% 0%, rgba(255, 90, 30, 0.10), transparent 70%),
+    radial-gradient(50% 50% at 80% 100%, rgba(80, 120, 255, 0.08), transparent 70%),
+    #0b0d12;
+  color: #e6e9ef;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
-.login-box {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+.fd-login__panel {
   width: 100%;
   max-width: 420px;
-  overflow: hidden;
+  background: #161922;
+  border: 1px solid #262a36;
+  border-radius: 14px;
+  padding: 32px 28px 24px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 24px 60px -20px rgba(0, 0, 0, 0.6);
 }
 
-.login-header {
-  background: #1a1d29;
-  color: white;
-  padding: 40px 30px;
-  text-align: center;
+/* ── brand ─────────────────────────────────────────────────────────────────── */
+.fd-login__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
 }
 
-.login-header h1 {
-  margin: 0 0 10px 0;
+.fd-login__logo {
   font-size: 32px;
-  font-weight: 600;
+  line-height: 1;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #ff6b35, #f59f00);
+  border-radius: 12px;
+  box-shadow: 0 6px 16px -6px rgba(255, 107, 53, 0.4);
 }
 
-.login-header p {
+.fd-login__title {
   margin: 0;
-  color: #a0a0a0;
-  font-size: 14px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #f5f7fb;
 }
 
-.login-form {
-  padding: 30px;
+.fd-login__subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #8a93a6;
 }
 
-.form-group {
-  margin-bottom: 20px;
+/* ── form ──────────────────────────────────────────────────────────────────── */
+.fd-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  color: #333;
-  font-weight: 500;
-  font-size: 14px;
+.fd-login__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.form-group input {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-  transition: border-color 0.3s;
-  box-sizing: border-box;
-  color: #333;
-  background-color: #ffffff;
-}
-
-.form-group input::placeholder {
-  color: #aaa;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.form-group input:disabled {
-  background: #f5f5f5;
-  cursor: not-allowed;
-}
-
-.error-message {
-  background: #fee;
-  border: 1px solid #fcc;
-  color: #c33;
-  padding: 12px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  font-size: 14px;
-}
-
-.btn-login {
-  width: 100%;
-  padding: 14px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
+.fd-login__label {
+  font-size: 12px;
   font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  color: #b3bccc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.btn-login:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+/* Input: massima leggibilità.
+   - background scuro PIENO (no transparency)
+   - testo bianco/quasi
+   - border visibile in stato rest, accent in focus */
+.fd-login__input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;
+  padding: 0 14px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: #f5f7fb;
+  background: #1f2330;
+  border: 1px solid #2e3344;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  -webkit-text-fill-color: #f5f7fb;
+  caret-color: #ff8a4a;
 }
 
-.btn-login:active:not(:disabled) {
-  transform: translateY(0);
+.fd-login__input::placeholder {
+  color: #5f6779;
+  opacity: 1;
 }
 
-.btn-login:disabled {
+.fd-login__input:hover:not(:disabled) {
+  border-color: #3a4156;
+}
+
+.fd-login__input:focus {
+  border-color: #ff8a4a;
+  background: #232838;
+  box-shadow: 0 0 0 3px rgba(255, 138, 74, 0.18);
+}
+
+.fd-login__input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.login-footer {
-  padding: 20px;
-  text-align: center;
-  background: #f9f9f9;
-  border-top: 1px solid #eee;
+/* Autofill di Chrome/Edge: rimuove il giallo, mantiene il nostro tema */
+.fd-login__input:-webkit-autofill,
+.fd-login__input:-webkit-autofill:hover,
+.fd-login__input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f5f7fb;
+  -webkit-box-shadow: 0 0 0 1000px #1f2330 inset;
+  box-shadow: 0 0 0 1000px #1f2330 inset;
+  caret-color: #ff8a4a;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
-.login-footer p {
-  margin: 0;
-  color: #666;
-  font-size: 12px;
+/* Password con bottone show/hide */
+.fd-login__input-wrap {
+  position: relative;
+}
+
+.fd-login__input--password {
+  padding-right: 44px;
+}
+
+.fd-login__toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  color: #b3bccc;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.fd-login__toggle:hover {
+  background: #2a3041;
+  color: #f5f7fb;
+}
+
+/* Checkbox remember */
+.fd-login__remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #b3bccc;
+  cursor: pointer;
+  user-select: none;
+}
+
+.fd-login__remember input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #ff8a4a;
+  cursor: pointer;
+}
+
+/* ── submit ────────────────────────────────────────────────────────────────── */
+.fd-login__submit {
+  margin-top: 4px;
+  height: 46px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: #1a0e08;
+  background: linear-gradient(135deg, #ff8a4a, #ff6b35);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 80ms ease, filter 120ms ease, box-shadow 120ms ease;
+  box-shadow: 0 6px 18px -8px rgba(255, 107, 53, 0.55);
+}
+
+.fd-login__submit:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 10px 24px -10px rgba(255, 107, 53, 0.7);
+}
+
+.fd-login__submit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.fd-login__submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ── alert (errore) ────────────────────────────────────────────────────────── */
+.fd-login__alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #ffd6cc;
+  background: rgba(255, 76, 76, 0.10);
+  border: 1px solid rgba(255, 76, 76, 0.40);
+  border-radius: 8px;
+}
+
+/* ── footer ────────────────────────────────────────────────────────────────── */
+.fd-login__footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #232838;
+  text-align: center;
+  font-size: 11px;
+  color: #6a7387;
 }
