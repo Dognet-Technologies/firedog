@@ -14,8 +14,9 @@ from .models import (
     AgentCommand,
     AgentHeartbeat,
 )
-from targets.models import Target, Alert, FirewallStats
+from targets.models import Target, Alert, FirewallStats, BlockedIP
 from threats.models import ThreatLog
+from rules.models import FirewallRule
 
 logger = logging.getLogger(__name__)
 
@@ -495,6 +496,192 @@ class AgentConsumer(AsyncWebsocketConsumer):
             },
         )
 
+        # Estensioni: stessa snapshot popola anche regole, IP bloccati e threat log.
+        # Ogni helper è sincrono e gira dentro lo stesso wrapper async.
+        self._sync_firewall_rules(payload.get("rules") or {})
+        self._sync_blocked_ips(payload.get("rules") or {})
+        self._sync_threat_log(payload.get("threats") or [])
+
+    def _sync_firewall_rules(self, rules_by_chain):
+        """Sincronizza la tabella FirewallRule con lo snapshot ricevuto.
+
+        Per ogni chain (INPUT/OUTPUT/FORWARD) fa upsert sulle regole presenti
+        nel payload (chiave = target+chain+rule_number) ed elimina quelle
+        non-custom rimaste fuori dallo snapshot (le custom create dalla UI
+        restano intoccate finché non risultano sincronizzate).
+        """
+        import re as _re
+
+        valid_chains = {"INPUT", "OUTPUT", "FORWARD"}
+        valid_actions = {"ACCEPT", "DROP", "REJECT"}
+        valid_protos = {"tcp", "udp", "icmp", "all"}
+
+        for chain, rules in (rules_by_chain or {}).items():
+            if chain not in valid_chains or not isinstance(rules, list):
+                continue
+
+            seen_rule_numbers = []
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    continue
+                action = (rule.get("target") or "").upper()
+                if action not in valid_actions:
+                    # Target è una chain custom (es. SSH_PROTECT, ICMP_FLOOD):
+                    # non rappresentabile come FirewallRule "classica", skip.
+                    continue
+
+                proto = (rule.get("prot") or "all").lower()
+                if proto not in valid_protos:
+                    proto = "all"
+
+                # Estrai porta da `extra` (es. "tcp dpt:22"). Fallback su None.
+                port = None
+                extra = rule.get("extra") or ""
+                m = _re.search(r"dpt:(\d+)", extra)
+                if m:
+                    try:
+                        p = int(m.group(1))
+                        if 1 <= p <= 65535:
+                            port = p
+                    except ValueError:
+                        pass
+
+                source_ip = rule.get("source") or ""
+                if source_ip in ("0.0.0.0/0", "::/0", "anywhere", ""):
+                    source_ip = None
+                else:
+                    source_ip = source_ip.split("/")[0]  # CIDR → host part
+
+                dest_ip = rule.get("destination") or ""
+                if dest_ip in ("0.0.0.0/0", "::/0", "anywhere", ""):
+                    dest_ip = None
+                else:
+                    dest_ip = dest_ip.split("/")[0]
+
+                rule_number = rule.get("num") or 0
+                if rule_number <= 0:
+                    continue
+                seen_rule_numbers.append(rule_number)
+
+                FirewallRule.objects.update_or_create(
+                    target=self.target,
+                    chain=chain,
+                    rule_number=rule_number,
+                    defaults={
+                        "protocol": proto,
+                        "port": port,
+                        "source_ip": source_ip,
+                        "dest_ip": dest_ip,
+                        "action": action,
+                        "comment": (rule.get("comment") or "")[:256],
+                        "is_custom": False,
+                        "is_synced": True,
+                    },
+                )
+
+            # Rimuovi regole non-custom della chain che non sono più presenti
+            # nell'ultima snapshot. Le regole custom (create dalla UI ma non
+            # ancora applicate sul target) vengono lasciate in pace.
+            FirewallRule.objects.filter(
+                target=self.target,
+                chain=chain,
+                is_custom=False,
+            ).exclude(rule_number__in=seen_rule_numbers).delete()
+
+    def _sync_blocked_ips(self, rules_by_chain):
+        """Deriva BlockedIP dalle regole DROP con un source/destination specifico.
+
+        Politica:
+          - INPUT  DROP  -s X  → X è bloccato in ingresso
+          - OUTPUT DROP  -d X  → X è bloccato in uscita
+
+        Gli IP osservati vengono upsert-ati con blocked_by="agent-snapshot"; quelli
+        che erano in questo set ma non sono più presenti nell'ultima snapshot
+        vengono marcati is_active=False (NON eliminati — utile per audit).
+        Le entry create dalla UI (blocked_by≠"agent-snapshot") non vengono toccate.
+        """
+        observed_ips: set[str] = set()
+
+        for chain, rules in (rules_by_chain or {}).items():
+            if chain not in {"INPUT", "OUTPUT"} or not isinstance(rules, list):
+                continue
+            for rule in rules:
+                if (rule.get("target") or "").upper() != "DROP":
+                    continue
+                ip_field = "source" if chain == "INPUT" else "destination"
+                ip = rule.get(ip_field) or ""
+                if ip in ("0.0.0.0/0", "::/0", "anywhere", ""):
+                    continue
+                ip = ip.split("/")[0]
+                observed_ips.add(ip)
+
+                BlockedIP.objects.update_or_create(
+                    target=self.target,
+                    ip_address=ip,
+                    defaults={
+                        "block_reason": "manual",
+                        "description": (rule.get("comment") or f"iptables DROP {chain}")[:512],
+                        "blocked_by": "agent-snapshot",
+                        "packet_count": int(rule.get("pkts") or 0),
+                        "is_active": True,
+                    },
+                )
+
+        BlockedIP.objects.filter(
+            target=self.target, blocked_by="agent-snapshot", is_active=True,
+        ).exclude(ip_address__in=observed_ips).update(is_active=False)
+
+    def _sync_threat_log(self, threats):
+        """Aggiorna ThreatLog dai dati threat estratti dal pcap input_dropped.
+
+        Schema atteso per ciascun threat: {ip, score, attempts, reasons[]}.
+        Per evitare bloat, fa update_or_create su (target, source_ip, is_resolved=False):
+        un nuovo evento per lo stesso IP aggiorna lo score e il contatore;
+        se l'amministratore ha marcato il threat come `is_resolved=True` viene
+        creato un nuovo record.
+        """
+        if not isinstance(threats, list):
+            return
+
+        for t in threats:
+            if not isinstance(t, dict):
+                continue
+            ip = t.get("ip")
+            if not ip:
+                continue
+            try:
+                score = max(0, min(100, int(t.get("score", 0) or 0)))
+            except (TypeError, ValueError):
+                continue
+
+            if score >= 80:
+                severity = "critical"
+            elif score >= 60:
+                severity = "high"
+            elif score >= 40:
+                severity = "medium"
+            else:
+                severity = "low"
+
+            reasons = t.get("reasons") or []
+            if not isinstance(reasons, list):
+                reasons = [str(reasons)]
+
+            attempts = int(t.get("attempts", 1) or 1)
+
+            ThreatLog.objects.update_or_create(
+                target=self.target,
+                source_ip=ip,
+                is_resolved=False,
+                defaults={
+                    "threat_score": score,
+                    "severity": severity,
+                    "packet_count": attempts,
+                    "reasons": reasons,
+                    "description": ", ".join(str(r) for r in reasons)[:512],
+                },
+            )
+
     @database_sync_to_async
     def save_threat_log(self, threat):
         """Salva threat log"""
@@ -521,12 +708,13 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def update_command_status(self, command_id, command_status, result, error):
-        """Aggiorna status comando"""
+        """Aggiorna status comando + riconcilia oggetti DB tramite payload._meta."""
         try:
             command = AgentCommand.objects.get(command_id=command_id)
 
             if command_status == "success":
                 command.mark_success(result)
+                self._reconcile_command_meta(command)
             elif command_status == "failed":
                 command.mark_failed(error or "Unknown error")
             elif command_status == "executing":
@@ -534,6 +722,26 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
         except AgentCommand.DoesNotExist:
             logger.error(f"Command not found: {command_id}")
+
+    def _reconcile_command_meta(self, command):
+        """Mark referenced DB objects as synced when the agent confirms success.
+
+        Riconosce:
+          - add_rule  → FirewallRule.is_synced = True (via _meta.rule_id)
+          - remove_rule → FirewallRule.objects.filter(id=rule_id).delete()
+          - block_ip   → BlockedIP.is_active = True
+        """
+        meta = (command.payload or {}).get("_meta") or {}
+        if not meta:
+            return
+        action = command.action
+
+        if action == "add_rule" and meta.get("rule_id"):
+            FirewallRule.objects.filter(id=meta["rule_id"]).update(is_synced=True)
+        elif action == "remove_rule" and meta.get("rule_id"):
+            FirewallRule.objects.filter(id=meta["rule_id"]).delete()
+        elif action == "block_ip" and meta.get("blocked_ip_id"):
+            BlockedIP.objects.filter(id=meta["blocked_ip_id"]).update(is_active=True)
 
     @database_sync_to_async
     def mark_connection_offline(self):

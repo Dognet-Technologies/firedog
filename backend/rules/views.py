@@ -50,6 +50,66 @@ class FirewallRuleViewSet(viewsets.ModelViewSet):
             return FirewallRuleListSerializer
         return FirewallRuleSerializer
 
+    def perform_create(self, serializer):
+        """Salva la rule in DB e la dispatcha all'agent del target via WS.
+
+        Se l'agent non è connesso, la rule viene comunque persistita con
+        is_synced=False: sarà la successiva snapshot dell'agent a riconciliarla
+        (o l'utente potrà ri-applicarla manualmente).
+        """
+        from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
+
+        rule = serializer.save(is_custom=True, is_synced=False)
+        payload = {
+            "chain": rule.chain,
+            "protocol": rule.protocol if rule.protocol != "all" else None,
+            "action": rule.action,
+            "src_ip": rule.source_ip,
+            "dst_ip": rule.dest_ip,
+            "dst_port": rule.port,
+            "comment": rule.comment or None,
+        }
+        # rimuovi None per non confondere l'agent (serde li accetterebbe come null)
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        try:
+            dispatch_command_to_agent(
+                rule.target,
+                action="add_rule",
+                payload=payload,
+                meta={"rule_id": rule.id},
+            )
+            logger.info("add_rule dispatched to target %s for rule %s", rule.target.id, rule.id)
+        except AgentNotConnected as e:
+            logger.warning("rule %s saved DB-only: %s", rule.id, e)
+
+    def perform_destroy(self, instance):
+        """Cancella la rule lato server e chiede all'agent di rimuoverla.
+
+        Per semplicità V1: se l'agent non è connesso, eliminiamo comunque dal DB
+        (l'utente potrà fare cleanup manuale o aspettare la prossima snapshot
+        che ri-osserverà la rule come is_custom=False).
+        """
+        from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
+
+        target = instance.target
+        rule_number = instance.rule_number
+        chain = instance.chain
+        instance.delete()
+
+        if rule_number:
+            try:
+                dispatch_command_to_agent(
+                    target,
+                    action="remove_rule",
+                    payload={"chain": chain, "rule_num": rule_number},
+                    meta={},
+                )
+                logger.info("remove_rule dispatched to target %s chain=%s num=%s",
+                            target.id, chain, rule_number)
+            except AgentNotConnected as e:
+                logger.warning("rule deleted DB-only: %s", e)
+
     @action(
         detail=False,
         methods=["post"],
