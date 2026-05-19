@@ -51,6 +51,15 @@ const Targets: React.FC = () => {
     group_ids: [],
   });
 
+  // Set di target che hanno appena cambiato status verso "online" — usato per
+  // animare il dot per ~10s e poi tornare statico. Niente euristiche su
+  // last_seen (che si aggiorna ad ogni heartbeat e quindi è sempre "fresh"
+  // per i target online).
+  const [justPairedIds, setJustPairedIds] = useState<Set<number>>(new Set());
+  // ref alla mappa precedente id → status, per detection delle transizioni
+  // ad ogni poll. Inizialmente null → first load non triggera il pulse.
+  const prevStatusRef = React.useRef<Map<number, string> | null>(null);
+
   useEffect(() => {
     loadTargets();
     loadGroups();
@@ -64,6 +73,38 @@ const Targets: React.FC = () => {
   const loadTargets = async () => {
     try {
       const data = await apiService.getTargets();
+      // Detection delle transizioni di status (X → online) per attivare il
+      // pulse iniziale solo per qualche secondo. La PRIMA load non triggera
+      // niente (prevStatusRef è null), così aprire la pagina non fa lampeggiare
+      // tutti i target già online.
+      if (prevStatusRef.current !== null) {
+        const newlyOnline: number[] = [];
+        for (const t of data.results) {
+          const prev = prevStatusRef.current.get(t.id);
+          if (prev && prev !== 'online' && t.status === 'online') {
+            newlyOnline.push(t.id);
+          }
+        }
+        if (newlyOnline.length > 0) {
+          setJustPairedIds(prev => {
+            const next = new Set(prev);
+            newlyOnline.forEach(id => next.add(id));
+            return next;
+          });
+          // Dopo ~10s (≈ 5 iterazioni × 2s del pulse), rimuovi la classe.
+          newlyOnline.forEach(id => {
+            setTimeout(() => {
+              setJustPairedIds(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+              });
+            }, 10_000);
+          });
+        }
+      }
+      // Aggiorna lo snapshot per il prossimo poll
+      prevStatusRef.current = new Map(data.results.map(t => [t.id, t.status]));
       setTargets(data.results);
     } catch (error) {
       console.error('Error loading targets:', error);
@@ -230,15 +271,8 @@ const Targets: React.FC = () => {
   //  rosso   = paired ma irraggiungibile (offline/error)
   //  arancio = noto ma non ancora associato (unpaired/pending/pairing)
   //  giallo  = installazione in corso
-  // Per i target "appena associati" (entrati in online da poco) aggiungo
-  // status-dot--just-paired che fa pulsare il dot per ~10s e poi si ferma.
-  const isJustPaired = (target: Target): boolean => {
-    if (target.status !== 'online' || !target.last_seen) return false;
-    // last_seen entro 60s → ancora "fresh"; la classe esiste in DOM per
-    // ~10s di pulse (5 iter × 2s) e poi resta statico.
-    return Date.now() - new Date(target.last_seen).getTime() < 60_000;
-  };
-
+  // status-dot--just-paired è applicato solo per ~10s dopo la transizione
+  // verso online (gestita da loadTargets via justPairedIds set).
   const getStatusIcon = (target: Target) => {
     const status = target.status;
     let cls = 'status-pending';
@@ -247,7 +281,7 @@ const Targets: React.FC = () => {
     else if (status === 'offline' || status === 'error') { cls = 'status-danger'; title = status === 'error' ? 'Error' : 'Paired · offline'; }
     else if (status === 'unpaired' || status === 'pending' || status === 'pairing') { cls = 'status-warning'; title = status === 'pairing' ? 'Pairing in progress' : 'Not paired yet'; }
     else if (status === 'installing') { cls = 'status-info'; title = 'Installing'; }
-    const justPaired = isJustPaired(target) ? ' status-dot--just-paired' : '';
+    const justPaired = justPairedIds.has(target.id) ? ' status-dot--just-paired' : '';
     return <span className={`status-dot ${cls}${justPaired}`} title={title}></span>;
   };
 
