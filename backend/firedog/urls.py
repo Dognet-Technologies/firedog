@@ -25,6 +25,7 @@ from settings.views import (
 
 # Import Log Views
 from api.views import LogAPIView, LogSourcesAPIView
+from api.views_system import SystemUpdateCheckView, SystemUpdateInstallView
 
 # Router per API REST
 router = DefaultRouter()
@@ -58,6 +59,9 @@ urlpatterns = [
     # Log APIs
     path("api/logs/", LogAPIView.as_view(), name="logs"),
     path("api/logs/sources/", LogSourcesAPIView.as_view(), name="logs-sources"),
+    # System update (git pull + build + migrate + restart)
+    path("api/system/update/check/", SystemUpdateCheckView.as_view(), name="system-update-check"),
+    path("api/system/update/install/", SystemUpdateInstallView.as_view(), name="system-update-install"),
     # Gruppi
     path("api/", include("targets.urls_groups")),
     # Settings

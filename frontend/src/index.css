@@ -254,40 +254,43 @@ pre {
   text-shadow: 0 0 10px var(--accent-primary);
 }
 
-/* Status Indicators */
+/* Status Indicators — outline-style: cerchio vuoto con bordo colorato.
+   Niente pulse infinito: il pulse parte solo se il dot ha la classe
+   `.status-dot--just-paired` e si esaurisce in 5 cicli (~10s) per dare
+   feedback subito dopo l'associazione, poi resta statico. Lo stato a regime
+   è un anello solido nel colore corrispondente.
+*/
 .status-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 12px;
+  height: 12px;
   border-radius: var(--radius-full);
+  border: 2px solid currentColor;
+  background: transparent;
   position: relative;
+  box-sizing: border-box;
+  vertical-align: middle;
 }
 
-.status-dot::before {
+.status-dot.status-dot--just-paired::before {
   content: '';
   position: absolute;
-  width: 100%;
-  height: 100%;
+  inset: -3px;
   border-radius: var(--radius-full);
-  animation: pulse-dot 2s infinite;
+  border: 2px solid currentColor;
+  animation: pulse-dot 2s ease-out 5;
+  opacity: 0;
 }
 
-.status-success { background: var(--status-success); }
-.status-success::before { background: var(--status-success); }
-
-.status-warning { background: var(--status-warning); }
-.status-warning::before { background: var(--status-warning); }
-
-.status-danger { background: var(--status-danger); }
-.status-danger::before { background: var(--status-danger); }
-
-.status-info { background: var(--status-info); }
-.status-info::before { background: var(--status-info); }
+.status-success { color: var(--status-success); }
+.status-warning { color: var(--status-warning); }
+.status-danger  { color: var(--status-danger); }
+.status-info    { color: var(--status-info); }
 
 @keyframes pulse-dot {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.5); opacity: 0; }
-  100% { transform: scale(1); opacity: 0; }
+  0%   { transform: scale(0.95); opacity: 0.9; }
+  60%  { transform: scale(1.6);  opacity: 0; }
+  100% { transform: scale(1.6);  opacity: 0; }
 }
 
 /* Badges */

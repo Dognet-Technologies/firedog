@@ -550,6 +550,18 @@ class ApiService {
     return response.data;
   }
 
+  async checkSystemUpdate(): Promise<{ ok: boolean; error?: string; branch?: string; installed?: string; available?: string; commits_behind?: number; changelog?: string[]; up_to_date?: boolean }> {
+    const response = await this.api.get('/system/update/check/');
+    return response.data;
+  }
+
+  async installSystemUpdate(): Promise<{ ok: boolean; exit_code?: number; stdout?: string; stderr?: string; error?: string }> {
+    // L'install può durare anche 1-2 minuti (npm ci + build + migrate + restart).
+    // Aumento timeout default di axios per evitare di abortire prematuramente.
+    const response = await this.api.post('/system/update/install/', undefined, { timeout: 10 * 60 * 1000 });
+    return response.data;
+  }
+
   // Whitelist methods
   async getWhitelistByTarget(targetId: number) {
     const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);

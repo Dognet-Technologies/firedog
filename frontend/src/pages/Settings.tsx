@@ -97,6 +97,137 @@ interface UserProfile {
 
 type TabType = 'general' | 'appearance' | 'notifications' | 'security' | 'monitoring' | 'ssh' | 'database';
 
+interface UpdateCheckResponse {
+  ok: boolean;
+  error?: string;
+  branch?: string;
+  installed?: string;
+  available?: string;
+  commits_behind?: number;
+  changelog?: string[];
+  up_to_date?: boolean;
+}
+
+interface UpdateInstallResponse {
+  ok: boolean;
+  exit_code?: number;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+}
+
+const UpdateSection: React.FC = () => {
+  const { showToast, showConfirm } = useNotifications();
+  const [checking, setChecking] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [info, setInfo] = useState<UpdateCheckResponse | null>(null);
+  const [lastInstall, setLastInstall] = useState<UpdateInstallResponse | null>(null);
+
+  const handleCheck = async () => {
+    setChecking(true);
+    try {
+      const resp = await api.checkSystemUpdate();
+      setInfo(resp);
+      if (!resp.ok) {
+        showToast({ type: 'error', title: 'Check fallito', message: resp.error || 'Errore' });
+      } else if (resp.up_to_date) {
+        showToast({ type: 'success', title: 'Aggiornato', message: 'Versione più recente già installata' });
+      } else {
+        showToast({ type: 'info', title: 'Update disponibile', message: `${resp.commits_behind} commit indietro su ${resp.branch}` });
+      }
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Errore di rete';
+      showToast({ type: 'error', title: 'Check fallito', message: msg });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleInstall = async () => {
+    showConfirm({
+      title: 'Installa aggiornamento',
+      message: 'Verrà eseguito git pull, rebuild del frontend, migrazioni DB e restart del backend/celery. Il sistema sarà brevemente offline. Procedere?',
+      confirmText: 'Installa',
+      cancelText: 'Annulla',
+      type: 'warning',
+      onConfirm: async () => {
+        setInstalling(true);
+        setLastInstall(null);
+        try {
+          const resp = await api.installSystemUpdate();
+          setLastInstall(resp);
+          if (resp.ok) {
+            showToast({ type: 'success', title: 'Update completato', message: 'Backend riavviato. Ricarica la pagina.' });
+            // re-check per refreshare versione installata
+            handleCheck();
+          } else {
+            showToast({ type: 'error', title: 'Update fallito', message: resp.error || `exit ${resp.exit_code}` });
+          }
+        } catch (e: unknown) {
+          const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Errore di rete';
+          showToast({ type: 'error', title: 'Update fallito', message: msg });
+        } finally {
+          setInstalling(false);
+        }
+      },
+    });
+  };
+
+  return (
+    <div className="settings-update-section" style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid var(--border-color, #333)' }}>
+      <h2 className="section-title">Aggiornamenti</h2>
+      <p className="section-description">Scarica e installa l'ultima versione del codice dal repository GitHub.</p>
+
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <button className="btn-secondary" onClick={handleCheck} disabled={checking || installing}>
+          {checking ? 'Checking…' : 'Verifica aggiornamenti'}
+        </button>
+        <button
+          className="btn-primary"
+          onClick={handleInstall}
+          disabled={installing || checking || !info?.ok || info?.up_to_date}
+          title={info?.up_to_date ? 'Già aggiornato' : 'Installa update'}
+        >
+          {installing ? 'Installazione in corso…' : 'Installa update'}
+        </button>
+      </div>
+
+      {info && info.ok && (
+        <div style={{ background: 'var(--bg-secondary, #1a1a1a)', padding: 12, borderRadius: 6, fontFamily: 'monospace', fontSize: 12 }}>
+          <div>Branch:    <strong>{info.branch}</strong></div>
+          <div>Installato: {info.installed}</div>
+          <div>Disponibile: {info.available}</div>
+          <div>Commits behind: <strong style={{ color: (info.commits_behind ?? 0) > 0 ? 'var(--status-warning)' : 'var(--status-success)' }}>{info.commits_behind ?? 0}</strong></div>
+          {info.changelog && info.changelog.length > 0 && (
+            <details style={{ marginTop: 8 }}>
+              <summary style={{ cursor: 'pointer' }}>Changelog ({info.changelog.length})</summary>
+              <ul style={{ marginTop: 6 }}>
+                {info.changelog.map((c, i) => <li key={i}>{c}</li>)}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
+      {info && !info.ok && (
+        <div style={{ background: 'var(--bg-secondary, #2a1a1a)', padding: 12, borderRadius: 6, color: 'var(--status-danger)' }}>
+          {info.error}
+        </div>
+      )}
+
+      {lastInstall && (
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: 'pointer' }}>Log esecuzione update.sh (exit {lastInstall.exit_code})</summary>
+          <pre style={{ background: 'var(--bg-secondary, #1a1a1a)', padding: 12, borderRadius: 6, maxHeight: 400, overflow: 'auto', fontSize: 11 }}>
+            {lastInstall.stdout || ''}
+            {lastInstall.stderr ? `\n--- STDERR ---\n${lastInstall.stderr}` : ''}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
+};
+
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const { showToast, showConfirm } = useNotifications();
@@ -1075,6 +1206,8 @@ const Settings: React.FC = () => {
           <span className="form-hint">Lingua dell'interfaccia</span>
         </div>
       </div>
+
+      <UpdateSection />
     </div>
   );
 

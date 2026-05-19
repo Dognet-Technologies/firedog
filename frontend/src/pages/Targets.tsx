@@ -225,20 +225,30 @@ const Targets: React.FC = () => {
       return 0;
     });
 
-  // Icona stato
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'online':
-        return <span className="status-dot status-online" title="Online"></span>;
-      case 'offline':
-        return <span className="status-dot status-offline" title="Offline"></span>;
-      case 'error':
-        return <span className="status-dot status-error" title="Error"></span>;
-      case 'installing':
-        return <span className="status-dot status-installing" title="Installing"></span>;
-      default:
-        return <span className="status-dot status-pending" title="Pending"></span>;
-    }
+  // Icona stato — anello colorato:
+  //  verde   = paired + raggiungibile (online)
+  //  rosso   = paired ma irraggiungibile (offline/error)
+  //  arancio = noto ma non ancora associato (unpaired/pending/pairing)
+  //  giallo  = installazione in corso
+  // Per i target "appena associati" (entrati in online da poco) aggiungo
+  // status-dot--just-paired che fa pulsare il dot per ~10s e poi si ferma.
+  const isJustPaired = (target: Target): boolean => {
+    if (target.status !== 'online' || !target.last_seen) return false;
+    // last_seen entro 60s → ancora "fresh"; la classe esiste in DOM per
+    // ~10s di pulse (5 iter × 2s) e poi resta statico.
+    return Date.now() - new Date(target.last_seen).getTime() < 60_000;
+  };
+
+  const getStatusIcon = (target: Target) => {
+    const status = target.status;
+    let cls = 'status-pending';
+    let title = 'Pending';
+    if (status === 'online') { cls = 'status-success'; title = 'Paired · online'; }
+    else if (status === 'offline' || status === 'error') { cls = 'status-danger'; title = status === 'error' ? 'Error' : 'Paired · offline'; }
+    else if (status === 'unpaired' || status === 'pending' || status === 'pairing') { cls = 'status-warning'; title = status === 'pairing' ? 'Pairing in progress' : 'Not paired yet'; }
+    else if (status === 'installing') { cls = 'status-info'; title = 'Installing'; }
+    const justPaired = isJustPaired(target) ? ' status-dot--just-paired' : '';
+    return <span className={`status-dot ${cls}${justPaired}`} title={title}></span>;
   };
 
   // Formatta Last Seen
@@ -417,7 +427,7 @@ const Targets: React.FC = () => {
                     {formatLastSeen(target.last_seen)}
                   </td>
                   <td className="status-cell">
-                    {getStatusIcon(target.status)}
+                    {getStatusIcon(target)}
                   </td>
                   <td className="actions-cell">
                     <div className="action-buttons">
