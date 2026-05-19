@@ -100,9 +100,15 @@ python manage.py migrate --noinput 2>&1 | tail -10
 ok "Migrazioni applicate"
 
 # ── step 5: restart services ────────────────────────────────────────────────
-step "Step 5/5 — restart services"
-sudo -n /bin/systemctl restart firedog-backend && ok "firedog-backend ✓" || fail "restart backend fallito"
-sudo -n /bin/systemctl restart firedog-celery  && ok "firedog-celery ✓"  || warn "restart celery fallito (non bloccante)"
+#
+# Usiamo --no-block così systemctl ritorna SUBITO. systemd processa il restart
+# in background dopo qualche ms — questo dà tempo a daphne (che sta eseguendo
+# l'API che ha invocato update.sh) di scrivere la response HTTP al client
+# prima di essere ucciso e re-spawn. Non perfetto vs race, ma sufficiente per
+# l'uso interattivo dal pulsante "Installa update" della UI.
+step "Step 5/5 — restart services (no-block)"
+sudo -n /bin/systemctl restart --no-block firedog-backend && ok "firedog-backend restart scheduled" || fail "restart backend fallito"
+sudo -n /bin/systemctl restart --no-block firedog-celery  && ok "firedog-celery restart scheduled"  || warn "restart celery fallito (non bloccante)"
 
 deactivate || true
 
