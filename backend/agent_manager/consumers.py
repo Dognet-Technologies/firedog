@@ -14,7 +14,7 @@ from .models import (
     AgentCommand,
     AgentHeartbeat,
 )
-from targets.models import Target, Alert
+from targets.models import Target, Alert, FirewallStats
 from threats.models import ThreatLog
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,8 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 await self.handle_threat_log(data)
             elif message_type == "command_response":
                 await self.handle_command_response(data)
+            elif message_type == "firewall_stats":
+                await self.handle_firewall_stats(data)
             else:
                 await self.send_error(f"Unknown message type: {message_type}")
 
@@ -257,6 +259,38 @@ class AgentConsumer(AsyncWebsocketConsumer):
         # Aggiorna comando
         await self.update_command_status(command_id, command_status, result, error)
 
+    async def handle_firewall_stats(self, data):
+        """
+        Gestisce snapshot firewall+system inviato dall'agent.
+
+        Il payload contiene il JSON prodotto da `firewall-manager --export-json`
+        sul target. Lo persistiamo nel model FirewallStats per consultazione
+        successiva via /api/firewall-stats/.
+
+        Messaggio: {
+            "type": "firewall_stats",
+            "timestamp": "<rfc3339, wall-clock dell'agent al momento dell'invio>",
+            "payload": { ...output di firewall-manager --export-json... }
+        }
+        """
+        if not self.target:
+            await self.send_error("Not paired. Send pair_request first.")
+            return
+
+        payload = data.get("payload") or {}
+        if not isinstance(payload, dict):
+            await self.send_error("firewall_stats: payload must be a JSON object")
+            return
+
+        try:
+            await self.save_firewall_stats(payload)
+        except Exception as e:
+            logger.exception("firewall_stats save failed for target %s: %s", self.target.id, e)
+            await self.send_error(f"firewall_stats save failed: {e}")
+            return
+
+        await self.send(text_data=json.dumps({"type": "firewall_stats_ack"}))
+
     async def send_command(self, event):
         """
         Invia comando all'agent (chiamato da channel layer)
@@ -329,7 +363,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             )
 
             if pairing_session and not pairing_session.is_expired:
-                # Aggiorna sessione
+                # Bootstrap pairing: marca la sessione come success
                 pairing_session.phase_1_verified = True
                 pairing_session.phase_2_verified = True
                 pairing_session.status = "success"
@@ -339,13 +373,26 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 pairing_session.completed_at = timezone.now()
                 pairing_session.save()
 
-                # Aggiorna stato target (il gruppo è gestito dalla relazione
-                # many-to-many TargetGroup, non più dal campo legacy `gruppo`).
                 target.status = "online"
                 target.last_seen = timezone.now()
                 target.save(update_fields=["status", "last_seen"])
 
                 return pairing_session
+
+            # Re-pair persistente: il target era già stato accoppiato in passato
+            # (status != "unpaired"). Identity hash + API key bastano per ristabilire
+            # la sessione WS senza richiedere una nuova PairingSession nel DB.
+            if target.status != "unpaired":
+                last_success = (
+                    PairingSession.objects.filter(target=target, status="success")
+                    .order_by("-completed_at")
+                    .first()
+                )
+                if last_success:
+                    target.status = "online"
+                    target.last_seen = timezone.now()
+                    target.save(update_fields=["status", "last_seen"])
+                    return last_success
 
         except Target.DoesNotExist:
             logger.warning(f"No target found with identity hash: {calculated_hash}")
@@ -397,6 +444,56 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 blocked_ips_count=system_stats.get("blocked_ips_count", 0),
                 raw_data=system_stats,
             )
+
+    @database_sync_to_async
+    def save_firewall_stats(self, payload):
+        """Persiste snapshot firewall+system in FirewallStats.
+
+        Si attende la stessa shape prodotta da `firewall-manager --export-json`:
+            {
+              "hostname": str, "firedog_version": str,
+              "system": {"os": str, "kernel": str, "uptime_seconds": int},
+              "stats": {
+                "total_packets": {"INPUT": int, "OUTPUT": int, "FORWARD": int},
+                "pcap_sizes": {"input": int, "output": int}  # opzionale
+              },
+              "status": str, "timestamp": iso-8601
+            }
+        I campi mancanti finiscono ai default (0 / "").
+        """
+        from django.utils.dateparse import parse_datetime
+        from django.utils import timezone
+
+        if not self.target:
+            return
+
+        system = payload.get("system") or {}
+        stats = payload.get("stats") or {}
+        total = stats.get("total_packets") or {}
+        pcap = stats.get("pcap_sizes") or {}
+
+        collected_at = parse_datetime(payload.get("timestamp") or "") or timezone.now()
+        if timezone.is_naive(collected_at):
+            collected_at = timezone.make_aware(collected_at, timezone.get_current_timezone())
+
+        FirewallStats.objects.update_or_create(
+            target=self.target,
+            collected_at=collected_at,
+            defaults={
+                "hostname": payload.get("hostname", "") or "",
+                "firedog_version": payload.get("firedog_version", "") or "",
+                "os_version": system.get("os", "") or "",
+                "kernel_version": system.get("kernel", "") or "",
+                "uptime_seconds": int(system.get("uptime_seconds", 0) or 0),
+                "input_packets": int(total.get("INPUT", 0) or 0),
+                "output_packets": int(total.get("OUTPUT", 0) or 0),
+                "forward_packets": int(total.get("FORWARD", 0) or 0),
+                "pcap_input_dropped_bytes": int(pcap.get("input", 0) or 0),
+                "pcap_output_dropped_bytes": int(pcap.get("output", 0) or 0),
+                "status": payload.get("status", "healthy") or "healthy",
+                "raw_json": payload,
+            },
+        )
 
     @database_sync_to_async
     def save_threat_log(self, threat):
