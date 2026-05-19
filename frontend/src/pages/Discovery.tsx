@@ -113,13 +113,31 @@ const Discovery: React.FC = () => {
       const interval = setInterval(async () => {
         try {
           const response = await apiService.getDiscoveryScanStatus(scanStatus.taskId!);
-          
+
           if (response.status === 'SUCCESS') {
-            setScanStatus({ status: 'completed', message: 'Scan completed' });
-            loadDiscoveredHosts();
+            // Il task Celery è terminato senza eccezioni, ma la business-logic
+            // interna può comunque avere fallito (es. arp-scan binary mancante,
+            // o tutte le reti scansionate in errore). Verifichiamo result.success
+            // prima di dichiarare lo scan riuscito.
+            const result = (response as { result?: { success?: boolean; error?: string; hosts_found?: number; network_errors?: Record<string, string> } }).result;
+            if (result && result.success === false) {
+              const detail = result.network_errors
+                ? Object.entries(result.network_errors).map(([net, err]) => `${net}: ${err}`).join(' · ')
+                : result.error || 'Scan fallito senza dettagli';
+              setScanStatus({ status: 'error', message: detail });
+              showToast({ type: 'error', title: 'Scan fallito', message: detail });
+            } else {
+              const found = result?.hosts_found ?? 0;
+              setScanStatus({ status: 'completed', message: `Scan completed: ${found} host` });
+              loadDiscoveredHosts();
+            }
             clearInterval(interval);
           } else if (response.status === 'FAILURE') {
-            setScanStatus({ status: 'error', message: 'Scan failed' });
+            // Eccezione non gestita nel worker → result è la traceback string
+            const rawResult: unknown = (response as unknown as { result?: unknown }).result;
+            const errMsg = typeof rawResult === 'string' ? rawResult : 'Scan failed';
+            setScanStatus({ status: 'error', message: errMsg });
+            showToast({ type: 'error', title: 'Scan fallito', message: errMsg });
             clearInterval(interval);
           }
         } catch (error) {
