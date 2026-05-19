@@ -245,13 +245,15 @@ const PerformanceTab: React.FC<PerformanceTabProps> = ({ targetId }) => {
       const cpu = sorted.map((hb: any) => ({
         time: new Date(hb.timestamp).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
         cpu: hb.cpu_percent,
-        load1: +(hb.cpu_percent / 100 * 4).toFixed(2),
+        load1: hb.load_avg_1m ?? 0,
       }));
 
+      // Memory in MB dai campi assoluti ingestiti dall'agent
+      // (memory_*_kb sono in KB; fallback a 0 se l'heartbeat è precedente alla migration).
       const mem = sorted.map((hb: any) => ({
         time: new Date(hb.timestamp).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-        used: Math.round(hb.memory_percent * 81.92), // 8192 MB total
-        total: 8192,
+        used: Math.round((hb.memory_used_kb ?? 0) / 1024),
+        total: Math.round((hb.memory_total_kb ?? 0) / 1024),
       }));
 
       setCpuData(cpu);

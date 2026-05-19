@@ -76,10 +76,12 @@ const MonitoringPerformance: React.FC = () => {
           cpu_percent: hb.cpu_percent,
           memory_percent: hb.memory_percent,
           disk_percent: hb.disk_percent,
-          load_average: hb.raw_data?.load_average ?? [
-            +(hb.cpu_percent / 100 * 4).toFixed(2),
-            +(hb.cpu_percent / 100 * 3.8).toFixed(2),
-            +(hb.cpu_percent / 100 * 3.5).toFixed(2),
+          // load_avg reali (1m, 5m, 15m) dalle colonne dedicate del heartbeat.
+          // Per gli heartbeat legacy (precedenti alla migration 0004) sono 0.
+          load_average: [
+            hb.load_avg_1m ?? 0,
+            hb.load_avg_5m ?? 0,
+            hb.load_avg_15m ?? 0,
           ],
         }));
 
@@ -87,11 +89,18 @@ const MonitoringPerformance: React.FC = () => {
       setCurrentMetrics(mapped[mapped.length - 1]);
 
       const latest = heartbeats[0];
+      // System info dai campi assoluti reali dell'heartbeat. cpu_cores non è
+      // ancora trasportato dall'agent: lasciamo il fallback finché non lo
+      // aggiungiamo a SystemStats.
+      const totalMemKb = latest.memory_total_kb ?? 0;
+      const totalDiskKb = latest.disk_total_kb ?? 0;
       setSystemInfo({
         cpu_cores: latest.raw_data?.cpu_cores ?? 4,
-        total_memory_gb: latest.raw_data?.total_memory_gb ?? 8,
-        total_disk_gb: latest.raw_data?.total_disk_gb ?? 100,
-        uptime_hours: latest.raw_data?.uptime_hours ?? Math.round((Date.now() - new Date(heartbeats[heartbeats.length - 1].timestamp).getTime()) / 3_600_000),
+        total_memory_gb: totalMemKb > 0 ? +(totalMemKb / 1024 / 1024).toFixed(2) : 0,
+        total_disk_gb: totalDiskKb > 0 ? Math.round(totalDiskKb / 1024 / 1024) : 0,
+        uptime_hours: latest.uptime_seconds
+          ? Math.round(latest.uptime_seconds / 3600)
+          : Math.round((Date.now() - new Date(heartbeats[heartbeats.length - 1].timestamp).getTime()) / 3_600_000),
       });
     } catch (error) {
       console.error('Error loading performance data:', error);

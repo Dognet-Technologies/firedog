@@ -422,6 +422,21 @@ class AgentHeartbeat(models.Model):
     active_rules_count = models.PositiveIntegerField(default=0)
     blocked_ips_count = models.PositiveIntegerField(default=0)
 
+    # Memory / disk absolute (KB) — popolati dall'agent via raw_data.
+    # Default 0 per gli heartbeat legacy che non li contenevano.
+    memory_total_kb = models.BigIntegerField(default=0)
+    memory_used_kb = models.BigIntegerField(default=0)
+    disk_total_kb = models.BigIntegerField(default=0)
+    disk_used_kb = models.BigIntegerField(default=0)
+
+    # Load average (1/5/15 minuti) — dal /proc/loadavg via sysinfo.
+    load_avg_1m = models.FloatField(default=0)
+    load_avg_5m = models.FloatField(default=0)
+    load_avg_15m = models.FloatField(default=0)
+
+    # Uptime del sistema in secondi.
+    uptime_seconds = models.BigIntegerField(default=0)
+
     # Raw data
     raw_data = models.JSONField(
         null=True, blank=True, help_text="Dati completi heartbeat"

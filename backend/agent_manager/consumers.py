@@ -433,19 +433,39 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_heartbeat(self, system_stats):
-        """Salva heartbeat nello storico"""
-        if self.target:
-            AgentHeartbeat.objects.create(
-                target=self.target,
-                cpu_percent=system_stats.get("cpu_percent", 0),
-                memory_percent=system_stats.get("memory_percent", 0),
-                disk_percent=system_stats.get("disk_percent", 0),
-                bytes_sent=system_stats.get("bytes_sent", 0),
-                bytes_recv=system_stats.get("bytes_recv", 0),
-                active_rules_count=system_stats.get("active_rules_count", 0),
-                blocked_ips_count=system_stats.get("blocked_ips_count", 0),
-                raw_data=system_stats,
-            )
+        """Salva heartbeat nello storico, popolando anche le metriche assolute
+        (memory/disk KB, load_avg, uptime) così la UI non deve più derivarle.
+        """
+        if not self.target:
+            return
+        load = system_stats.get("load_avg") or [0, 0, 0]
+        # load_avg arriva come [1m, 5m, 15m]; tollera anche valori mancanti
+        try:
+            load_1m = float(load[0]) if len(load) > 0 else 0.0
+            load_5m = float(load[1]) if len(load) > 1 else 0.0
+            load_15m = float(load[2]) if len(load) > 2 else 0.0
+        except (TypeError, ValueError):
+            load_1m = load_5m = load_15m = 0.0
+
+        AgentHeartbeat.objects.create(
+            target=self.target,
+            cpu_percent=system_stats.get("cpu_percent", 0) or 0,
+            memory_percent=system_stats.get("memory_percent", 0) or 0,
+            disk_percent=system_stats.get("disk_percent", 0) or 0,
+            memory_total_kb=int(system_stats.get("memory_total_kb", 0) or 0),
+            memory_used_kb=int(system_stats.get("memory_used_kb", 0) or 0),
+            disk_total_kb=int(system_stats.get("disk_total_kb", 0) or 0),
+            disk_used_kb=int(system_stats.get("disk_used_kb", 0) or 0),
+            load_avg_1m=load_1m,
+            load_avg_5m=load_5m,
+            load_avg_15m=load_15m,
+            uptime_seconds=int(system_stats.get("uptime_seconds", 0) or 0),
+            bytes_sent=int(system_stats.get("bytes_sent", 0) or 0),
+            bytes_recv=int(system_stats.get("bytes_recv", 0) or 0),
+            active_rules_count=int(system_stats.get("active_rules_count", 0) or 0),
+            blocked_ips_count=int(system_stats.get("blocked_ips_count", 0) or 0),
+            raw_data=system_stats,
+        )
 
     @database_sync_to_async
     def save_firewall_stats(self, payload):
