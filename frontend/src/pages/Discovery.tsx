@@ -75,6 +75,7 @@ const Discovery: React.FC = () => {
   const [manualForm, setManualForm] = useState({
     ip_address: '',
     hostname: '',
+    mac_address: '',
     description: '',
     group_ids: [] as number[]
   });
@@ -367,6 +368,22 @@ const Discovery: React.FC = () => {
       });
       return;
     }
+    if (!manualForm.mac_address) {
+      showToast({
+        type: 'error',
+        title: 'Validation Error',
+        message: 'MAC address is required (necessario per l\'identity hash del pairing agent)'
+      });
+      return;
+    }
+    if (!/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/.test(manualForm.mac_address)) {
+      showToast({
+        type: 'error',
+        title: 'Validation Error',
+        message: 'MAC address non valido (formato atteso AA:BB:CC:DD:EE:FF)'
+      });
+      return;
+    }
 
     try {
       setLoading(true);
@@ -381,6 +398,7 @@ const Discovery: React.FC = () => {
       setManualForm({
         ip_address: '',
         hostname: '',
+        mac_address: '',
         description: '',
         group_ids: []
       });
@@ -762,15 +780,19 @@ const Discovery: React.FC = () => {
               <h2>Bulk Import from File</h2>
               <p className="import-description">
                 Upload a text file with one host per line.<br/>
-                Format: <code>IP_ADDRESS HOSTNAME [DESCRIPTION]</code>
+                Format raccomandato: <code>IP_ADDRESS MAC_ADDRESS HOSTNAME [DESCRIPTION]</code><br/>
+                <small>(senza MAC il target è importato ma non può completare il pairing dell'agent finché non lo aggiungi a mano)</small>
               </p>
 
               <div className="file-format-example">
                 <h3>Example File:</h3>
                 <pre>
-{`192.168.1.100 server01 Production web server
-192.168.1.101 server02 Database server
-192.168.1.102 server03 Backup server`}
+{`192.168.1.100 AA:BB:CC:11:22:33 server01 Production web server
+192.168.1.101 AA:BB:CC:11:22:44 server02 Database server
+192.168.1.102 AA:BB:CC:11:22:55 server03 Backup server
+
+# Formato legacy (senza MAC, ancora supportato ma sconsigliato):
+192.168.1.103 server04 Legacy host`}
                 </pre>
               </div>
 
@@ -870,6 +892,20 @@ const Discovery: React.FC = () => {
                 </div>
 
                 <div className="form-group">
+                  <label htmlFor="mac_address">MAC Address *</label>
+                  <input
+                    type="text"
+                    id="mac_address"
+                    value={manualForm.mac_address}
+                    onChange={(e) => setManualForm({...manualForm, mac_address: e.target.value})}
+                    placeholder="AA:BB:CC:DD:EE:FF"
+                    pattern="^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$"
+                    required
+                  />
+                  <small className="form-hint">Necessario per l'identity hash usato dal pairing dell'agent</small>
+                </div>
+
+                <div className="form-group">
                   <label htmlFor="description">Description</label>
                   <textarea
                     id="description"
@@ -902,7 +938,7 @@ const Discovery: React.FC = () => {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={loading || !manualForm.ip_address}
+                  disabled={loading || !manualForm.ip_address || !manualForm.mac_address}
                 >
                   {loading ? 'Adding...' : 'Add Target'}
                 </button>

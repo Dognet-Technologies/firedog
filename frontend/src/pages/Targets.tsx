@@ -161,21 +161,40 @@ const Targets: React.FC = () => {
     }
   };
 
-  const handlePair = async (id: number, label: string) => {
-    try {
-      const session = await apiService.startPairing(id);
-      showToast({
-        type: 'success',
-        title: 'Pairing avviato',
-        message: `Sessione #${session.id} aperta per ${label}. Avvia l'agent entro 3 minuti.`
+  const handlePair = async (id: number, label: string, currentStatus: string) => {
+    const startPair = async () => {
+      try {
+        const session = await apiService.startPairing(id);
+        showToast({
+          type: 'success',
+          title: 'Pairing avviato',
+          message: `Sessione #${session.id} aperta per ${label}. Avvia l'agent entro 3 minuti.`
+        });
+        loadTargets();
+      } catch (error: unknown) {
+        const msg =
+          (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+          'Errore avvio pairing (controlla che IP/hostname/MAC siano impostati)';
+        showToast({ type: 'error', title: 'Pairing fallito', message: msg });
+      }
+    };
+
+    // Target già accoppiato in passato (online/offline/error) → chiedi
+    // conferma: l'utente potrebbe aver cliccato per sbaglio sul pulsante
+    // di un target che funziona già.
+    const alreadyKnown = ['online', 'offline', 'error'].includes(currentStatus);
+    if (alreadyKnown) {
+      showConfirm({
+        title: 'Riassociare il target?',
+        message: `${label} è già associato (stato: ${currentStatus}). Vuoi davvero aprire una nuova sessione di pairing? L'agent corrente continua a funzionare; se la nuova sessione scade (3 min) il target torna allo stato precedente automaticamente.`,
+        confirmText: 'Sì, riassocia',
+        cancelText: 'Annulla',
+        type: 'warning',
+        onConfirm: startPair,
       });
-      loadTargets();
-    } catch (error: unknown) {
-      const msg =
-        (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Errore avvio pairing (controlla che IP/hostname/MAC siano impostati)';
-      showToast({ type: 'error', title: 'Pairing fallito', message: msg });
+      return;
     }
+    await startPair();
   };
 
   const handleDelete = async (id: number) => {
@@ -466,7 +485,7 @@ const Targets: React.FC = () => {
                   <td className="actions-cell">
                     <div className="action-buttons">
                       <button
-                        onClick={() => handlePair(target.id, target.hostname || target.ip_address)}
+                        onClick={() => handlePair(target.id, target.hostname || target.ip_address, target.status)}
                         className="btn-icon"
                         title="Open pairing session (3 min) for the agent"
                         disabled={target.status === 'pairing' || target.status === 'installing'}

@@ -204,7 +204,7 @@ class PairingSessionViewSet(viewsets.ModelViewSet):
         """
         session = self.get_object()
 
-        # Verifica se � scaduta
+        # Verifica se è scaduta
         if session.is_expired and session.status in [
             "waiting",
             "verifying_api",
@@ -212,13 +212,33 @@ class PairingSessionViewSet(viewsets.ModelViewSet):
         ]:
             session.status = "expired"
             session.save(update_fields=["status"])
-
-            # Reset target status
-            session.target.status = "unpaired"
-            session.target.save(update_fields=["status"])
+            self._restore_target_status_after_expiry(session.target)
 
         serializer = self.get_serializer(session)
         return Response(serializer.data)
+
+    @staticmethod
+    def _restore_target_status_after_expiry(target):
+        """Decidi a quale stato riportare il target dopo la scadenza di un pairing.
+
+        Logica:
+          - target era già accoppiato e c'è un AgentConnection vivo  → "online"
+          - target era già accoppiato ma l'agent è offline           → "offline"
+          - target non era mai stato accoppiato (no success session) → "unpaired"
+
+        Risolve l'incongruenza per cui "Open pairing session" su un target già
+        associato finiva, dopo 3 minuti, in stato "unpaired" anche se il vecchio
+        agent stava continuando a heartbeatare.
+        """
+        from .models import AgentConnection, PairingSession  # local to avoid cycle
+
+        was_paired = PairingSession.objects.filter(target=target, status="success").exists()
+        if not was_paired:
+            target.status = "unpaired"
+        else:
+            connection = AgentConnection.objects.filter(target=target).order_by("-last_heartbeat").first()
+            target.status = "online" if (connection and connection.is_online) else "offline"
+        target.save(update_fields=["status"])
 
 
 class AgentConnectionViewSet(viewsets.ReadOnlyModelViewSet):
