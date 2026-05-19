@@ -8,6 +8,7 @@
  * 4. Groups Management (NEW)
  */
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import apiService from '../services/api';
 import type { DiscoveredHost, Target } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -59,8 +60,18 @@ const GRUPPO_OPTIONS = [
 ];
 
 const Discovery: React.FC = () => {
+  // ?tab=arp-scan|file|manual|groups & ?group=<id> consente di linkare
+  // direttamente al tab Groups con un gruppo pre-selezionato (es. dalla
+  // pagina /groups cliccando "+ Add Target").
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const tabParam = queryParams.get('tab') as 'arp-scan' | 'file' | 'manual' | 'groups' | null;
+  const groupParam = queryParams.get('group');
+
   // State
-  const [activeTab, setActiveTab] = useState<'arp-scan' | 'file' | 'manual' | 'groups'>('arp-scan');
+  const [activeTab, setActiveTab] = useState<'arp-scan' | 'file' | 'manual' | 'groups'>(
+    (tabParam && ['arp-scan', 'file', 'manual', 'groups'].includes(tabParam)) ? tabParam : 'arp-scan'
+  );
   const [discoveredHosts, setDiscoveredHosts] = useState<DiscoveredHost[]>([]);
   const [selectedHosts, setSelectedHosts] = useState<Set<number>>(new Set());
   const { showToast, showConfirm } = useNotifications();
@@ -419,7 +430,14 @@ const Discovery: React.FC = () => {
   const loadGroups = async () => {
     try {
       const groups = await apiService.getGroups();
-      setGroups(Array.isArray(groups) ? groups : []);
+      const list = Array.isArray(groups) ? groups : [];
+      setGroups(list);
+      // Se l'URL includeva ?group=<id> e il tab è "groups", auto-seleziona
+      // quel gruppo per saltare lo step intermedio dell'utente.
+      if (groupParam && activeTab === 'groups' && !selectedGroup) {
+        const target = list.find((g) => String(g.id) === String(groupParam));
+        if (target) handleSelectGroup(target);
+      }
     } catch (error) {
       console.error('Error loading groups:', error);
       showToast({

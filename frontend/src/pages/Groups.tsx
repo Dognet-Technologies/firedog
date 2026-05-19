@@ -150,8 +150,26 @@ const Groups: React.FC = () => {
                   )}
                 </div>
 
-                <div className="group-card-footer">
+                <div className="group-card-footer" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <span className="group-card-link">View details →</span>
+                  <span
+                    className="group-card-link"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/discovery?tab=groups&group=${group.id}`);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.stopPropagation();
+                        navigate(`/discovery?tab=groups&group=${group.id}`);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    + Add Target →
+                  </span>
                 </div>
               </div>
             );
