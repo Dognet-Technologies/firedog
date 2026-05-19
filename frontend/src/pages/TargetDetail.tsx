@@ -392,7 +392,21 @@ const TargetDetail: React.FC = () => {
           </div>
 
           <div className="td-hero-actions">
-            <button className="td-btn td-btn-secondary" onClick={() => {}}>
+            <button
+              className="td-btn td-btn-secondary"
+              onClick={async () => {
+                if (!targetId) return;
+                try {
+                  await apiService.syncTargetRules(targetId);
+                  showToast({ type: 'success', title: 'Sync Rules', message: 'Snapshot in arrivo, le rule vengono aggiornate.' });
+                  // l'ingest server-side è quasi istantaneo (round-trip via WS)
+                  setTimeout(() => loadAll(targetId), 1200);
+                } catch (e: unknown) {
+                  const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Sync fallito';
+                  showToast({ type: 'error', title: 'Sync Rules', message: msg });
+                }
+              }}
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="23 4 23 10 17 10" />
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />

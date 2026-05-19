@@ -251,15 +251,49 @@ class AgentConsumer(AsyncWebsocketConsumer):
         """
         command_id = data.get("command_id")
         command_status = data.get("status")
-        result = data.get("result")
+        # L'agent Rust serializza il campo come `output` (CommandResponse struct);
+        # supportiamo entrambi i nomi per retro-compat.
+        result = data.get("result") if data.get("result") is not None else data.get("output")
         error = data.get("error")
 
         if not command_id:
             await self.send_error("Missing command_id")
             return
 
+        # Side-effect: se la risposta di sync_rules contiene il JSON snapshot
+        # di firewall-manager --export-json, ingestialo nelle tabelle come
+        # se fosse un firewall_stats — la UI vede le rule fresh subito.
+        if command_status == "success" and isinstance(result, str):
+            await self._maybe_ingest_sync_rules_output(command_id, result)
+
         # Aggiorna comando
         await self.update_command_status(command_id, command_status, result, error)
+
+    async def _maybe_ingest_sync_rules_output(self, command_id, output_str):
+        """Se il comando era 'sync_rules' e l'agent ha rispedito il JSON
+        completo di firewall-manager --export-json nell'output, lo ingestiamo
+        nelle stesse tabelle che firewall_stats popola. Così la UI vede le
+        rules aggiornate subito dopo il click di "Sync Rules".
+        """
+        cmd = await self._get_command(command_id)
+        if not cmd or cmd.action != "sync_rules":
+            return
+        try:
+            payload = json.loads(output_str)
+        except (TypeError, ValueError):
+            logger.debug("sync_rules: output non è JSON, skip ingestion")
+            return
+        if not isinstance(payload, dict):
+            return
+        # Forza self.target sulla destinazione del comando (handle_command_response
+        # NON ha lo stesso target del consumer in tutti i casi: il consumer è
+        # legato all'agent che ha risposto, che è il target di destinazione).
+        await self.save_firewall_stats(payload)
+
+    @database_sync_to_async
+    def _get_command(self, command_id):
+        from .models import AgentCommand as _AC
+        return _AC.objects.filter(command_id=command_id).first()
 
     async def handle_firewall_stats(self, data):
         """
@@ -536,6 +570,11 @@ class AgentConsumer(AsyncWebsocketConsumer):
         valid_chains = {"INPUT", "OUTPUT", "FORWARD"}
         valid_actions = {"ACCEPT", "DROP", "REJECT"}
         valid_protos = {"tcp", "udp", "icmp", "all"}
+        # iptables -L -n stampa i protocolli come numero (es. "1" per ICMP)
+        # quando non riconosce il nome short. Mappiamo i casi comuni così la
+        # dedup-logic (che confronta `protocol`) combacia con le rule create
+        # dalla UI che usano "icmp"/"tcp"/"udp".
+        proto_number_to_name = {"1": "icmp", "6": "tcp", "17": "udp", "0": "all"}
 
         for chain, rules in (rules_by_chain or {}).items():
             if chain not in valid_chains or not isinstance(rules, list):
@@ -552,6 +591,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
                     continue
 
                 proto = (rule.get("prot") or "all").lower()
+                proto = proto_number_to_name.get(proto, proto)
                 if proto not in valid_protos:
                     proto = "all"
 

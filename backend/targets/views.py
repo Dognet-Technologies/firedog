@@ -100,6 +100,24 @@ class TargetViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    @action(detail=True, methods=["post"], url_path="sync-rules")
+    def sync_rules(self, request, pk=None):
+        """Forza un refresh delle FirewallRule del target.
+
+        Dispatcha CommandAction::SyncRules all'agent. L'agent esegue
+        `firewall-manager --export-json` e rispedisce il JSON nella
+        command_response; il consumer lo ingestisce in tempo reale, così
+        la UI vede le rule aggiornate al prossimo poll.
+        """
+        from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
+
+        target = self.get_object()
+        try:
+            cmd = dispatch_command_to_agent(target, action="sync_rules", payload={})
+            return Response({"command_id": str(cmd.command_id), "status": "dispatched"}, status=202)
+        except AgentNotConnected as e:
+            return Response({"error": str(e)}, status=409)
+
     @action(detail=False, methods=["get"], url_path="check-ip")
     def check_ip(self, request):
         """

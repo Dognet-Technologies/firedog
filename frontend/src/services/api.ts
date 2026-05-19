@@ -545,6 +545,11 @@ class ApiService {
     return response.data;
   }
 
+  async syncTargetRules(targetId: number): Promise<{ command_id: string; status: string }> {
+    const response = await this.api.post(`/targets/${targetId}/sync-rules/`);
+    return response.data;
+  }
+
   // Whitelist methods
   async getWhitelistByTarget(targetId: number) {
     const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);
