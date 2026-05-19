@@ -98,13 +98,21 @@ class FirewallRuleListSerializer(serializers.ModelSerializer):
         model = FirewallRule
         fields = [
             "id",
+            "target",
             "target_ip",
             "chain",
+            "rule_number",
             "protocol",
             "port",
+            "source_ip",
+            "dest_ip",
             "action",
+            "comment",
+            "is_custom",
             "is_synced",
             "rule_description",
+            "created_at",
+            "updated_at",
         ]
 
 

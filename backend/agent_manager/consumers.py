@@ -623,6 +623,14 @@ class AgentConsumer(AsyncWebsocketConsumer):
                     if rule.get("comment") and not custom_match.comment:
                         custom_match.comment = (rule.get("comment") or "")[:256]
                     custom_match.save(update_fields=["rule_number", "is_synced", "comment", "updated_at"])
+                    # Cleanup retroattivo: rimuovi eventuali duplicati non-custom
+                    # creati prima che la dedup-logic fosse attiva.
+                    FirewallRule.objects.filter(
+                        target=self.target,
+                        chain=chain,
+                        rule_number=rule_number,
+                        is_custom=False,
+                    ).exclude(id=custom_match.id).delete()
                     continue
 
                 FirewallRule.objects.update_or_create(
