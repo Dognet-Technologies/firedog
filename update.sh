@@ -57,10 +57,20 @@ cd "$REPO_DIR"
 # ── step 1: git pull (saving conflict-prone local edits if any) ─────────────
 step "Step 1/5 — git pull"
 git fetch origin "$BRANCH" --quiet
-LOCAL_DIRTY=$(git status --porcelain | grep -vE '^\?\?' | wc -l)
+# --untracked-files=no evita il filtro grep che fallisce sotto `pipefail`
+# quando il working tree è pulito (grep non matcha → exit 1 → tutto il pipe
+# ritorna 1 → set -e aborta lo script con "Step 1" come ultimo log).
+LOCAL_DIRTY=$(git status --porcelain --untracked-files=no | wc -l)
 if [[ "$LOCAL_DIRTY" -gt 0 ]]; then
     warn "Working tree non pulito; faccio stash automatico"
     git stash push -m "auto-stash before update $(date +%s)" >/dev/null
+fi
+# Anche gli untracked sono problematici (es. file che ora esistono nel commit
+# remoto): li mettiamo in stash insieme.
+UNTRACKED=$(git status --porcelain | grep -cE '^\?\?' || true)
+if [[ "$UNTRACKED" -gt 0 ]]; then
+    warn "Trovati $UNTRACKED file untracked che potrebbero conflittare; stash --include-untracked"
+    git stash push --include-untracked -m "auto-stash-untracked before update $(date +%s)" >/dev/null
 fi
 git checkout "$BRANCH" --quiet
 git pull --ff-only origin "$BRANCH" && ok "Codice aggiornato" || fail "git pull (non fast-forward?) — risolvi a mano"
@@ -74,7 +84,11 @@ if [[ -f node_modules/.package-lock.json ]] && cmp -s package-lock.json node_mod
     NEEDS_NPM_INSTALL=0
 fi
 if [[ $NEEDS_NPM_INSTALL -eq 1 ]]; then
-    npm ci --no-audit --no-fund && ok "npm deps OK" || fail "npm ci fallito"
+    # --legacy-peer-deps: usiamo React 19 con @testing-library/react@13 che
+    # dichiara peerDep React <=18. È un conflitto solo formale (la dev-dep
+    # non è caricata in produzione). `npm install` (vs `npm ci`) è meno
+    # strict del lockfile e tollera questo mismatch.
+    npm install --legacy-peer-deps --no-audit --no-fund && ok "npm deps OK" || fail "npm install fallito"
 else
     ok "npm deps invariate, skip"
 fi

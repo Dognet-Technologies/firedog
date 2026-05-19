@@ -135,12 +135,27 @@ class SystemUpdateInstallView(APIView):
             return s if len(s) <= n else "…\n" + s[-n:]
 
         ok = rc == 0
+        # Estrai un messaggio operativo dallo stderr (o ultime righe stdout)
+        # così la UI può mostrarlo subito invece di un generico "Errore di rete".
+        if not ok:
+            error_msg = (stderr.strip().splitlines() or [""])[-1]
+            if not error_msg:
+                # cerca pattern [KO] / [ERROR] / "fail" nelle ultime righe stdout
+                tail_lines = [l for l in stdout.splitlines() if l.strip()][-5:]
+                error_msg = next(
+                    (l for l in tail_lines if any(t in l for t in ("[KO]", "[ERROR]", "fail", "error"))),
+                    tail_lines[-1] if tail_lines else f"update.sh exit {rc}",
+                )
+        else:
+            error_msg = None
+
         return Response(
             {
                 "ok": ok,
                 "exit_code": rc,
                 "stdout": tail(stdout),
                 "stderr": tail(stderr),
+                "error": error_msg,
                 "command": shlex.join(["bash", str(UPDATE_SCRIPT)]),
             },
             status=200 if ok else 500,
