@@ -6,6 +6,7 @@ import json
 import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from django.db import models
 from django.utils import timezone
 from .models import (
     AgentAPIKey,
@@ -563,6 +564,47 @@ class AgentConsumer(AsyncWebsocketConsumer):
                     continue
                 seen_rule_numbers.append(rule_number)
 
+                # Dedup: se esiste già una rule creata dalla UI (is_custom=True)
+                # che combacia con questa snapshot, la usiamo invece di crearne
+                # una nuova non-custom. Riconciliazione su signature:
+                # (chain, action, protocol, port, source_ip, dest_ip).
+                # NB: source/dest sono normalizzate (CIDR stripped) per il match,
+                # quindi se l'utente ha inserito "10.0.0.0/24" e l'agent vede
+                # l'host "10.0.0.0", il match avviene comunque.
+                custom_match = (
+                    FirewallRule.objects.filter(
+                        target=self.target,
+                        chain=chain,
+                        action=action,
+                        protocol=proto,
+                        port=port,
+                        source_ip=source_ip,
+                        dest_ip=dest_ip,
+                        is_custom=True,
+                    )
+                    # Preferisci quella che ha già lo stesso rule_number, poi
+                    # quelle synced (già applicate), poi le più recenti.
+                    .order_by(
+                        models.Case(
+                            models.When(rule_number=rule_number, then=0),
+                            default=1,
+                            output_field=models.IntegerField(),
+                        ),
+                        "-is_synced",
+                        "-updated_at",
+                    )
+                    .first()
+                )
+
+                if custom_match:
+                    # Aggiorna in-place senza creare un duplicato non-custom.
+                    custom_match.rule_number = rule_number
+                    custom_match.is_synced = True
+                    if rule.get("comment") and not custom_match.comment:
+                        custom_match.comment = (rule.get("comment") or "")[:256]
+                    custom_match.save(update_fields=["rule_number", "is_synced", "comment", "updated_at"])
+                    continue
+
                 FirewallRule.objects.update_or_create(
                     target=self.target,
                     chain=chain,
@@ -580,8 +622,10 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 )
 
             # Rimuovi regole non-custom della chain che non sono più presenti
-            # nell'ultima snapshot. Le regole custom (create dalla UI ma non
-            # ancora applicate sul target) vengono lasciate in pace.
+            # nell'ultima snapshot. Le regole custom (create dalla UI) restano
+            # intoccate: se la rule è scomparsa lato target, il loro
+            # is_synced=True diventa "informazione storica" finché l'admin non
+            # decide cosa farne — meglio non eliminarle silenziosamente.
             FirewallRule.objects.filter(
                 target=self.target,
                 chain=chain,
