@@ -627,7 +627,7 @@ class FirewallManager:
 
         return '0.0.0.0'
 
-    def export_json(self, output_path: str = '/opt/firedog/export/status.json'):
+    def export_json(self, output_path: str = '/opt/sentinelsuite/firedog/export/status.json'):
         """Esporta stato completo firewall in JSON"""
 
         try:
@@ -755,8 +755,8 @@ Esempi:
                        help='Ripristina regole salvate')
 
     parser.add_argument('--export-json', metavar='OUTPUT_PATH',
-                       nargs='?', const='/opt/firedog/export/status.json',
-                       help='Esporta stato completo in JSON (default: /opt/firedog/export/status.json)')
+                       nargs='?', const='/opt/sentinelsuite/firedog/export/status.json',
+                       help='Esporta stato completo in JSON (default: /opt/sentinelsuite/firedog/export/status.json)')
 
     args = parser.parse_args()
     

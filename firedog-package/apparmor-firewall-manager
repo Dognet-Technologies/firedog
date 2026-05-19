@@ -50,8 +50,8 @@
   /var/lib/firewall/** rw,
 
   # Export JSON
-  /opt/firedog/export/ r,
-  /opt/firedog/export/** rw,
+  /opt/sentinelsuite/firedog/export/ r,
+  /opt/sentinelsuite/firedog/export/** rw,
 
   # Log files
   /var/log/firedog/ r,
@@ -96,7 +96,7 @@
   deny /root/ rw,
   deny /root/** rw,
   deny /home/*/.ssh/** rw,
-  deny /opt/firedog/.ssh/id_* r,  # Nega lettura chiavi private
+  deny /opt/sentinelsuite/firedog/.ssh/id_* r,  # Nega lettura chiavi private
   deny /boot/** rw,
   deny /usr/bin/su x,
   deny /usr/bin/sudo x,

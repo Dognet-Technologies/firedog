@@ -12,6 +12,9 @@ LOG_FILE="/var/log/firewall-init.log"
 RULES_DIR="/etc/firewall"
 CUSTOM_RULES="${RULES_DIR}/custom_rules.conf"
 
+# Porta SSH (override con env SSH_PORT, es: SSH_PORT=2222 ./firewall-init.sh)
+SSH_PORT="${SSH_PORT:-22}"
+
 # Colori per output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -201,8 +204,8 @@ setup_input_rules() {
     iptables -A INPUT -p icmp --icmp-type destination-unreachable -j ACCEPT
     iptables -A INPUT -p icmp --icmp-type time-exceeded -j ACCEPT
     
-    # SSH con protezione brute force (porta 22)
-    iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -j SSH_PROTECT
+    # SSH con protezione brute force (porta configurabile via $SSH_PORT)
+    iptables -A INPUT -p tcp --dport "${SSH_PORT}" -m conntrack --ctstate NEW -j SSH_PROTECT
     
     # HTTP/HTTPS per servizi web (commentato di default - abilitare se necessario)
     # iptables -A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW -j ACCEPT
