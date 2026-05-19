@@ -62,7 +62,7 @@ const formatRelative = (ts: string | null): string => {
 const GroupDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { showToast } = useNotifications();
+  const { showToast, showConfirm } = useNotifications();
 
   const [group, setGroup] = useState<TargetGroup | null>(null);
   const [members, setMembers] = useState<Target[]>([]);
@@ -84,6 +84,27 @@ const GroupDetail: React.FC = () => {
     action: 'ACCEPT',
     comment: '',
   });
+
+  // Out-of-sync report (per Members tab badges + Apply modal)
+  type OutOfSyncMember = {
+    target_id: number;
+    target_label: string;
+    in_sync: boolean;
+    canonical_total: number;
+    present_count: number;
+    missing_count: number;
+    missing_signatures: { chain: string; action: string; protocol: string; port: number | null; source_ip: string | null; dest_ip: string | null; comment: string }[];
+    individual_rules_count: number;
+  };
+  const [syncReport, setSyncReport] = useState<{ canonical_total: number; out_of_sync_count: number; members: OutOfSyncMember[] } | null>(null);
+
+  // Apply modal state
+  const [applyTarget, setApplyTarget] = useState<OutOfSyncMember | null>(null);
+  const [applyOverwrite, setApplyOverwrite] = useState(false);
+  const [applyBackup, setApplyBackup] = useState(true);
+  const [applyShowAll, setApplyShowAll] = useState(false);
+  const [applyPage, setApplyPage] = useState(0);
+  const [applyLoading, setApplyLoading] = useState(false);
 
   const [trafficData, setTrafficData] = useState<any[]>([]);
   const [cpuData, setCpuData] = useState<any[]>([]);
@@ -116,6 +137,18 @@ const GroupDetail: React.FC = () => {
         setRules(groupRulesResp.results);
       } catch {
         setRules([]);
+      }
+
+      // Sync report (per Members tab)
+      try {
+        const sync = await apiService.getGroupOutOfSync(gid);
+        setSyncReport({
+          canonical_total: sync.canonical_total,
+          out_of_sync_count: sync.out_of_sync_count,
+          members: sync.members,
+        });
+      } catch {
+        setSyncReport(null);
       }
 
       // Load threats from all member targets
@@ -241,6 +274,71 @@ const GroupDetail: React.FC = () => {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to apply group rule';
       showToast({ type: 'error', title: 'Error', message: msg });
     }
+  };
+
+  const openApplyModal = (m: OutOfSyncMember) => {
+    setApplyTarget(m);
+    setApplyOverwrite(false);
+    setApplyBackup(true);
+    setApplyShowAll(false);
+    setApplyPage(0);
+  };
+
+  const handleApplyGroupRules = async () => {
+    if (!groupId || !applyTarget) return;
+    setApplyLoading(true);
+    try {
+      const resp = await apiService.applyGroupRulesToTarget(groupId, applyTarget.target_id, {
+        overwrite: applyOverwrite,
+        backup: applyOverwrite ? applyBackup : false,
+      });
+      const okCount = resp.applied.filter(a => a.dispatched).length;
+      const errSummary = Object.entries(resp.dispatch_errors || {}).map(([h, e]) => `${h}: ${e}`).join('; ');
+      showToast({
+        type: errSummary ? 'warning' : 'success',
+        title: 'Group rules applied',
+        message: `${okCount}/${resp.applied.length} applicate su ${applyTarget.target_label}` +
+                 (resp.removed_individual.length ? ` · rimosse ${resp.removed_individual.length} individuali` : '') +
+                 (errSummary ? ` — errori: ${errSummary}` : ''),
+      });
+      setApplyTarget(null);
+      if (groupId) loadAll(groupId);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Apply fallito';
+      showToast({ type: 'error', title: 'Error', message: msg });
+    } finally {
+      setApplyLoading(false);
+    }
+  };
+
+  const handleApplyToAllOutOfSync = async () => {
+    if (!groupId || !syncReport) return;
+    const oos = syncReport.members.filter(m => !m.in_sync);
+    if (oos.length === 0) return;
+    showConfirm({
+      title: `Applica group rules a ${oos.length} membri out-of-sync?`,
+      message: `Verranno applicate solo le rule mancanti su ciascun membro (modalità "keep"). Le rule individuali non vengono toccate. Per "overwrite + backup" usa il bottone sul singolo membro.`,
+      confirmText: `Sì, applica a ${oos.length}`,
+      cancelText: 'Annulla',
+      type: 'warning',
+      onConfirm: async () => {
+        const summary = { ok: 0, fail: 0 };
+        await Promise.all(oos.map(async (m) => {
+          try {
+            await apiService.applyGroupRulesToTarget(groupId, m.target_id, { overwrite: false, backup: false });
+            summary.ok += 1;
+          } catch {
+            summary.fail += 1;
+          }
+        }));
+        showToast({
+          type: summary.fail ? 'warning' : 'success',
+          title: 'Apply bulk',
+          message: `${summary.ok}/${oos.length} riusciti` + (summary.fail ? ` · ${summary.fail} falliti` : ''),
+        });
+        if (groupId) loadAll(groupId);
+      },
+    });
   };
 
   const handleRemoveGroupRule = async (ruleId: number) => {
@@ -486,8 +584,33 @@ const GroupDetail: React.FC = () => {
           <div className="gd-members">
             <div className="gd-section-header">
               <h2>Members</h2>
-              <span className="gd-section-count">{members.length} targets</span>
+              <span className="gd-section-count">
+                {members.length} targets
+                {syncReport && syncReport.out_of_sync_count > 0 && (
+                  <span style={{ color: 'var(--status-warning)', marginLeft: 8 }}>
+                    · {syncReport.out_of_sync_count} out-of-sync
+                  </span>
+                )}
+              </span>
+              {syncReport && syncReport.out_of_sync_count > 0 && (
+                <button className="btn-secondary" onClick={handleApplyToAllOutOfSync}>
+                  Apply Group Rules to all out-of-sync ({syncReport.out_of_sync_count})
+                </button>
+              )}
             </div>
+
+            {syncReport && syncReport.out_of_sync_count > 0 && (
+              <div style={{
+                background: 'rgba(255, 152, 0, 0.10)',
+                border: '1px solid rgba(255, 152, 0, 0.4)',
+                color: '#ffd6a0',
+                padding: 12, borderRadius: 8, marginBottom: 16, fontSize: 13,
+              }}>
+                ⚠ {syncReport.out_of_sync_count} membro(i) ha rule del gruppo mancanti.
+                Clicca <strong>Apply Group Rules</strong> sulla card per propagarle.
+              </div>
+            )}
+
             {members.length === 0 ? (
               <div className="empty-state">
                 <h3>No members</h3>
@@ -495,31 +618,150 @@ const GroupDetail: React.FC = () => {
               </div>
             ) : (
               <div className="gd-members-grid">
-                {members.map((target) => (
-                  <div
-                    key={target.id}
-                    className="gd-member-card"
-                    onClick={() => navigate(`/targets/${target.id}`)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/targets/${target.id}`); }}
-                  >
-                    <div className="gd-member-card-header">
-                      <StatusDot status={target.status as 'online' | 'offline' | 'error' | 'installing' | 'pending'} />
-                      <span className="gd-member-card-status">{getStatusText(target.status)}</span>
+                {members.map((target) => {
+                  const sync = syncReport?.members.find(m => m.target_id === target.id);
+                  const outOfSync = sync && !sync.in_sync;
+                  return (
+                    <div
+                      key={target.id}
+                      className="gd-member-card"
+                      onClick={() => navigate(`/targets/${target.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/targets/${target.id}`); }}
+                      style={outOfSync ? {
+                        outline: '2px solid var(--status-warning, #ff9800)',
+                        outlineOffset: '-2px',
+                      } : undefined}
+                    >
+                      <div className="gd-member-card-header">
+                        <StatusDot status={target.status as 'online' | 'offline' | 'error' | 'installing' | 'pending'} />
+                        <span className="gd-member-card-status">{getStatusText(target.status)}</span>
+                        {outOfSync && (
+                          <span style={{
+                            marginLeft: 'auto', fontSize: 11, padding: '2px 8px',
+                            borderRadius: 999, background: 'rgba(255, 152, 0, 0.18)',
+                            color: '#ffb648', fontWeight: 600,
+                          }}>
+                            {sync!.missing_count} mancanti
+                          </span>
+                        )}
+                      </div>
+                      <div className="gd-member-card-name">{target.hostname || target.ip_address}</div>
+                      <div className="gd-member-card-ip">{target.ip_address}</div>
+                      {target.firedog_version && (
+                        <div className="gd-member-card-version">v{target.firedog_version}</div>
+                      )}
+                      <div className="gd-member-card-footer">
+                        Last seen: {formatRelative(target.last_seen)}
+                      </div>
+                      {outOfSync && (
+                        <button
+                          className="btn-primary"
+                          style={{ width: '100%', marginTop: 10 }}
+                          onClick={(e) => { e.stopPropagation(); openApplyModal(sync!); }}
+                        >
+                          Apply Group Rules
+                        </button>
+                      )}
                     </div>
-                    <div className="gd-member-card-name">{target.hostname || target.ip_address}</div>
-                    <div className="gd-member-card-ip">{target.ip_address}</div>
-                    {target.firedog_version && (
-                      <div className="gd-member-card-version">v{target.firedog_version}</div>
-                    )}
-                    <div className="gd-member-card-footer">
-                      Last seen: {formatRelative(target.last_seen)}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* APPLY GROUP RULES MODAL */}
+        {applyTarget && group && (
+          <div className="modal-overlay" onClick={() => !applyLoading && setApplyTarget(null)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
+              <div className="modal-header">
+                <h2>Apply group rules → {applyTarget.target_label}</h2>
+                <button className="modal-close" onClick={() => !applyLoading && setApplyTarget(null)}>×</button>
+              </div>
+
+              <div style={{ padding: '0 4px 12px', fontSize: 13, color: 'var(--text-secondary, #b3bccc)' }}>
+                <p>
+                  <strong>{applyTarget.missing_count}</strong> di{' '}
+                  <strong>{applyTarget.canonical_total}</strong> group rule mancano su questo target.
+                  {applyTarget.individual_rules_count > 0 && (
+                    <> Il target ha anche <strong>{applyTarget.individual_rules_count}</strong> rule individuali (non group).</>
+                  )}
+                </p>
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
+                  Cosa fare con le rule individuali esistenti?
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6 }}>
+                  <input type="radio" name="apply-mode" checked={!applyOverwrite} onChange={() => setApplyOverwrite(false)} disabled={applyLoading} />
+                  <span>
+                    <strong>Mantieni</strong> — applica solo le {applyTarget.missing_count} rule del gruppo mancanti, lascia intoccate le rule individuali esistenti.
+                  </span>
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <input type="radio" name="apply-mode" checked={applyOverwrite} onChange={() => setApplyOverwrite(true)} disabled={applyLoading} />
+                  <span>
+                    <strong>Sovrascrivi</strong> — rimuovi le rule individuali ({applyTarget.individual_rules_count}) e applica le {applyTarget.missing_count} mancanti del gruppo.
+                  </span>
+                </label>
+              </div>
+
+              {applyOverwrite && (
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                  <input type="checkbox" checked={applyBackup} onChange={(e) => setApplyBackup(e.target.checked)} disabled={applyLoading} />
+                  <span>Fai backup delle rule individuali prima di rimuoverle (recuperabili in seguito).</span>
+                </label>
+              )}
+
+              <div style={{ background: 'var(--bg-secondary, #1a1a1a)', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13 }}>
+                  Rule del gruppo che verranno applicate ({applyTarget.missing_count})
+                </div>
+                {(() => {
+                  const all = applyTarget.missing_signatures;
+                  const visible = applyShowAll ? all : all.slice(applyPage * 10, applyPage * 10 + 10);
+                  return (
+                    <>
+                      <ul style={{ margin: 0, padding: '0 0 0 20px', fontSize: 12, fontFamily: 'monospace' }}>
+                        {visible.map((s, i) => (
+                          <li key={i}>
+                            {s.chain} {s.action} {s.protocol}
+                            {s.port ? `:${s.port}` : ''}
+                            {s.source_ip ? ` src=${s.source_ip}` : ''}
+                            {s.dest_ip ? ` dst=${s.dest_ip}` : ''}
+                            {s.comment ? <span style={{ color: '#888' }}> · {s.comment}</span> : null}
+                          </li>
+                        ))}
+                      </ul>
+                      {all.length > 10 && (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', fontSize: 12 }}>
+                          {!applyShowAll && (
+                            <>
+                              <button className="btn-secondary" style={{ padding: '4px 10px' }} onClick={() => setApplyPage(p => Math.max(0, p - 1))} disabled={applyPage === 0}>‹</button>
+                              <span>pagina {applyPage + 1} / {Math.ceil(all.length / 10)}</span>
+                              <button className="btn-secondary" style={{ padding: '4px 10px' }} onClick={() => setApplyPage(p => p + 1)} disabled={applyPage * 10 + 10 >= all.length}>›</button>
+                            </>
+                          )}
+                          <button className="btn-secondary" style={{ padding: '4px 10px', marginLeft: 'auto' }} onClick={() => setApplyShowAll(s => !s)}>
+                            {applyShowAll ? `Pagina (10 per volta)` : `Mostra tutte (${all.length})`}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="btn-secondary" onClick={() => setApplyTarget(null)} disabled={applyLoading}>Annulla</button>
+                <button type="button" className="btn-primary" onClick={handleApplyGroupRules} disabled={applyLoading}>
+                  {applyLoading ? 'Applicazione…' : applyOverwrite ? (applyBackup ? 'Backup + Sovrascrivi + Applica' : 'Sovrascrivi + Applica') : 'Applica'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

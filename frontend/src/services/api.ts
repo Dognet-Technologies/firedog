@@ -545,6 +545,40 @@ class ApiService {
     return response.data;
   }
 
+  async getGroupOutOfSync(groupId: number): Promise<{
+    group_id: number;
+    canonical_total: number;
+    out_of_sync_count: number;
+    members: {
+      target_id: number;
+      target_label: string;
+      in_sync: boolean;
+      canonical_total: number;
+      present_count: number;
+      missing_count: number;
+      missing_signatures: { chain: string; action: string; protocol: string; port: number | null; source_ip: string | null; dest_ip: string | null; comment: string }[];
+      individual_rules_count: number;
+    }[];
+  }> {
+    const response = await this.api.get(`/groups/${groupId}/out-of-sync/`);
+    return response.data;
+  }
+
+  async applyGroupRulesToTarget(
+    groupId: number,
+    targetId: number,
+    body: { overwrite: boolean; backup: boolean },
+  ): Promise<{
+    group_id: number;
+    target_id: number;
+    applied: { rule_id: number; dispatched: boolean }[];
+    removed_individual: number[];
+    dispatch_errors: Record<string, string>;
+  }> {
+    const response = await this.api.post(`/groups/${groupId}/apply-to-target/${targetId}/`, body);
+    return response.data;
+  }
+
   async syncTargetRules(targetId: number): Promise<{ command_id: string; status: string }> {
     const response = await this.api.post(`/targets/${targetId}/sync-rules/`);
     return response.data;

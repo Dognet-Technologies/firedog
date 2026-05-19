@@ -435,6 +435,206 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
         }
         return Response(body, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["get"], url_path="out-of-sync")
+    def out_of_sync(self, request, pk=None):
+        """GET /api/groups/{pk}/out-of-sync/ → per ogni membro, quali rule del
+        gruppo mancano e quante "stray" rule individuali ha.
+
+        "Canonical set" del gruppo = unione di tutte le signature
+        (chain, action, protocol, port, source_ip, dest_ip) presenti sui
+        FirewallRule con group_origin=group, considerando tutti i membri.
+
+        Member out-of-sync ⇔ gli mancano una o più signature canonical.
+        """
+        from rules.models import FirewallRule
+
+        group = get_object_or_404(TargetGroup, pk=pk)
+        members = list(group.targets.all())
+
+        # Costruisci canonical set (set di tuple-signature)
+        canonical_rules = list(FirewallRule.objects.filter(group_origin=group))
+        sig_to_rule: dict[tuple, FirewallRule] = {}
+        for r in canonical_rules:
+            sig = (r.chain, r.action, r.protocol, r.port, r.source_ip, r.dest_ip)
+            # se più membri hanno la stessa signature, ne tieni una sola di rappresentanza
+            sig_to_rule.setdefault(sig, r)
+
+        canonical_signatures = list(sig_to_rule.keys())
+
+        # Per ogni membro, calcola signature presenti e missing
+        report = []
+        for t in members:
+            present_sigs = {
+                (r.chain, r.action, r.protocol, r.port, r.source_ip, r.dest_ip)
+                for r in FirewallRule.objects.filter(target=t, group_origin=group)
+            }
+            missing = [s for s in canonical_signatures if s not in present_sigs]
+            individual_rules_count = FirewallRule.objects.filter(
+                target=t, group_origin__isnull=True, is_custom=True
+            ).count()
+            report.append({
+                "target_id": t.id,
+                "target_label": t.hostname or t.ip_address,
+                "in_sync": len(missing) == 0,
+                "canonical_total": len(canonical_signatures),
+                "present_count": len(canonical_signatures) - len(missing),
+                "missing_count": len(missing),
+                "missing_signatures": [
+                    {
+                        "chain": s[0], "action": s[1], "protocol": s[2],
+                        "port": s[3], "source_ip": s[4], "dest_ip": s[5],
+                        "comment": sig_to_rule[s].comment,
+                    } for s in missing
+                ],
+                "individual_rules_count": individual_rules_count,
+            })
+
+        return Response({
+            "group_id": group.id,
+            "canonical_total": len(canonical_signatures),
+            "members": report,
+            "out_of_sync_count": sum(1 for m in report if not m["in_sync"]),
+        })
+
+    @action(detail=True, methods=["post"], url_path=r"apply-to-target/(?P<target_id>\d+)")
+    def apply_to_target(self, request, pk=None, target_id=None):
+        """POST /api/groups/{pk}/apply-to-target/{target_id}/
+
+        Body: { "overwrite": bool, "backup": bool }
+
+        - keep (overwrite=false): dispatcha all'agent solo le rule canonical
+          che mancano al target. Non tocca le rule esistenti.
+        - overwrite=true: opzionalmente fa backup dei FirewallRule del target
+          (is_custom=True, group_origin=NULL — quelle "individuali"), poi le
+          rimuove (delete da DB + dispatch RemoveRule all'agent per le synced),
+          poi dispatcha tutte le canonical rule del gruppo.
+        """
+        from rules.models import FirewallRule, FirewallRuleBackup
+        from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
+
+        group = get_object_or_404(TargetGroup, pk=pk)
+        target = get_object_or_404(Target, pk=target_id)
+        if not group.targets.filter(pk=target.id).exists():
+            return Response({"error": "Target non appartiene a questo gruppo"}, status=400)
+
+        overwrite = bool(request.data.get("overwrite", False))
+        backup = bool(request.data.get("backup", False))
+
+        # Canonical set di group rules (1 per signature, prima istanza incontrata)
+        sig_to_rule = {}
+        for r in FirewallRule.objects.filter(group_origin=group):
+            sig = (r.chain, r.action, r.protocol, r.port, r.source_ip, r.dest_ip)
+            sig_to_rule.setdefault(sig, r)
+
+        # Signature già presenti su questo target
+        present_sigs = {
+            (r.chain, r.action, r.protocol, r.port, r.source_ip, r.dest_ip)
+            for r in FirewallRule.objects.filter(target=target, group_origin=group)
+        }
+
+        # ─── overwrite: opzionale backup + remove individuali ────────────────
+        removed_individual: list[int] = []
+        dispatch_errors: dict[str, str] = {}
+
+        if overwrite:
+            individuals = list(FirewallRule.objects.filter(
+                target=target, group_origin__isnull=True, is_custom=True,
+            ))
+
+            if backup and individuals:
+                FirewallRuleBackup.objects.create(
+                    target=target,
+                    reason="group_apply_overwrite",
+                    triggered_by=request.user if request.user.is_authenticated else None,
+                    related_group=group,
+                    rules_count=len(individuals),
+                    snapshot=[
+                        {
+                            "chain": r.chain, "rule_number": r.rule_number,
+                            "protocol": r.protocol, "port": r.port,
+                            "source_ip": r.source_ip, "dest_ip": r.dest_ip,
+                            "action": r.action, "comment": r.comment,
+                            "is_custom": r.is_custom, "is_synced": r.is_synced,
+                            "group_origin_id": r.group_origin_id,
+                        }
+                        for r in individuals
+                    ],
+                    note=f"Pre apply-group-rules per {group.name}",
+                )
+
+            for r in individuals:
+                rn, ch = r.rule_number, r.chain
+                r.delete()
+                removed_individual.append(r.id)
+                if rn:
+                    try:
+                        dispatch_command_to_agent(
+                            target, "remove_rule", {"chain": ch, "rule_num": rn},
+                        )
+                    except AgentNotConnected as e:
+                        dispatch_errors[target.hostname or target.ip_address] = str(e)
+
+        # ─── apply canonical rules mancanti ─────────────────────────────────
+        marker = f"[group:{group.name}]"
+        applied_signatures: list[dict] = []
+        for sig, seed in sig_to_rule.items():
+            if sig in present_sigs and not overwrite:
+                continue  # già in sync, niente da fare
+            if sig in present_sigs and overwrite:
+                continue  # in modalità overwrite teniamo comunque la presenza già nostra
+            chain, action_str, proto, port, src_ip, dst_ip = sig
+
+            # Comment marker (riusa il commento "canonico" della seed rule)
+            comment = seed.comment if seed.comment else f"{marker}"
+            if marker not in comment:
+                comment = f"{marker} {comment}".strip()
+            comment = comment[:256]
+
+            new_rule = FirewallRule.objects.create(
+                target=target, chain=chain, protocol=proto, port=port,
+                source_ip=src_ip, dest_ip=dst_ip, action=action_str,
+                comment=comment, is_custom=True, is_synced=False,
+                group_origin=group,
+            )
+            payload = {
+                "chain": chain, "action": action_str, "comment": comment,
+                "protocol": proto if proto != "all" else None,
+                "src_ip": src_ip, "dst_ip": dst_ip, "dst_port": port,
+            }
+            payload = {k: v for k, v in payload.items() if v is not None}
+            try:
+                dispatch_command_to_agent(
+                    target, "add_rule", payload, meta={"rule_id": new_rule.id},
+                )
+                applied_signatures.append({"rule_id": new_rule.id, "dispatched": True})
+            except AgentNotConnected as e:
+                dispatch_errors[target.hostname or target.ip_address] = str(e)
+                applied_signatures.append({"rule_id": new_rule.id, "dispatched": False})
+
+        AuditLog.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            action="group_apply_to_target",
+            description=(
+                f"Group '{group.name}' applied to {target.hostname or target.ip_address}: "
+                f"overwrite={overwrite}, backup={backup}, "
+                f"applied={len(applied_signatures)}, removed={len(removed_individual)}"
+            ),
+            success=True,
+            new_values={
+                "group_id": group.id, "target_id": target.id,
+                "overwrite": overwrite, "backup": backup,
+                "applied": applied_signatures,
+                "removed_individual": removed_individual,
+                "dispatch_errors": dispatch_errors,
+            },
+        )
+        return Response({
+            "group_id": group.id, "target_id": target.id,
+            "applied": applied_signatures,
+            "removed_individual": removed_individual,
+            "dispatch_errors": dispatch_errors,
+        }, status=200)
+
     @action(detail=True, methods=["post"], url_path=r"remove-rule/(?P<rule_id>\d+)")
     def remove_rule(self, request, pk=None, rule_id=None):
         """POST /api/groups/{pk}/remove-rule/{rule_id}/ → rimuove TUTTE le rule
