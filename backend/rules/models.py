@@ -104,6 +104,20 @@ class FirewallRule(models.Model):
         default=False, help_text="Indica se la regola è sincronizzata sul target"
     )
 
+    # Origine: se la regola è stata creata via "Add Group Rule" punta al gruppo
+    # che l'ha generata. Le regole single-target hanno questo a NULL.
+    group_origin = models.ForeignKey(
+        "targets.TargetGroup",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="applied_rules",
+        help_text=(
+            "Gruppo da cui questa rule è stata propagata. NULL = rule creata "
+            "direttamente sul singolo target."
+        ),
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -526,7 +526,26 @@ class ApiService {
     );
     return response.data;
   }
-    // Whitelist methods
+
+  async getGroupRules(groupId: number): Promise<{ count: number; results: FirewallRule[] }> {
+    const response = await this.api.get(`/groups/${groupId}/rules/`);
+    return response.data;
+  }
+
+  async addGroupRule(
+    groupId: number,
+    data: { chain: string; protocol: string; port?: number | null; source_ip?: string | null; dest_ip?: string | null; action: string; comment?: string }
+  ): Promise<{ group: number; rules: { target_id: number; rule_id: number; dispatched: boolean }[]; dispatch_errors: Record<string, string> }> {
+    const response = await this.api.post(`/groups/${groupId}/add-rule/`, data);
+    return response.data;
+  }
+
+  async removeGroupRule(groupId: number, ruleId: number): Promise<{ removed: number[]; dispatch_errors: Record<string, string> }> {
+    const response = await this.api.post(`/groups/${groupId}/remove-rule/${ruleId}/`);
+    return response.data;
+  }
+
+  // Whitelist methods
   async getWhitelistByTarget(targetId: number) {
     const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);
     return response.data;

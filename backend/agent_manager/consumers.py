@@ -633,6 +633,20 @@ class AgentConsumer(AsyncWebsocketConsumer):
                     ).exclude(id=custom_match.id).delete()
                     continue
 
+                # Rilevamento marker "[group:NAME]": se il commento iptables
+                # contiene quel prefisso, la rule è "applicata da un gruppo".
+                # Cerchiamo il TargetGroup omonimo per popolare group_origin
+                # (utile quando la rule è stata creata fuori dalla UI, es. da
+                # un altro admin via firewall-manager, ma marcata con la stessa
+                # convenzione).
+                from targets.models import TargetGroup
+                group_origin = None
+                raw_comment = (rule.get("comment") or "")
+                m_grp = _re.match(r"^\[group:([^\]]+)\]", raw_comment)
+                if m_grp:
+                    group_name = m_grp.group(1).strip()
+                    group_origin = TargetGroup.objects.filter(name=group_name).first()
+
                 FirewallRule.objects.update_or_create(
                     target=self.target,
                     chain=chain,
@@ -643,9 +657,10 @@ class AgentConsumer(AsyncWebsocketConsumer):
                         "source_ip": source_ip,
                         "dest_ip": dest_ip,
                         "action": action,
-                        "comment": (rule.get("comment") or "")[:256],
+                        "comment": raw_comment[:256],
                         "is_custom": False,
                         "is_synced": True,
+                        "group_origin": group_origin,
                     },
                 )
 

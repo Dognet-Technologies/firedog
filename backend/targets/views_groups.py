@@ -335,6 +335,154 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
             logger.error(f"Error getting available targets for group {pk}: {e}")
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    # ─── Group-level firewall rules ─────────────────────────────────────────
+    # Una "group rule" è una FirewallRule replicata su ogni target membro,
+    # con group_origin che punta al gruppo e un comment marker `[group:NAME]`
+    # che la rende identificabile anche su iptables -L.
+
+    @action(detail=True, methods=["get"], url_path="rules")
+    def list_rules(self, request, pk=None):
+        """GET /api/groups/{pk}/rules/ → tutte le FirewallRule applicate via questo gruppo."""
+        from rules.models import FirewallRule
+        from rules.serializers import FirewallRuleListSerializer
+
+        group = get_object_or_404(TargetGroup, pk=pk)
+        qs = FirewallRule.objects.filter(group_origin=group).select_related("target")
+        data = FirewallRuleListSerializer(qs, many=True).data
+        return Response({"count": len(data), "results": data})
+
+    @action(detail=True, methods=["post"], url_path="add-rule")
+    def add_rule(self, request, pk=None):
+        """POST /api/groups/{pk}/add-rule/ → crea + dispatcha la rule a tutti i membri.
+
+        Body: {chain, protocol, port?, source_ip?, dest_ip?, action, comment?}
+        """
+        from rules.models import FirewallRule
+        from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
+
+        group = get_object_or_404(TargetGroup, pk=pk)
+        data = request.data
+        # Validazione minima (lo schema completo è già coperto dal serializer
+        # di FirewallRule, ma qui dispatchiamo a N target — meglio fail-fast).
+        chain = (data.get("chain") or "").upper()
+        action_str = (data.get("action") or "").upper()
+        if chain not in {"INPUT", "OUTPUT", "FORWARD"}:
+            return Response({"error": "chain non valido"}, status=400)
+        if action_str not in {"ACCEPT", "DROP", "REJECT"}:
+            return Response({"error": "action non valido"}, status=400)
+
+        members = list(group.targets.all())
+        if not members:
+            return Response({"error": "Il gruppo non ha membri"}, status=400)
+
+        marker = f"[group:{group.name}]"
+        user_comment = (data.get("comment") or "").strip()
+        full_comment = f"{marker} {user_comment}".strip()[:256]
+
+        created_rules: list[dict] = []
+        dispatch_errors: dict[str, str] = {}
+        for t in members:
+            rule = FirewallRule.objects.create(
+                target=t,
+                chain=chain,
+                protocol=(data.get("protocol") or "tcp"),
+                port=data.get("port") or None,
+                source_ip=data.get("source_ip") or None,
+                dest_ip=data.get("dest_ip") or None,
+                action=action_str,
+                comment=full_comment,
+                is_custom=True,
+                is_synced=False,
+                group_origin=group,
+            )
+            payload = {
+                "chain": chain,
+                "protocol": rule.protocol if rule.protocol != "all" else None,
+                "action": action_str,
+                "src_ip": rule.source_ip,
+                "dst_ip": rule.dest_ip,
+                "dst_port": rule.port,
+                "comment": full_comment,
+            }
+            payload = {k: v for k, v in payload.items() if v is not None}
+            try:
+                dispatch_command_to_agent(
+                    t, action="add_rule", payload=payload, meta={"rule_id": rule.id}
+                )
+                created_rules.append({"target_id": t.id, "rule_id": rule.id, "dispatched": True})
+            except AgentNotConnected as e:
+                dispatch_errors[t.hostname or t.ip_address] = str(e)
+                created_rules.append({"target_id": t.id, "rule_id": rule.id, "dispatched": False})
+
+        AuditLog.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            action="group_add_rule",
+            description=f"Group '{group.name}' add_rule {chain}/{action_str} on {len(members)} members",
+            success=True,
+            new_values={
+                "group_id": group.id,
+                "chain": chain,
+                "action": action_str,
+                "members": len(members),
+                "dispatched": sum(1 for r in created_rules if r["dispatched"]),
+                "dispatch_errors": dispatch_errors,
+            },
+        )
+        body = {
+            "group": group.id,
+            "rules": created_rules,
+            "dispatch_errors": dispatch_errors,
+        }
+        return Response(body, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path=r"remove-rule/(?P<rule_id>\d+)")
+    def remove_rule(self, request, pk=None, rule_id=None):
+        """POST /api/groups/{pk}/remove-rule/{rule_id}/ → rimuove TUTTE le rule
+        del gruppo che hanno la stessa signature di questa (chain/proto/port/src/dst/action)."""
+        from rules.models import FirewallRule
+        from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
+
+        group = get_object_or_404(TargetGroup, pk=pk)
+        seed = get_object_or_404(FirewallRule, pk=rule_id, group_origin=group)
+
+        siblings = FirewallRule.objects.filter(
+            group_origin=group,
+            chain=seed.chain,
+            protocol=seed.protocol,
+            port=seed.port,
+            source_ip=seed.source_ip,
+            dest_ip=seed.dest_ip,
+            action=seed.action,
+        )
+
+        removed: list[int] = []
+        dispatch_errors: dict[str, str] = {}
+        for r in siblings:
+            target = r.target
+            chain = r.chain
+            rule_number = r.rule_number
+            r.delete()
+            removed.append(r.id)
+            if rule_number:
+                try:
+                    dispatch_command_to_agent(
+                        target,
+                        action="remove_rule",
+                        payload={"chain": chain, "rule_num": rule_number},
+                        meta={},
+                    )
+                except AgentNotConnected as e:
+                    dispatch_errors[target.hostname or target.ip_address] = str(e)
+
+        AuditLog.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            action="group_remove_rule",
+            description=f"Group '{group.name}' removed {len(removed)} replicated rules",
+            success=True,
+            new_values={"group_id": group.id, "removed": removed, "dispatch_errors": dispatch_errors},
+        )
+        return Response({"removed": removed, "dispatch_errors": dispatch_errors})
+
 
 class GroupRuleTemplateViewSet(viewsets.ModelViewSet):
     """

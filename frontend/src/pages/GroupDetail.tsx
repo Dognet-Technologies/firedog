@@ -74,6 +74,17 @@ const GroupDetail: React.FC = () => {
   const [configForm, setConfigForm] = useState({ name: '', description: '' });
   const [savingConfig, setSavingConfig] = useState(false);
 
+  // Add Group Rule modal state
+  const [showAddRule, setShowAddRule] = useState(false);
+  const [newGroupRule, setNewGroupRule] = useState({
+    chain: 'INPUT',
+    protocol: 'tcp',
+    port: '',
+    source_ip: '',
+    action: 'ACCEPT',
+    comment: '',
+  });
+
   const [trafficData, setTrafficData] = useState<any[]>([]);
   const [cpuData, setCpuData] = useState<any[]>([]);
   const [memData, setMemData] = useState<any[]>([]);
@@ -97,26 +108,30 @@ const GroupDetail: React.FC = () => {
       const groupTargets: Target[] = groupData.targets || [];
       setMembers(groupTargets);
 
+      // Le regole "del gruppo" sono quelle propagate via Add Group Rule
+      // (group_origin=gid sui FirewallRule replicati per ogni membro).
+      // Non aggregiamo più tutte le rule di ciascun target singolo.
+      try {
+        const groupRulesResp = await apiService.getGroupRules(gid);
+        setRules(groupRulesResp.results);
+      } catch {
+        setRules([]);
+      }
+
       // Load threats from all member targets
       if (groupTargets.length > 0) {
         const allThreats: ThreatLog[] = [];
-        const allRules: FirewallRule[] = [];
         await Promise.all(
           groupTargets.map(async (t) => {
             try {
-              const [threatResp, rulesResp] = await Promise.all([
-                apiService.getThreats({ target: t.id, limit: 20 }),
-                apiService.getRules(t.id),
-              ]);
+              const threatResp = await apiService.getThreats({ target: t.id, limit: 20 });
               allThreats.push(...threatResp.results);
-              allRules.push(...rulesResp.results);
             } catch {
               // Skip failed individual target fetches
             }
           })
         );
         setThreats(allThreats);
-        setRules(allRules);
 
         // Fetch monitoring data (firewall stats + heartbeats) from all members in parallel
         const allStats: any[] = [];
@@ -191,6 +206,56 @@ const GroupDetail: React.FC = () => {
       showToast({ type: 'error', title: 'Error', message: 'Failed to load group data' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddGroupRule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!groupId) return;
+    const port = newGroupRule.port ? parseInt(newGroupRule.port, 10) : null;
+    if (port !== null && (isNaN(port) || port < 1 || port > 65535)) {
+      showToast({ type: 'error', title: 'Validation', message: 'Port must be 1..65535' });
+      return;
+    }
+    try {
+      const resp = await apiService.addGroupRule(groupId, {
+        chain: newGroupRule.chain,
+        protocol: newGroupRule.protocol,
+        port,
+        source_ip: newGroupRule.source_ip || null,
+        action: newGroupRule.action,
+        comment: newGroupRule.comment,
+      });
+      const ok = resp.rules.filter(r => r.dispatched).length;
+      const fail = resp.rules.length - ok;
+      const errSummary = Object.entries(resp.dispatch_errors || {}).map(([h, e]) => `${h}: ${e}`).join('; ');
+      showToast({
+        type: fail > 0 ? 'warning' : 'success',
+        title: 'Group rule applied',
+        message: `${ok}/${resp.rules.length} member(s) dispatched${errSummary ? ` — errors: ${errSummary}` : ''}`,
+      });
+      setShowAddRule(false);
+      setNewGroupRule({ chain: 'INPUT', protocol: 'tcp', port: '', source_ip: '', action: 'ACCEPT', comment: '' });
+      if (groupId) loadAll(groupId);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to apply group rule';
+      showToast({ type: 'error', title: 'Error', message: msg });
+    }
+  };
+
+  const handleRemoveGroupRule = async (ruleId: number) => {
+    if (!groupId) return;
+    try {
+      const resp = await apiService.removeGroupRule(groupId, ruleId);
+      showToast({
+        type: 'success',
+        title: 'Group rule removed',
+        message: `${resp.removed.length} rule(s) removed across members`,
+      });
+      if (groupId) loadAll(groupId);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to remove rule';
+      showToast({ type: 'error', title: 'Error', message: msg });
     }
   };
 
@@ -462,14 +527,16 @@ const GroupDetail: React.FC = () => {
         {activeTab === 'rules' && (
           <div className="gd-rules">
             <div className="gd-section-header">
-              <h2>Rules</h2>
-              <span className="gd-section-count">{rules.length} total across all members</span>
-              <Link to="/firewall" className="mon-detail-link">Open in Firewall →</Link>
+              <h2>Group Rules</h2>
+              <span className="gd-section-count">
+                {rules.length} replicated across {new Set(rules.map(r => r.target)).size} member(s)
+              </span>
+              <button className="btn-primary" onClick={() => setShowAddRule(true)}>+ Add Group Rule</button>
             </div>
             {rules.length === 0 ? (
               <div className="empty-state">
-                <h3>No rules</h3>
-                <p>No firewall rules found for this group's members.</p>
+                <h3>No group rules yet</h3>
+                <p>Aggiungi una regola che verrà replicata su tutti i membri del gruppo. Le rule del gruppo sono identificabili dal marker <code>[group:{group?.name || '...'}]</code> nel commento iptables.</p>
               </div>
             ) : (
               <div className="gd-table-wrapper">
@@ -483,6 +550,8 @@ const GroupDetail: React.FC = () => {
                       <th>Source IP</th>
                       <th>Action</th>
                       <th>Comment</th>
+                      <th>Sync</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -507,6 +576,14 @@ const GroupDetail: React.FC = () => {
                             <span className={`action-badge action-${rule.action.toLowerCase()}`}>{rule.action}</span>
                           </td>
                           <td className="gd-muted">{rule.comment || '—'}</td>
+                          <td>{rule.is_synced ? '✓' : '…'}</td>
+                          <td>
+                            <button
+                              className="btn-icon btn-danger"
+                              title="Remove from all group members"
+                              onClick={() => handleRemoveGroupRule(rule.id)}
+                            >×</button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -514,6 +591,65 @@ const GroupDetail: React.FC = () => {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {showAddRule && groupId && (
+          <div className="modal-overlay" onClick={() => setShowAddRule(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Add Group Rule → {group?.name}</h2>
+                <button className="modal-close" onClick={() => setShowAddRule(false)}>×</button>
+              </div>
+              <form onSubmit={handleAddGroupRule}>
+                <div className="form-group">
+                  <label>Chain</label>
+                  <select value={newGroupRule.chain} onChange={e => setNewGroupRule({ ...newGroupRule, chain: e.target.value })}>
+                    <option value="INPUT">INPUT</option>
+                    <option value="OUTPUT">OUTPUT</option>
+                    <option value="FORWARD">FORWARD</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Protocol</label>
+                  <select value={newGroupRule.protocol} onChange={e => setNewGroupRule({ ...newGroupRule, protocol: e.target.value })}>
+                    <option value="tcp">tcp</option>
+                    <option value="udp">udp</option>
+                    <option value="icmp">icmp</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Port</label>
+                  <input type="number" min="1" max="65535" value={newGroupRule.port}
+                    onChange={e => setNewGroupRule({ ...newGroupRule, port: e.target.value })} placeholder="es. 80" />
+                </div>
+                <div className="form-group">
+                  <label>Source IP <small>(opzionale, solo INPUT)</small></label>
+                  <input type="text" value={newGroupRule.source_ip}
+                    onChange={e => setNewGroupRule({ ...newGroupRule, source_ip: e.target.value })} placeholder="es. 10.0.0.0/24" />
+                </div>
+                <div className="form-group">
+                  <label>Action</label>
+                  <select value={newGroupRule.action} onChange={e => setNewGroupRule({ ...newGroupRule, action: e.target.value })}>
+                    <option value="ACCEPT">ACCEPT</option>
+                    <option value="DROP">DROP</option>
+                    <option value="REJECT">REJECT</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Comment</label>
+                  <input type="text" value={newGroupRule.comment}
+                    onChange={e => setNewGroupRule({ ...newGroupRule, comment: e.target.value })} placeholder="es. Allow HTTP for cache nodes" />
+                  <small style={{ color: '#888' }}>
+                    Verrà prefissato con <code>[group:{group?.name}]</code> per identificare la rule come "di gruppo" anche dentro iptables.
+                  </small>
+                </div>
+                <div className="modal-actions">
+                  <button type="button" className="btn-secondary" onClick={() => setShowAddRule(false)}>Cancel</button>
+                  <button type="submit" className="btn-primary">Apply to {members.length} member(s)</button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 
