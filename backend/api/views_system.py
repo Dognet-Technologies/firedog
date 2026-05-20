@@ -79,13 +79,14 @@ class SystemUpdateCheckView(APIView):
             ["git", "log", "-1", "--format=%h %s (%ar)", f"origin/{branch}"], cwd=REPO_ROOT
         )
 
-        # Lista dei commit nuovi (max 20 righe)
+        # Lista dei commit nuovi (max 20 righe). Niente author: in un setup
+        # mono-team il nome aggiunge solo rumore al changelog.
         rc, log_diff, _ = _run(
             [
                 "git",
                 "log",
                 "--no-merges",
-                "--pretty=format:%h %s (%an, %ar)",
+                "--pretty=format:%h %s (%ar)",
                 "-n",
                 "20",
                 f"{local_sha.strip()}..{remote_sha.strip()}",
