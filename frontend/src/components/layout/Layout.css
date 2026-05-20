@@ -418,33 +418,33 @@
   display: inline-block;
 }
 
-.status-online {
+/* Regole status-* qui sotto sono SCOPED alla sidebar tramite .sidebar.
+ * Prima erano globali (.status-online {}) → si applicavano a qualsiasi
+ * elemento con quella class (inclusi i <tr> nella pagina Targets, che
+ * ricevevano background verde + pulse infinito → "verde neon che riempie
+ * la riga"). Scope-ate qui le regole restano valide per i dot della
+ * sidebar e non infestano altri layer. Niente animation infinita: il
+ * pulse "appena associato" è gestito nella pagina Targets via classe
+ * opt-in. */
+.sidebar .status-online {
   background: var(--status-success);
   box-shadow: 0 0 6px var(--status-success);
-  animation: statusPulse 2s infinite;
 }
 
-.status-offline {
+.sidebar .status-offline {
   background: var(--status-danger);
 }
 
-.status-error {
+.sidebar .status-error {
   background: var(--status-warning);
-  animation: statusPulse 1.5s infinite;
 }
 
-.status-installing {
+.sidebar .status-installing {
   background: var(--status-info);
-  animation: statusPulse 1.5s infinite;
 }
 
-.status-pending {
+.sidebar .status-pending {
   background: var(--text-tertiary);
-}
-
-@keyframes statusPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 /* Header icon button */

@@ -459,7 +459,7 @@ const Targets: React.FC = () => {
               </tr>
             ) : (
               filteredAndSortedTargets.map(target => (
-                <tr key={target.id} className={`target-row status-${target.status}`}>
+                <tr key={target.id} className={`target-row target-row--${target.status}`}>
                   <td className="ip-cell">
                     <code>{target.ip_address}</code>
                   </td>
