@@ -44,12 +44,9 @@ interface TrafficTabProps {
 const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
   const [loading, setLoading] = useState(false);
   const [trafficData, setTrafficData] = useState<any[]>([]);
-  const [protocolData] = useState([
-    { name: 'TCP', pct: 72 },
-    { name: 'UDP', pct: 18 },
-    { name: 'ICMP', pct: 6 },
-    { name: 'Other', pct: 4 },
-  ]);
+  // Distribuzione protocolli reale: calcolata dall'ultimo snapshot
+  // FirewallStats.protocols (origine /proc/net/snmp sul target).
+  const [protocolData, setProtocolData] = useState<Array<{ name: string; pct: number }>>([]);
   const [topIPs, setTopIPs] = useState<any[]>([]);
 
   const load = useCallback(async () => {
@@ -81,16 +78,45 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
 
       setTrafficData(traffic);
 
-      const last = sorted[sorted.length - 1];
-      const totalIn = last.input_packets;
-      const totalOut = last.output_packets;
-      setTopIPs([
-        { ip: '192.168.1.45', packets: Math.round(totalIn * 0.12), bytes: `${(totalIn * 0.12 * 480 / 1e9).toFixed(2)} GB`, direction: 'inbound' },
-        { ip: '10.0.0.23', packets: Math.round(totalIn * 0.09), bytes: `${(totalIn * 0.09 * 520 / 1e9).toFixed(2)} GB`, direction: 'inbound' },
-        { ip: '172.16.8.100', packets: Math.round(totalIn * 0.07), bytes: `${(totalIn * 0.07 * 310 / 1e9).toFixed(2)} GB`, direction: 'inbound' },
-        { ip: '8.8.8.8', packets: Math.round(totalOut * 0.15), bytes: `${(totalOut * 0.15 * 120 / 1e9).toFixed(2)} GB`, direction: 'outbound' },
-        { ip: '1.1.1.1', packets: Math.round(totalOut * 0.11), bytes: `${(totalOut * 0.11 * 110 / 1e9).toFixed(2)} GB`, direction: 'outbound' },
-      ]);
+      // Protocol Distribution: percentuali sull'ultimo snapshot del target.
+      // sorted è cronologico crescente → ultimo elemento = più recente.
+      const latest = sorted[sorted.length - 1];
+      const protos = (latest && latest.protocols) || {};
+      const sumProto = (p: { in_packets?: number; out_packets?: number } | undefined) =>
+        (p?.in_packets ?? 0) + (p?.out_packets ?? 0);
+      const tcp = sumProto(protos.tcp);
+      const udp = sumProto(protos.udp);
+      const icmp = sumProto(protos.icmp);
+      const total = tcp + udp + icmp;
+      setProtocolData(total > 0
+        ? [
+            { name: 'TCP',  pct: +(tcp  / total * 100).toFixed(1) },
+            { name: 'UDP',  pct: +(udp  / total * 100).toFixed(1) },
+            { name: 'ICMP', pct: +(icmp / total * 100).toFixed(1) },
+          ]
+        : []);
+
+      // Top IP Addresses: usiamo ThreatLog del target, aggregato per source_ip
+      // (sommando packet_count). Non è "top talker" classico (per quello servirebbe
+      // pcap analysis o nflog parsing), ma sono IP REALMENTE osservati come
+      // sorgenti di traffico anomalo verso questo target.
+      try {
+        const threatsResp = await apiService.getThreats({ target: targetId, limit: 100 });
+        const agg = new Map<string, { ip: string; packets: number; score: number }>();
+        for (const t of threatsResp.results) {
+          const cur = agg.get(t.source_ip) || { ip: t.source_ip, packets: 0, score: 0 };
+          cur.packets += t.packet_count || 0;
+          cur.score = Math.max(cur.score, t.threat_score || 0);
+          agg.set(t.source_ip, cur);
+        }
+        const top = Array.from(agg.values())
+          .sort((a, b) => b.packets - a.packets)
+          .slice(0, 5)
+          .map((e) => ({ ip: e.ip, packets: e.packets, score: e.score, direction: 'inbound' }));
+        setTopIPs(top);
+      } catch {
+        setTopIPs([]);
+      }
     } catch (err) {
       console.error('Traffic load error:', err);
     } finally {
@@ -173,8 +199,8 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
 
       <div className="mon-grid-2">
         <DataTooltip title="Protocol Distribution" type="rate"
-          description="Distribuzione percentuale stimata dei protocolli di rete nel traffico totale (TCP, UDP, ICMP, altri). Nota: si tratta di una stima statica basata su valori tipici — non deriva da deep packet inspection in tempo reale."
-          source="Stima statica (non da API)">
+          description="Distribuzione percentuale di TCP/UDP/ICMP sull'ultimo snapshot del target. Counter cumulativi del kernel raccolti da /proc/net/snmp e inviati dall'agent in FirewallStats.protocols."
+          source="FirewallStats.protocols · /proc/net/snmp">
         <div className="mon-chart-card">
           <h3 className="mon-card-title">Protocol Distribution</h3>
           <ResponsiveContainer width="100%" height={180}>
@@ -189,34 +215,36 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
         </div>
         </DataTooltip>
 
-        <DataTooltip title="Top IP Addresses by Volume" type="sum"
-          description="Indirizzi IP con il maggiore volume di traffico stimato nel periodo. I conteggi sono derivati proporzionalmente dai totali cumulativi di FirewallStats — rappresentano volumi relativi, non metriche per-IP precise."
-          source="Stima da FirewallStats.input_packets (proporzionale)">
+        <DataTooltip title="Top Source IPs (threats)" type="sum"
+          description="IP sorgenti con più pacchetti anomali osservati su questo target, aggregati dai ThreatLog. Non è 'top talker' nel senso classico: per quello servirebbe parsing dei pcap. Sono però IP reali, non stimati."
+          source="ThreatLog.source_ip · packet_count per target">
         <div className="mon-card">
-          <h3 className="mon-card-title">Top IP Addresses by Volume</h3>
+          <h3 className="mon-card-title">Top Source IPs (threats)</h3>
           <div className="mon-table-wrapper">
-            <table className="mon-table">
-              <thead>
-                <tr>
-                  <th>IP</th>
-                  <th>Packets</th>
-                  <th>Volume</th>
-                  <th>Dir.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topIPs.map((ip) => (
-                  <tr key={ip.ip}>
-                    <td className="mon-mono">{ip.ip}</td>
-                    <td>{fmt(ip.packets)}</td>
-                    <td>{ip.bytes}</td>
-                    <td>
-                      <span className={`mon-dir-badge ${ip.direction}`}>{ip.direction}</span>
-                    </td>
+            {topIPs.length === 0 ? (
+              <div className="mon-empty" style={{ padding: 16 }}>
+                Nessun threat osservato per questo target.
+              </div>
+            ) : (
+              <table className="mon-table">
+                <thead>
+                  <tr>
+                    <th>IP</th>
+                    <th>Packets</th>
+                    <th>Max score</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {topIPs.map((ip) => (
+                    <tr key={ip.ip}>
+                      <td className="mon-mono">{ip.ip}</td>
+                      <td>{fmt(ip.packets)}</td>
+                      <td>{ip.score}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
         </DataTooltip>

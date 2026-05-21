@@ -214,15 +214,32 @@ const ActivityTimelineWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats
 };
 
 const GeoMapWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) => {
-  // TODO: replace with real API call for geo stats
-  const geoData: Array<{ country: string; count: number; pct: number }> = [
-    { country: 'CN', count: 234, pct: 42 },
-    { country: 'RU', count: 120, pct: 22 },
-    { country: 'US', count: 87, pct: 16 },
-    { country: 'BR', count: 45, pct: 8 },
-    { country: 'IN', count: 32, pct: 6 },
-    { country: 'DE', count: 18, pct: 3 },
-  ];
+  // Aggregato per country_code dei ThreatLog recenti. Il backend popola
+  // country_code solo se geoip2 + GeoLite2-Country.mmdb sono configurati
+  // (Roadmap punto #7). Senza GeoIP, country_code resta vuoto → widget vuoto.
+  const threats = stats?.recent_threats ?? [];
+  const countByCountry = new Map<string, number>();
+  for (const t of threats) {
+    const cc = (t as { country_code?: string }).country_code;
+    if (!cc) continue;
+    countByCountry.set(cc, (countByCountry.get(cc) ?? 0) + 1);
+  }
+  const total = Array.from(countByCountry.values()).reduce((s, n) => s + n, 0);
+  const geoData = total === 0
+    ? []
+    : Array.from(countByCountry.entries())
+        .map(([country, count]) => ({ country, count, pct: Math.round((count / total) * 100) }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6);
+
+  if (geoData.length === 0) {
+    return (
+      <div className="widget-empty">
+        Nessun dato geografico (GeoIP lookup non configurato lato server).
+      </div>
+    );
+  }
+
   return (
     <div className="widget-geo">
       {geoData.map((g) => (
