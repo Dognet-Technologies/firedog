@@ -428,6 +428,7 @@ class FirewallStatsSerializer(serializers.ModelSerializer):
             "pcap_output_dropped_bytes",
             "dropped_input_packets",
             "dropped_output_packets",
+            "protocols",
             "status",
             "collected_at",
             "imported_at",

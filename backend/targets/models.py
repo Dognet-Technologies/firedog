@@ -635,6 +635,15 @@ class FirewallStats(models.Model):
         default=0, help_text="Pacchetti droppati in uscita (LOG_OUTPUT_DROP)"
     )
 
+    # Counter per protocollo da /proc/net/snmp, formato:
+    #   {"tcp": {"in_packets": N, "out_packets": N},
+    #    "udp": {...}, "icmp": {...}}
+    # Cumulativi del kernel: il chart Protocol Distribution scala in delta.
+    protocols = models.JSONField(
+        default=dict, blank=True,
+        help_text="Counter per protocollo (tcp/udp/icmp in/out), cumulativi",
+    )
+
     # Status
     status = models.CharField(
         max_length=50, default="healthy", help_text="Stato generale del firewall"

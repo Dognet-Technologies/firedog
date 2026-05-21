@@ -80,6 +80,10 @@ const TargetDetail: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const [trafficData, setTrafficData] = useState<any[]>([]);
+  // Protocol Distribution: % di TCP/UDP/ICMP sull'ultimo snapshot. Niente
+  // più valori hardcoded — i counter cumulativi vengono dall'agent in
+  // FirewallStats.protocols (origine /proc/net/snmp sul target).
+  const [protocolData, setProtocolData] = useState<Array<{ name: string; value: number }>>([]);
   const [cpuData, setCpuData] = useState<any[]>([]);
   const [memData, setMemData] = useState<any[]>([]);
   const [currentMetrics, setCurrentMetrics] = useState<{ cpu: number; mem: number; disk: number } | null>(null);
@@ -126,6 +130,26 @@ const TargetDetail: React.FC = () => {
           };
         }).slice(1);
         setTrafficData(traffic);
+
+        // Protocol Distribution: percentuale di TCP/UDP/ICMP sul totale
+        // pacchetti (in+out) dell'ultimo snapshot. I counter sono cumulativi
+        // del kernel ma per la % istantanea va benissimo lavorare in assoluto.
+        const latest = statsData[0];
+        const protos = (latest && latest.protocols) || {};
+        const sum = (p: { in_packets?: number; out_packets?: number } | undefined) =>
+          (p?.in_packets ?? 0) + (p?.out_packets ?? 0);
+        const tcp = sum(protos.tcp);
+        const udp = sum(protos.udp);
+        const icmp = sum(protos.icmp);
+        const total = tcp + udp + icmp;
+        setProtocolData(total > 0
+          ? [
+              { name: 'TCP',  value: +(tcp  / total * 100).toFixed(1) },
+              { name: 'UDP',  value: +(udp  / total * 100).toFixed(1) },
+              { name: 'ICMP', value: +(icmp / total * 100).toFixed(1) },
+            ]
+          : [],
+        );
       }
 
       // Performance data from AgentHeartbeat
@@ -792,16 +816,12 @@ const TargetDetail: React.FC = () => {
               </DataTooltip>
 
               <DataTooltip title="Protocol Distribution" type="rate"
-                description="Distribuzione stimata dei protocolli di rete (TCP, UDP, ICMP). Si tratta di valori statici di default — non derivano da analisi dei pacchetti in tempo reale per questo specifico target."
-                source="Stima statica (non da API)">
+                description="Percentuale di pacchetti TCP/UDP/ICMP sul totale (in + out) dell'ultimo snapshot del target. Counter cumulativi del kernel raccolti da /proc/net/snmp e inviati dall'agent come FirewallStats.protocols."
+                source="FirewallStats.protocols · /proc/net/snmp">
               <div className="td-chart-card">
                 <h3 className="td-card-title">Protocol Distribution</h3>
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={[
-                    { name: 'TCP', value: 65 },
-                    { name: 'UDP', value: 25 },
-                    { name: 'ICMP', value: 10 },
-                  ]}>
+                  <BarChart data={protocolData}>
                     <XAxis dataKey="name" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
                     <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
                     <CartesianGrid stroke="var(--border-primary)" strokeDasharray="3 3" />

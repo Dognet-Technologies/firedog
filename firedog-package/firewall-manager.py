@@ -580,6 +580,51 @@ class FirewallManager:
 
         return rules
 
+    def get_protocol_stats(self) -> Dict:
+        """Estrae i counter cumulativi per protocollo da /proc/net/snmp.
+
+        Restituisce InSegs/OutSegs (TCP), InDatagrams/OutDatagrams (UDP),
+        InMsgs/OutMsgs (ICMP). I valori sono counter del kernel (mai resettati
+        a runtime), il server li scala in delta tra snapshot consecutivi.
+        """
+        result = {
+            'tcp':  {'in_packets': 0, 'out_packets': 0},
+            'udp':  {'in_packets': 0, 'out_packets': 0},
+            'icmp': {'in_packets': 0, 'out_packets': 0},
+        }
+        try:
+            with open('/proc/net/snmp', 'r') as f:
+                lines = f.readlines()
+            # Le coppie sono header / values con stesso prefisso (es. "Tcp:")
+            headers = {}
+            values = {}
+            for line in lines:
+                if ':' not in line:
+                    continue
+                proto, rest = line.split(':', 1)
+                fields = rest.split()
+                if proto in headers:
+                    values[proto] = fields
+                else:
+                    headers[proto] = fields
+
+            def col(proto, name, default=0):
+                try:
+                    idx = headers[proto].index(name)
+                    return int(values[proto][idx])
+                except (KeyError, ValueError, IndexError):
+                    return default
+
+            result['tcp']['in_packets']  = col('Tcp', 'InSegs')
+            result['tcp']['out_packets'] = col('Tcp', 'OutSegs')
+            result['udp']['in_packets']  = col('Udp', 'InDatagrams')
+            result['udp']['out_packets'] = col('Udp', 'OutDatagrams')
+            result['icmp']['in_packets'] = col('Icmp', 'InMsgs')
+            result['icmp']['out_packets'] = col('Icmp', 'OutMsgs')
+        except Exception:
+            pass
+        return result
+
     def get_system_info(self) -> Dict:
         """Ottieni informazioni di sistema"""
 
@@ -642,6 +687,9 @@ class FirewallManager:
                 'timestamp': datetime.now().isoformat(),
                 'firedog_version': '1.0.0',
                 'system': self.get_system_info(),
+                # Counters per protocollo da /proc/net/snmp (cumulativi del kernel).
+                # Il server scala in delta per il Protocol Distribution chart.
+                'protocols': self.get_protocol_stats(),
                 'rules': {
                     'INPUT': self.parse_iptables_rules('INPUT'),
                     'OUTPUT': self.parse_iptables_rules('OUTPUT'),

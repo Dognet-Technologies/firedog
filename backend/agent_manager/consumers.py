@@ -552,6 +552,9 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 "pcap_output_dropped_bytes": int(pcap.get("output", 0) or 0),
                 "dropped_input_packets": int(dropped.get("input", 0) or 0),
                 "dropped_output_packets": int(dropped.get("output", 0) or 0),
+                # Counter per protocollo da /proc/net/snmp. Validati a un dict
+                # per evitare di salvare tipi inattesi (es. None).
+                "protocols": payload.get("protocols") if isinstance(payload.get("protocols"), dict) else {},
                 "status": payload.get("status", "healthy") or "healthy",
                 "raw_json": payload,
             },
