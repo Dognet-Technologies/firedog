@@ -429,6 +429,8 @@ class FirewallStatsSerializer(serializers.ModelSerializer):
             "dropped_input_packets",
             "dropped_output_packets",
             "protocols",
+            "conntrack_count",
+            "conntrack_max",
             "status",
             "collected_at",
             "imported_at",

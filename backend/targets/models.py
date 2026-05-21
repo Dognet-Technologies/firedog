@@ -644,6 +644,14 @@ class FirewallStats(models.Model):
         help_text="Counter per protocollo (tcp/udp/icmp in/out), cumulativi",
     )
 
+    # Connessioni attive tracciate da netfilter conntrack (snapshot istantaneo).
+    conntrack_count = models.IntegerField(
+        default=0, help_text="Connessioni attive (nf_conntrack_count)"
+    )
+    conntrack_max = models.IntegerField(
+        default=0, help_text="Capacità massima conntrack (nf_conntrack_max)"
+    )
+
     # Status
     status = models.CharField(
         max_length=50, default="healthy", help_text="Stato generale del firewall"

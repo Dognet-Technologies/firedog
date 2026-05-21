@@ -533,8 +533,11 @@ class AgentConsumer(AsyncWebsocketConsumer):
         dropped = stats.get("dropped") or {}
 
         collected_at = parse_datetime(payload.get("timestamp") or "") or timezone.now()
+        # Difensivo: timestamp dell'agent senza TZ info viene trattato come
+        # UTC (i target Linux registrano ora UTC by default). Prima veniva
+        # marcato come Europe/Rome dal middleware Django → 2h di shift al DB.
         if timezone.is_naive(collected_at):
-            collected_at = timezone.make_aware(collected_at, timezone.get_current_timezone())
+            collected_at = timezone.make_aware(collected_at, timezone.utc)
 
         FirewallStats.objects.update_or_create(
             target=self.target,
@@ -555,6 +558,9 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 # Counter per protocollo da /proc/net/snmp. Validati a un dict
                 # per evitare di salvare tipi inattesi (es. None).
                 "protocols": payload.get("protocols") if isinstance(payload.get("protocols"), dict) else {},
+                # Conntrack: snapshot istantaneo (non delta).
+                "conntrack_count": int((payload.get("conntrack") or {}).get("count", 0) or 0),
+                "conntrack_max":   int((payload.get("conntrack") or {}).get("max", 0) or 0),
                 "status": payload.get("status", "healthy") or "healthy",
                 "raw_json": payload,
             },

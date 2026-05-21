@@ -11,7 +11,7 @@ import sys
 import os
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import ipaddress
@@ -580,6 +580,23 @@ class FirewallManager:
 
         return rules
 
+    def get_conntrack_stats(self) -> Dict:
+        """Connessioni tracciate dal modulo netfilter conntrack.
+
+        È il numero di flussi TCP/UDP/ICMP attivi visti dal firewall, non solo
+        le sessioni TCP ESTABLISHED — copre anche UDP "pseudo-stateful" e ICMP
+        request/reply. Letto da /proc/sys/net/netfilter/nf_conntrack_{count,max}.
+        """
+        result = {'count': 0, 'max': 0}
+        for key, path in (('count', '/proc/sys/net/netfilter/nf_conntrack_count'),
+                          ('max',   '/proc/sys/net/netfilter/nf_conntrack_max')):
+            try:
+                with open(path, 'r') as f:
+                    result[key] = int(f.read().strip())
+            except (FileNotFoundError, ValueError, PermissionError):
+                pass
+        return result
+
     def get_protocol_stats(self) -> Dict:
         """Estrae i counter cumulativi per protocollo da /proc/net/snmp.
 
@@ -684,12 +701,20 @@ class FirewallManager:
             data = {
                 'hostname': subprocess.run(['hostname'], capture_output=True, text=True).stdout.strip(),
                 'ip_address': self.get_primary_ip(),
-                'timestamp': datetime.now().isoformat(),
+                # Timestamp ISO-8601 con TZ UTC esplicito. datetime.now() senza
+                # argomenti restituisce un naive datetime → il server lo
+                # interpreta come ora locale (Europe/Rome) e applica un doppio
+                # offset, sfasando di 2h tutto il chart.
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'firedog_version': '1.0.0',
                 'system': self.get_system_info(),
                 # Counters per protocollo da /proc/net/snmp (cumulativi del kernel).
                 # Il server scala in delta per il Protocol Distribution chart.
                 'protocols': self.get_protocol_stats(),
+                # Connessioni attive tracciate da netfilter conntrack: snapshot
+                # istantaneo (non delta), utile per il chart "Connections over
+                # time" che usa la serie temporale di snapshot.
+                'conntrack': self.get_conntrack_stats(),
                 'rules': {
                     'INPUT': self.parse_iptables_rules('INPUT'),
                     'OUTPUT': self.parse_iptables_rules('OUTPUT'),

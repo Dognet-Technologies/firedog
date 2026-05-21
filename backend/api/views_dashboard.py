@@ -91,10 +91,14 @@ class FleetTrafficView(APIView):
                 fleet_delta[h_now][1] += max(0, out_now - out_prev)
 
         # Timeline ordinata su tutte le N ore (anche quelle vuote).
+        # NB: il campo `time` (HH:00) è derivabile dal browser via toLocaleTimeString
+        # sul timestamp ISO; lo lasciamo come hint comodo per chart semplici, ma
+        # è formattato esplicitamente in TZ del server (Django TIME_ZONE) così
+        # è prevedibile a prescindere dall'ora di sistema.
         timeline = [now_h - timedelta(hours=hours - 1 - i) for i in range(hours)]
         series = [
             {
-                "time": h.astimezone().strftime("%H:00"),
+                "time": timezone.localtime(h).strftime("%H:00"),
                 "in": fleet_delta.get(h, [0, 0])[0],
                 "out": fleet_delta.get(h, [0, 0])[1],
                 "timestamp": h.isoformat(),

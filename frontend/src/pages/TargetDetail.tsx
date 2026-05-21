@@ -127,6 +127,9 @@ const TargetDetail: React.FC = () => {
             time: new Date(s.collected_at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
             in: prev ? Math.max(0, s.input_packets - prev.input_packets) : 0,
             out: prev ? Math.max(0, s.output_packets - prev.output_packets) : 0,
+            // conntrack_count è uno snapshot istantaneo (no delta): mostra il
+            // numero di flussi attivi al momento della snapshot.
+            conn: s.conntrack_count ?? 0,
           };
         }).slice(1);
         setTrafficData(traffic);
@@ -834,13 +837,13 @@ const TargetDetail: React.FC = () => {
               </div>
               </DataTooltip>
 
-              <DataTooltip title="Connections over time" type="delta"
-                description="Stima del numero di connessioni attive nel tempo, derivata proporzionalmente dal volume di pacchetti: connessioni ≈ (in + out) / 20. Non è un contatore reale di connessioni TCP/UDP."
-                source="Derivato da FirewallStats (stima)">
+              <DataTooltip title="Connections over time" type="last"
+                description="Connessioni attive tracciate dal modulo netfilter conntrack del kernel del target. Snapshot istantaneo per ogni campionamento (non delta). Include TCP, UDP pseudo-stateful e ICMP request/reply."
+                source="FirewallStats.conntrack_count · /proc/sys/net/netfilter/nf_conntrack_count">
               <div className="td-chart-card">
                 <h3 className="td-card-title">Connections over time</h3>
                 <ResponsiveContainer width="100%" height={180}>
-                  <LineChart data={trafficData.map((d) => ({ ...d, conn: Math.floor((d.in + d.out) / 20) }))}>
+                  <LineChart data={trafficData}>
                     <XAxis dataKey="time" tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
                     <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
                     <CartesianGrid stroke="var(--border-primary)" strokeDasharray="3 3" />
