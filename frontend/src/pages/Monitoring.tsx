@@ -67,7 +67,15 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
           time: new Date(s.collected_at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
           inbound: prev ? Math.max(0, s.input_packets - prev.input_packets) : 0,
           outbound: prev ? Math.max(0, s.output_packets - prev.output_packets) : 0,
-          dropped: prev ? Math.max(0, s.forward_packets - prev.forward_packets) : 0,
+          // Dropped reale = delta dei counter LOG_INPUT_DROP + LOG_OUTPUT_DROP
+          // (popolati dal cron `firewall-manager --export-json/stats.dropped`).
+          // Prima si leggeva forward_packets, semanticamente sbagliato (FORWARD
+          // è la chain di routing, non i drop).
+          dropped: prev ? Math.max(
+            0,
+            ((s.dropped_input_packets ?? 0) - (prev.dropped_input_packets ?? 0))
+            + ((s.dropped_output_packets ?? 0) - (prev.dropped_output_packets ?? 0))
+          ) : 0,
         };
       }).slice(1);
 

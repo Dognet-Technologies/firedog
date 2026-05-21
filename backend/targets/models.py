@@ -625,6 +625,16 @@ class FirewallStats(models.Model):
         default=0, help_text="Dimensione file PCAP output dropped (bytes)"
     )
 
+    # Pacchetti droppati contati dalle chain di drop (LOG_INPUT_DROP /
+    # LOG_OUTPUT_DROP create da firewall-init.sh). Sono contatori cumulativi
+    # del kernel: il delta tra due snapshot dà la velocità di drop.
+    dropped_input_packets = models.BigIntegerField(
+        default=0, help_text="Pacchetti droppati in ingresso (LOG_INPUT_DROP)"
+    )
+    dropped_output_packets = models.BigIntegerField(
+        default=0, help_text="Pacchetti droppati in uscita (LOG_OUTPUT_DROP)"
+    )
+
     # Status
     status = models.CharField(
         max_length=50, default="healthy", help_text="Stato generale del firewall"

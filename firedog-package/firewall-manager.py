@@ -649,7 +649,14 @@ class FirewallManager:
                 },
                 'stats': {
                     'total_packets': {},
+                    # `dropped_packets` (legacy, totale aggregato) resta per
+                    # retro-compat; `dropped` espone i counter delle chain di
+                    # drop create da firewall-init.sh, separati per direzione.
                     'dropped_packets': 0,
+                    'dropped': {
+                        'input': 0,
+                        'output': 0,
+                    },
                     'pcap_sizes': {}
                 },
                 'threats': self.get_threats_data(min_score=30),
@@ -666,6 +673,38 @@ class FirewallManager:
                         data['stats']['total_packets'][chain] = total
                 except Exception:
                     data['stats']['total_packets'][chain] = 0
+
+            # Counters delle chain di drop create da firewall-init.sh.
+            # Quando il firewall non è inizializzato, le chain non esistono
+            # → mettiamo 0 silenziosamente.
+            for direction, chain_name in (('input', 'LOG_INPUT_DROP'), ('output', 'LOG_OUTPUT_DROP')):
+                try:
+                    res = self.run_command(['iptables', '-L', chain_name, '-v', '-n', '-x'], check=False)
+                    if res.returncode != 0:
+                        continue
+                    # L'header chain è del tipo:
+                    #   "Chain LOG_INPUT_DROP (NN references)"
+                    # Il riepilogo del totale pacchetti non è nell'header;
+                    # sommiamo i pkts di ogni regola della chain.
+                    total = 0
+                    for line in res.stdout.split('\n'):
+                        line = line.strip()
+                        if not line or line.startswith('Chain ') or line.startswith('pkts'):
+                            continue
+                        parts = line.split()
+                        if not parts:
+                            continue
+                        try:
+                            total += int(parts[0])
+                        except (ValueError, IndexError):
+                            continue
+                    data['stats']['dropped'][direction] = total
+                except Exception:
+                    pass
+            # Manteniamo `dropped_packets` come somma aggregata per retro-compat.
+            data['stats']['dropped_packets'] = (
+                data['stats']['dropped']['input'] + data['stats']['dropped']['output']
+            )
 
             # Dimensioni PCAP
             for pcap_name in ['input_dropped.pcap', 'output_dropped.pcap']:

@@ -527,6 +527,10 @@ class AgentConsumer(AsyncWebsocketConsumer):
         stats = payload.get("stats") or {}
         total = stats.get("total_packets") or {}
         pcap = stats.get("pcap_sizes") or {}
+        # `dropped` è il dict con i counter delle chain LOG_INPUT_DROP /
+        # LOG_OUTPUT_DROP (aggiunto a firewall-manager --export-json). Quando
+        # il firewall non è inizializzato la chain non esiste e i counter sono 0.
+        dropped = stats.get("dropped") or {}
 
         collected_at = parse_datetime(payload.get("timestamp") or "") or timezone.now()
         if timezone.is_naive(collected_at):
@@ -546,6 +550,8 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 "forward_packets": int(total.get("FORWARD", 0) or 0),
                 "pcap_input_dropped_bytes": int(pcap.get("input", 0) or 0),
                 "pcap_output_dropped_bytes": int(pcap.get("output", 0) or 0),
+                "dropped_input_packets": int(dropped.get("input", 0) or 0),
+                "dropped_output_packets": int(dropped.get("output", 0) or 0),
                 "status": payload.get("status", "healthy") or "healthy",
                 "raw_json": payload,
             },
