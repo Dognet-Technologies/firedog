@@ -274,8 +274,26 @@ const Dashboard: React.FC = () => {
   const [selectedDashboardId, setSelectedDashboardId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
-  const [timeRange, setTimeRange] = useState<TimeRange>('24h');
-  const [autoRefresh, setAutoRefresh] = useState<AutoRefresh>('off');
+  // Le preferenze "time range" e "auto refresh" sono persistite in localStorage
+  // così sopravvivono a reload/navigazione/logout. Lazy initializer per leggere
+  // una sola volta al mount; setter custom per scriverle al cambio.
+  const [timeRange, setTimeRangeState] = useState<TimeRange>(() => {
+    const v = typeof window !== 'undefined' ? window.localStorage.getItem('fd.dashboard.timeRange') : null;
+    return (v === '24h' || v === '7d' || v === '30d') ? v : '24h';
+  });
+  const setTimeRange = (v: TimeRange) => {
+    setTimeRangeState(v);
+    try { window.localStorage.setItem('fd.dashboard.timeRange', v); } catch { /* private mode */ }
+  };
+
+  const [autoRefresh, setAutoRefreshState] = useState<AutoRefresh>(() => {
+    const v = typeof window !== 'undefined' ? window.localStorage.getItem('fd.dashboard.autoRefresh') : null;
+    return (v === 'off' || v === '30s' || v === '1m' || v === '5m') ? v : 'off';
+  });
+  const setAutoRefresh = (v: AutoRefresh) => {
+    setAutoRefreshState(v);
+    try { window.localStorage.setItem('fd.dashboard.autoRefresh', v); } catch { /* private mode */ }
+  };
   const [showAddWidget, setShowAddWidget] = useState(false);
   const [widgets, setWidgets] = useState<GridWidget[]>(DEFAULT_WIDGETS);
   // trafficData: alimentato da /api/dashboard/fleet-traffic/ (aggregato
