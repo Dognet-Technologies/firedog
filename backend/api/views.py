@@ -457,4 +457,16 @@ class LogSourcesAPIView(APIView):
         for key, info in log_files.items():
             file_path = info["path"]
             exists = os.path.exists(file_path)
-            size
+            size = os.path.getsize(file_path) if exists else 0
+            sources.append(
+                {
+                    "id": key,
+                    "name": info["name"],
+                    "description": info["description"],
+                    "path": str(file_path),
+                    "exists": exists,
+                    "size_bytes": size,
+                }
+            )
+
+        return Response({"sources": sources})
