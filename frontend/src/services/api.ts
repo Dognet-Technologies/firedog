@@ -596,6 +596,14 @@ class ApiService {
     return response.data;
   }
 
+  async getDashboardFleetTraffic(hours = 24): Promise<{
+    hours: number;
+    series: { time: string; in: number; out: number; timestamp: string }[];
+  }> {
+    const response = await this.api.get('/dashboard/fleet-traffic/', { params: { hours } });
+    return response.data;
+  }
+
   // Whitelist methods
   async getWhitelistByTarget(targetId: number) {
     const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);

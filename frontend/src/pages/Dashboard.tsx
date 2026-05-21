@@ -63,18 +63,9 @@ const DEFAULT_WIDGETS: GridWidget[] = [
   { i: 'geo_map', x: 6, y: 5, w: 6, h: 3, type: 'geo_map', title: 'Geo Map' },
 ];
 
-// TODO: replace with real API call when traffic endpoint is available
-const generateTrafficMock = (): Array<{ time: string; in: number; out: number }> => {
-  const data = [];
-  for (let i = 23; i >= 0; i--) {
-    data.push({
-      time: `${i}h`,
-      in: Math.floor(Math.random() * 800 + 100),
-      out: Math.floor(Math.random() * 400 + 50),
-    });
-  }
-  return data;
-};
+// Traffic fleet-wide arriva da apiService.getDashboardFleetTraffic dentro al
+// componente. Niente più mock random: se l'endpoint non risponde restiamo
+// con array vuoto (il widget mostra grafico vuoto).
 
 // ============================================================
 // Widget sub-components
@@ -270,7 +261,9 @@ const Dashboard: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState<AutoRefresh>('off');
   const [showAddWidget, setShowAddWidget] = useState(false);
   const [widgets, setWidgets] = useState<GridWidget[]>(DEFAULT_WIDGETS);
-  const [trafficData] = useState(generateTrafficMock());
+  // trafficData: alimentato da /api/dashboard/fleet-traffic/ (aggregato
+  // fleet-wide dei delta input/output_packets per ora). Vedi loadData().
+  const [trafficData, setTrafficData] = useState<Array<{ time: string; in: number; out: number }>>([]);
 
   // Widget builder state
   const [builderState, setBuilderState] = useState<WidgetBuilderStep>({
@@ -283,12 +276,14 @@ const Dashboard: React.FC = () => {
 
   const loadData = useCallback(async () => {
     try {
-      const [statsData, targetsData] = await Promise.all([
+      const [statsData, targetsData, trafficResp] = await Promise.all([
         apiService.getThreatStats(),
         apiService.getTargets(),
+        apiService.getDashboardFleetTraffic(24).catch(() => ({ series: [] as Array<{ time: string; in: number; out: number }> })),
       ]);
       setStats(statsData);
       setTargets(targetsData.results);
+      setTrafficData(trafficResp.series.map(s => ({ time: s.time, in: s.in, out: s.out })));
     } catch (err) {
       console.error('Dashboard loadData error:', err);
     } finally {

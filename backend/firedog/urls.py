@@ -26,6 +26,7 @@ from settings.views import (
 # Import Log Views
 from api.views import LogAPIView, LogSourcesAPIView
 from api.views_system import SystemUpdateCheckView, SystemUpdateInstallView
+from api.views_dashboard import FleetTrafficView
 
 # Router per API REST
 router = DefaultRouter()
@@ -62,6 +63,8 @@ urlpatterns = [
     # System update (git pull + build + migrate + restart)
     path("api/system/update/check/", SystemUpdateCheckView.as_view(), name="system-update-check"),
     path("api/system/update/install/", SystemUpdateInstallView.as_view(), name="system-update-install"),
+    # Dashboard aggregations
+    path("api/dashboard/fleet-traffic/", FleetTrafficView.as_view(), name="dashboard-fleet-traffic"),
     # Gruppi
     path("api/", include("targets.urls_groups")),
     # Settings
