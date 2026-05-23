@@ -99,7 +99,11 @@ const TargetDetail: React.FC = () => {
   const loadAll = async (tid: number) => {
     setLoading(true);
     try {
-      const [targetData, rulesData, threatsData, integrityData, statsData, heartbeatData] = await Promise.all([
+      // Promise.allSettled: il fallimento di un endpoint secondario (es. rules
+      // o threats) NON deve impedire il rendering del target. Prima usavamo
+      // Promise.all e un 500 su /api/threats/ rendeva la pagina "Target not
+      // found" perché setTarget non veniva mai chiamato.
+      const results = await Promise.allSettled([
         apiService.getTarget(tid),
         apiService.getRules(tid),
         apiService.getThreats({ target: tid, limit: 50 }),
@@ -107,16 +111,37 @@ const TargetDetail: React.FC = () => {
         apiService.getFirewallStats(tid, 48),
         apiService.getHeartbeats(tid, 48),
       ]);
+      const [targetRes, rulesRes, threatsRes, integrityRes, statsRes, heartbeatRes] = results;
+
+      if (targetRes.status === 'rejected') {
+        console.error('TargetDetail: getTarget failed', targetRes.reason);
+        showToast({ type: 'error', title: 'Error', message: 'Failed to load target' });
+        setLoading(false);
+        return;
+      }
+      const targetData = targetRes.value;
       setTarget(targetData);
       setConfigForm({
         hostname: targetData.hostname || '',
         description: targetData.description || '',
         ip_address: targetData.ip_address || '',
       });
-      setRules(rulesData.results);
-      setThreats(threatsData.results);
-      const filtered = integrityData.results.filter((f) => (f as unknown as { target: number }).target === tid);
-      setIntegrity(filtered);
+
+      if (rulesRes.status === 'fulfilled') setRules(rulesRes.value.results);
+      else console.warn('TargetDetail: rules failed', rulesRes.reason);
+
+      if (threatsRes.status === 'fulfilled') setThreats(threatsRes.value.results);
+      else console.warn('TargetDetail: threats failed', threatsRes.reason);
+
+      if (integrityRes.status === 'fulfilled') {
+        const filtered = integrityRes.value.results.filter((f) => (f as unknown as { target: number }).target === tid);
+        setIntegrity(filtered);
+      } else {
+        console.warn('TargetDetail: integrity failed', integrityRes.reason);
+      }
+
+      const statsData = statsRes.status === 'fulfilled' ? statsRes.value : [];
+      const heartbeatData = heartbeatRes.status === 'fulfilled' ? heartbeatRes.value : [];
 
       // Traffic data from FirewallStats
       if (statsData.length) {

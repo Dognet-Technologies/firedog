@@ -235,7 +235,7 @@ class FleetActivityView(APIView):
         )
         for t in threat_qs:
             proto = f" {t.protocol}" if getattr(t, "protocol", "") else ""
-            port = f":{t.dst_port}" if getattr(t, "dst_port", None) else ""
+            port = f":{t.dest_port}" if getattr(t, "dest_port", None) else ""
             events.append({
                 "kind": "threat",
                 "timestamp": t.detected_at.isoformat(),
@@ -245,8 +245,8 @@ class FleetActivityView(APIView):
                 "target_hostname": getattr(t.target, "hostname", "") or getattr(t.target, "ip_address", ""),
                 "meta": {
                     "source_ip": t.source_ip,
-                    "threat_type": getattr(t, "threat_type", ""),
                     "score": getattr(t, "threat_score", 0),
+                    "reasons": getattr(t, "reasons", []),
                 },
             })
 
