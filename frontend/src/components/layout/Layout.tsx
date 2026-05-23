@@ -276,7 +276,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <div className="target-dropdown">
                     {targets.length === 0 ? (
                       <div className="dropdown-empty">
-                        <p>No targets online</p>
+                        <p>No targets configured</p>
                         <Link
                           to="/targets"
                           className="dropdown-link"
