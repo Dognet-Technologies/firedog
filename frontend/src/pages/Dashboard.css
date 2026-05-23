@@ -307,9 +307,16 @@
   padding: var(--space-xs) var(--space-sm);
 }
 
-.wat-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-primary); flex-shrink: 0; margin-top: 3px; }
-.wat-content { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.wat-msg { font-size: var(--font-xs); color: var(--text-secondary); }
+.wat-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-primary); flex-shrink: 0; margin-top: 5px; }
+.wat-dot--critical { background: var(--status-danger, #ef4444); box-shadow: 0 0 6px rgba(239,68,68,0.6); }
+.wat-dot--high     { background: var(--status-danger, #ef4444); }
+.wat-dot--medium   { background: var(--status-warning, #f59e0b); }
+.wat-dot--low      { background: var(--accent-primary); }
+.wat-dot--info     { background: var(--text-tertiary, #6b7280); }
+.wat-content { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wat-msg { font-size: var(--font-xs); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wat-kind { font-weight: 600; color: var(--text-primary); margin-right: 4px; }
+.wat-host { color: var(--text-tertiary); }
 .wat-time { font-size: 10px; color: var(--text-tertiary); }
 
 .widget-geo { height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-xs); }

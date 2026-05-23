@@ -192,21 +192,53 @@ const TopAttackersWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) 
   );
 };
 
-const ActivityTimelineWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) => {
-  const threats = stats?.recent_threats ?? [];
-  if (threats.length === 0) {
-    return <div className="widget-empty">No activity</div>;
-  }
+type ActivityEvent = Awaited<ReturnType<typeof apiService.getDashboardActivity>>['events'][number];
+
+const KIND_LABEL: Record<ActivityEvent['kind'], string> = {
+  threat: 'Threat',
+  block: 'Block',
+  audit: 'Audit',
+};
+
+const ActivityTimelineWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats: _stats }) => {
+  // Sorgente: /api/dashboard/activity/ — merge fleet-wide di ThreatLog,
+  // BlockedIP e AuditLog. Più completo del semplice recent_threats che era
+  // mostrato prima (ora il widget reagisce anche a blocchi e azioni utente).
+  const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchActivity = () => {
+      apiService.getDashboardActivity(12, 24)
+        .then(resp => {
+          if (cancelled) return;
+          setEvents(resp.events);
+        })
+        .catch(() => { if (!cancelled) setEvents([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    };
+    fetchActivity();
+    const id = setInterval(fetchActivity, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  if (loading) return <div className="widget-empty">Loading…</div>;
+  if (events.length === 0) return <div className="widget-empty">No activity in last 24h</div>;
+
   return (
     <div className="widget-timeline">
-      {threats.slice(0, 6).map((t) => (
-        <div key={t.id} className="wat-item">
-          <div className="wat-dot" />
+      {events.slice(0, 6).map((ev, idx) => (
+        <div key={`${ev.kind}-${ev.timestamp}-${idx}`} className={`wat-item wat-item--${ev.kind}`}>
+          <div className={`wat-dot wat-dot--${ev.severity}`} />
           <div className="wat-content">
-            <span className="wat-msg">Threat from {t.source_ip}</span>
-            <span className="wat-time">{new Date(t.detected_at).toLocaleString('it-IT')}</span>
+            <span className="wat-msg">
+              <span className="wat-kind">[{KIND_LABEL[ev.kind]}]</span> {ev.message}
+              {ev.target_hostname && <span className="wat-host"> · {ev.target_hostname}</span>}
+            </span>
+            <span className="wat-time">{new Date(ev.timestamp).toLocaleString('it-IT')}</span>
           </div>
-          <SeverityBadge severity={t.severity} />
+          {ev.kind !== 'audit' && ev.severity !== 'info' && <SeverityBadge severity={ev.severity} />}
         </div>
       ))}
     </div>

@@ -613,6 +613,23 @@ class ApiService {
     return response.data;
   }
 
+  async getDashboardActivity(limit = 20, hours = 24): Promise<{
+    hours: number;
+    count: number;
+    events: {
+      kind: 'threat' | 'block' | 'audit';
+      timestamp: string;
+      message: string;
+      severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+      target_id: number | null;
+      target_hostname: string;
+      meta: Record<string, unknown>;
+    }[];
+  }> {
+    const response = await this.api.get('/dashboard/activity/', { params: { limit, hours } });
+    return response.data;
+  }
+
   // Whitelist methods
   async getWhitelistByTarget(targetId: number) {
     const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);

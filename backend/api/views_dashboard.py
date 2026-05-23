@@ -17,7 +17,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from django.db.models import Sum, Count
-from targets.models import FirewallStats, NetworkFlow
+from targets.models import FirewallStats, NetworkFlow, BlockedIP
+from threats.models import ThreatLog
+from audit.models import AuditLog
 
 logger = logging.getLogger(__name__)
 
@@ -173,4 +175,134 @@ class FleetGeoView(APIView):
             "total_flows": total_flows,
             "with_country": with_country,
             "countries": countries,
+        })
+
+
+class FleetActivityView(APIView):
+    """GET /api/dashboard/activity/?limit=20&hours=24
+
+    Timeline unificata fleet-wide degli ultimi N eventi da più sorgenti:
+      - threat:  ThreatLog (minacce rilevate dai target)
+      - block:   BlockedIP (IP bloccati da iptables sui target)
+      - audit:   AuditLog (azioni utente: rule add/remove, login, install…)
+
+    Ogni record viene normalizzato in:
+        {kind, timestamp, message, severity, target_id, target_hostname, meta}
+
+    severity ∈ {info, low, medium, high, critical}. Usato dal frontend per il
+    colore del dot e l'eventuale badge.
+
+    Ordinamento finale per timestamp DESC. `limit` cap a 50, `hours` cap a 168.
+    """
+
+    permission_classes = [IsAuthenticated]
+    MAX_LIMIT = 50
+    MAX_HOURS = 168
+
+    SEVERITY_BY_REASON = {
+        "ddos": "critical",
+        "syn_flood": "critical",
+        "malware": "critical",
+        "brute_force": "high",
+        "port_scan": "high",
+        "threat_detected": "high",
+        "manual": "medium",
+        "other": "low",
+    }
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get("limit", 20))
+        except ValueError:
+            limit = 20
+        limit = max(1, min(self.MAX_LIMIT, limit))
+
+        try:
+            hours = int(request.query_params.get("hours", 24))
+        except ValueError:
+            hours = 24
+        hours = max(1, min(self.MAX_HOURS, hours))
+
+        since = timezone.now() - timedelta(hours=hours)
+        events: List[Dict] = []
+
+        # 1. Threats
+        threat_qs = (
+            ThreatLog.objects
+            .filter(detected_at__gte=since)
+            .select_related("target")
+            .order_by("-detected_at")[:limit]
+        )
+        for t in threat_qs:
+            proto = f" {t.protocol}" if getattr(t, "protocol", "") else ""
+            port = f":{t.dst_port}" if getattr(t, "dst_port", None) else ""
+            events.append({
+                "kind": "threat",
+                "timestamp": t.detected_at.isoformat(),
+                "message": f"Threat from {t.source_ip}{proto}{port}",
+                "severity": t.severity or "medium",
+                "target_id": t.target_id,
+                "target_hostname": getattr(t.target, "hostname", "") or getattr(t.target, "ip_address", ""),
+                "meta": {
+                    "source_ip": t.source_ip,
+                    "threat_type": getattr(t, "threat_type", ""),
+                    "score": getattr(t, "threat_score", 0),
+                },
+            })
+
+        # 2. Blocked IPs
+        block_qs = (
+            BlockedIP.objects
+            .filter(blocked_at__gte=since, is_active=True)
+            .select_related("target")
+            .order_by("-blocked_at")[:limit]
+        )
+        for b in block_qs:
+            sev = self.SEVERITY_BY_REASON.get(b.block_reason, "medium")
+            reason_label = b.get_block_reason_display() if hasattr(b, "get_block_reason_display") else b.block_reason
+            events.append({
+                "kind": "block",
+                "timestamp": b.blocked_at.isoformat(),
+                "message": f"Blocked {b.ip_address} ({reason_label})",
+                "severity": sev,
+                "target_id": b.target_id,
+                "target_hostname": getattr(b.target, "hostname", "") or getattr(b.target, "ip_address", ""),
+                "meta": {
+                    "ip": b.ip_address,
+                    "reason": b.block_reason,
+                    "blocked_by": b.blocked_by,
+                },
+            })
+
+        # 3. Audit log: solo azioni operative significative (no fetch/login spam)
+        relevant_actions = ("create", "update", "delete", "install", "uninstall",
+                            "rule_add", "rule_remove", "approve", "error")
+        audit_qs = (
+            AuditLog.objects
+            .filter(created_at__gte=since, action__in=relevant_actions)
+            .select_related("user")
+            .order_by("-created_at")[:limit]
+        )
+        for a in audit_qs:
+            sev = "high" if not a.success else ("medium" if a.action in ("delete", "uninstall") else "info")
+            user = a.user.username if a.user_id else "system"
+            events.append({
+                "kind": "audit",
+                "timestamp": a.created_at.isoformat(),
+                "message": f"{user}: {a.description or a.get_action_display()}",
+                "severity": sev,
+                "target_id": None,
+                "target_hostname": "",
+                "meta": {
+                    "action": a.action,
+                    "success": a.success,
+                },
+            })
+
+        # Merge, sort, cap
+        events.sort(key=lambda e: e["timestamp"], reverse=True)
+        return Response({
+            "hours": hours,
+            "count": len(events[:limit]),
+            "events": events[:limit],
         })
