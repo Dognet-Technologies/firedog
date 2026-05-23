@@ -298,8 +298,23 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
             return BlockedIPStatsSerializer
         return BlockedIPSerializer
 
+    # Mapping reason → (severity, threat_score) per il ThreatLog companion.
+    # Un blocco "manual" non genera ThreatLog: non c'è una minaccia rilevata,
+    # è solo una decisione dell'operatore. Le altre reason corrispondono a
+    # minacce reali che devono apparire in /api/threats/ per coerenza con la
+    # Dashboard (Recent Threats, Threat Distribution, Activity Timeline).
+    THREAT_FROM_REASON = {
+        "ddos":            ("critical", 95),
+        "syn_flood":       ("critical", 90),
+        "malware":         ("critical", 95),
+        "brute_force":     ("high",     80),
+        "port_scan":       ("high",     70),
+        "threat_detected": ("high",     75),
+        "other":           ("low",      30),
+    }
+
     def perform_create(self, serializer):
-        """Crea blocco con logging audit"""
+        """Crea blocco con logging audit e ThreatLog companion se non-manual."""
         block = serializer.save()
 
         # Log audit
@@ -315,6 +330,29 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
                 "reason": block.block_reason,
             },
         )
+
+        # ThreatLog companion. Senza questo, /api/threats/ resterebbe vuoto
+        # per i blocchi e l'utente non vedrebbe il "brute_force" sul dettaglio
+        # del target né nei conteggi della Dashboard.
+        if block.block_reason != "manual":
+            from threats.models import ThreatLog
+            sev, score = self.THREAT_FROM_REASON.get(
+                block.block_reason, ("medium", 50)
+            )
+            reason_label = block.get_block_reason_display()
+            ThreatLog.objects.create(
+                target=block.target,
+                source_ip=block.ip_address,
+                threat_score=score,
+                severity=sev,
+                packet_count=block.packet_count or 1,
+                reasons=[block.block_reason],
+                description=(
+                    block.description or
+                    f"{reason_label} detected from {block.ip_address}"
+                ),
+                is_blocked=True,
+            )
 
         logger.warning(
             f"IP blocked: {block.ip_address} on target {block.target.id} - Reason: {block.block_reason}"
