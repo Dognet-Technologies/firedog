@@ -652,6 +652,13 @@ class FirewallStats(models.Model):
         default=0, help_text="Capacità massima conntrack (nf_conntrack_max)"
     )
 
+    # Snapshot dei peer remoti pubblici (per popolare NetworkFlow). Lista raw,
+    # è raccolta solo per audit/debug; l'aggregato persistente è in NetworkFlow.
+    network_flows_raw = models.JSONField(
+        default=list, blank=True,
+        help_text="Snapshot peer remoti (ss -tun) — solo per debug, l'aggregato è in NetworkFlow",
+    )
+
     # Status
     status = models.CharField(
         max_length=50, default="healthy", help_text="Stato generale del firewall"
@@ -698,3 +705,62 @@ class FirewallStats(models.Model):
     def total_pcap_size_mb(self):
         """Dimensione totale PCAP in MB"""
         return round(self.total_pcap_size / (1024 * 1024), 2)
+
+
+
+class NetworkFlow(models.Model):
+    """Peer remoto pubblico osservato da un target.
+
+    Aggregato cumulativo nel tempo: ogni snapshot dell'agent fa upsert
+    incrementando `times_seen` e aggiornando `last_seen`. Alimenta la
+    Geo Map (aggregato per `country_code` calcolato server-side via geoip2).
+    """
+
+    target = models.ForeignKey(
+        Target,
+        on_delete=models.CASCADE,
+        related_name="network_flows",
+        help_text="Target che ha visto il flusso",
+    )
+    remote_ip = models.GenericIPAddressField(
+        db_index=True,
+        help_text="IP remoto pubblico (no privati/loopback)",
+    )
+
+    # Geo lookup (popolato server-side quando il record è creato/aggiornato).
+    country_code = models.CharField(
+        max_length=2, blank=True, db_index=True,
+        help_text="ISO 3166-1 alpha-2 (es. 'US', 'IT'). Vuoto se lookup non disponibile.",
+    )
+    country_name = models.CharField(
+        max_length=128, blank=True,
+        help_text="Nome del paese (cache da geoip2)",
+    )
+
+    # Volumi
+    times_seen = models.BigIntegerField(
+        default=0,
+        help_text="Numero di snapshot in cui questo peer è stato osservato",
+    )
+    last_ports = models.JSONField(
+        default=list, blank=True,
+        help_text="Ultime porte remote viste (dedupe, max 10)",
+    )
+
+    first_seen = models.DateTimeField(auto_now_add=True, db_index=True)
+    last_seen = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        ordering = ["-last_seen"]
+        indexes = [
+            models.Index(fields=["target", "country_code"]),
+            models.Index(fields=["country_code"]),
+            models.Index(fields=["-last_seen"]),
+        ]
+        unique_together = [["target", "remote_ip"]]
+        verbose_name = "Network Flow"
+        verbose_name_plural = "Network Flows"
+
+    def __str__(self):
+        cc = f" ({self.country_code})" if self.country_code else ""
+        return f"{self.target} → {self.remote_ip}{cc}"

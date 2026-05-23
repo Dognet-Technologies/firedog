@@ -571,6 +571,55 @@ class AgentConsumer(AsyncWebsocketConsumer):
         self._sync_firewall_rules(payload.get("rules") or {})
         self._sync_blocked_ips(payload.get("rules") or {})
         self._sync_threat_log(payload.get("threats") or [])
+        self._sync_network_flows(payload.get("network_flows") or [])
+
+    def _sync_network_flows(self, flows):
+        """Upsert dei flussi network (peer IP pubblici) ingestiti dall'agent.
+
+        Schema input (ogni elemento): {ip, count, ports}.
+        - times_seen incrementato di `count` (snapshot rolling)
+        - country_code/name popolato via geoip2 al primo lookup, riconfermato
+          se vuoto (per gestire DB aggiunto/sostituito dopo)
+        - last_ports unisce le ultime porte viste, max 10 elementi
+        """
+        from .models import Target  # noqa
+        from targets.models import NetworkFlow
+        from api.geoip import lookup_country
+
+        if not isinstance(flows, list) or not self.target:
+            return
+
+        for flow in flows:
+            if not isinstance(flow, dict):
+                continue
+            ip = flow.get("ip")
+            if not ip:
+                continue
+            count = int(flow.get("count", 0) or 0)
+            ports = flow.get("ports") or []
+            if not isinstance(ports, list):
+                ports = []
+
+            obj, _created = NetworkFlow.objects.get_or_create(
+                target=self.target, remote_ip=ip,
+                defaults={"times_seen": 0, "last_ports": []},
+            )
+            obj.times_seen = (obj.times_seen or 0) + max(1, count)
+
+            # Merge ports (set-like, max 10)
+            merged = list(obj.last_ports or [])
+            for p in ports:
+                if isinstance(p, int) and p not in merged:
+                    merged.append(p)
+            obj.last_ports = merged[-10:]
+
+            # GeoIP lookup se non già fatto
+            if not obj.country_code:
+                cc, name = lookup_country(ip)
+                obj.country_code = cc
+                obj.country_name = name
+
+            obj.save()
 
     def _sync_firewall_rules(self, rules_by_chain):
         """Sincronizza la tabella FirewallRule con lo snapshot ricevuto.

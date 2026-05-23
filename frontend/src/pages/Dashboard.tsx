@@ -213,29 +213,42 @@ const ActivityTimelineWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats
   );
 };
 
-const GeoMapWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) => {
-  // Aggregato per country_code dei ThreatLog recenti. Il backend popola
-  // country_code solo se geoip2 + GeoLite2-Country.mmdb sono configurati
-  // (Roadmap punto #7). Senza GeoIP, country_code resta vuoto → widget vuoto.
-  const threats = stats?.recent_threats ?? [];
-  const countByCountry = new Map<string, number>();
-  for (const t of threats) {
-    const cc = (t as { country_code?: string }).country_code;
-    if (!cc) continue;
-    countByCountry.set(cc, (countByCountry.get(cc) ?? 0) + 1);
-  }
-  const total = Array.from(countByCountry.values()).reduce((s, n) => s + n, 0);
-  const geoData = total === 0
-    ? []
-    : Array.from(countByCountry.entries())
-        .map(([country, count]) => ({ country, count, pct: Math.round((count / total) * 100) }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 6);
+const GeoMapWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats: _stats }) => {
+  // Sorgente: /api/dashboard/geo/ — aggregato dei NetworkFlow per country_code
+  // (peer remoti pubblici visti dai target, lookup via geoip2 lato server).
+  // Funziona indipendentemente dai ThreatLog: mostra traffico legittimo
+  // outbound + qualunque connessione attiva verso IP pubblici.
+  const [geoData, setGeoData] = useState<Array<{ country: string; count: number; pct: number; name: string }>>([]);
+  const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    let cancelled = false;
+    apiService.getDashboardGeo()
+      .then(resp => {
+        if (cancelled) return;
+        setGeoData(resp.countries.slice(0, 6).map(c => ({
+          country: c.country_code, name: c.country_name, count: c.times_seen, pct: c.pct,
+        })));
+      })
+      .catch(() => { if (!cancelled) setGeoData([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    // refresh allineato al polling default della Dashboard (loadData ogni 30s+);
+    // un re-fetch ogni 60s qui evita di legare il widget allo state del parent.
+    const id = setInterval(() => {
+      apiService.getDashboardGeo()
+        .then(resp => setGeoData(resp.countries.slice(0, 6).map(c => ({
+          country: c.country_code, name: c.country_name, count: c.times_seen, pct: c.pct,
+        }))))
+        .catch(() => {});
+    }, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  if (loading) return <div className="widget-empty">Loading…</div>;
   if (geoData.length === 0) {
     return (
       <div className="widget-empty">
-        Nessun dato geografico (GeoIP lookup non configurato lato server).
+        Nessun dato geografico ancora — i peer remoti vengono raccolti dai target via cron (5min) e geo-localizzati lato server.
       </div>
     );
   }

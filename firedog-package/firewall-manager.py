@@ -580,6 +580,79 @@ class FirewallManager:
 
         return rules
 
+    def get_network_flows(self, limit: int = 200) -> List[Dict]:
+        """Snapshot dei peer remoti con cui il target sta dialogando.
+
+        Sorgente: `ss -tun state established` (filtri TCP+UDP, solo connessioni
+        attive). Non /proc/net/nf_conntrack perché negli LXC container quel
+        file è filtrato e non leggibile.
+
+        Filtra IP locali (127.0.0.0/8) e privati RFC1918/CGNAT (10/8, 172.16/12,
+        192.168/16, 100.64/10) — la geo map ha senso solo per IP pubblici.
+
+        Restituisce lista di dict {ip, count, ports}: count = numero di
+        connessioni distinte verso quell'IP; ports = lista delle peer-port
+        viste (max 10) utile per debug ma compatta nel payload.
+        """
+        import ipaddress
+        out: Dict[str, Dict] = {}
+
+        try:
+            # Includiamo anche TIME-WAIT (linger ~60s post-close) e
+            # CLOSE-WAIT/FIN-WAIT-* per catturare connessioni brevi (HTTP
+            # request/response). `connected` matcha tutti gli stati eccetto
+            # LISTEN/CLOSED. Più rumore ma molto meglio per workload "burst".
+            # Niente `-H`: non supportato da iproute2 < 5.x (Debian 11).
+            result = self.run_command(
+                ['ss', '-tun', 'state', 'connected'], check=False
+            )
+            if result.returncode != 0:
+                return []
+            for line in result.stdout.split('\n'):
+                parts = line.split()
+                # Header riga: Netid State Recv-Q Send-Q Local Peer
+                # Data row con state: Netid State Recv-Q Send-Q Local Peer
+                # Data row senza state (-H): Netid Recv-Q Send-Q Local Peer
+                # Skip header line e linee inconsistenti.
+                if len(parts) < 5 or parts[0] == 'Netid':
+                    continue
+                # Determina indice della colonna Peer in base alla presenza di State.
+                # Se parts[1] è una STATE word maiuscola (es. ESTAB, TIME-WAIT),
+                # Peer è parts[5]; altrimenti parts[4].
+                if parts[1].isupper() and not parts[1].isdigit():
+                    if len(parts) < 6:
+                        continue
+                    peer = parts[5]
+                else:
+                    peer = parts[4]
+                # IPv6 brackets: "[2001:db8::1]:443"
+                if peer.startswith('['):
+                    ip_str, _, port_str = peer.rpartition(':')
+                    ip_str = ip_str.strip('[]')
+                else:
+                    ip_str, _, port_str = peer.rpartition(':')
+                if not ip_str or ip_str == '*':
+                    continue
+                try:
+                    ip_obj = ipaddress.ip_address(ip_str)
+                except ValueError:
+                    continue
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local \
+                   or ip_obj.is_multicast or ip_obj.is_unspecified or ip_obj.is_reserved:
+                    continue
+                entry = out.setdefault(ip_str, {'ip': ip_str, 'count': 0, 'ports': []})
+                entry['count'] += 1
+                if port_str and port_str.isdigit() and len(entry['ports']) < 10:
+                    p = int(port_str)
+                    if p not in entry['ports']:
+                        entry['ports'].append(p)
+        except Exception:
+            return []
+
+        # Top N per count (taglia il payload se ci sono migliaia di connessioni)
+        flows = sorted(out.values(), key=lambda x: x['count'], reverse=True)[:limit]
+        return flows
+
     def get_conntrack_stats(self) -> Dict:
         """Connessioni tracciate dal modulo netfilter conntrack.
 
@@ -715,6 +788,9 @@ class FirewallManager:
                 # istantaneo (non delta), utile per il chart "Connections over
                 # time" che usa la serie temporale di snapshot.
                 'conntrack': self.get_conntrack_stats(),
+                # Peer remoti pubblici con cui il target sta dialogando.
+                # Alimenta la GeoMap server-side (geoip2 lookup).
+                'network_flows': self.get_network_flows(),
                 'rules': {
                     'INPUT': self.parse_iptables_rules('INPUT'),
                     'OUTPUT': self.parse_iptables_rules('OUTPUT'),

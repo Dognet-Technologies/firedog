@@ -604,6 +604,15 @@ class ApiService {
     return response.data;
   }
 
+  async getDashboardGeo(targetId?: number): Promise<{
+    total_flows: number;
+    with_country: number;
+    countries: { country_code: string; country_name: string; flows: number; times_seen: number; pct: number }[];
+  }> {
+    const response = await this.api.get('/dashboard/geo/', { params: targetId ? { target_id: targetId } : {} });
+    return response.data;
+  }
+
   // Whitelist methods
   async getWhitelistByTarget(targetId: number) {
     const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);

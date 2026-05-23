@@ -16,7 +16,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from targets.models import FirewallStats
+from django.db.models import Sum, Count
+from targets.models import FirewallStats, NetworkFlow
 
 logger = logging.getLogger(__name__)
 
@@ -107,3 +108,69 @@ class FleetTrafficView(APIView):
         ]
 
         return Response({"hours": hours, "series": series})
+
+
+class FleetGeoView(APIView):
+    """GET /api/dashboard/geo/?target_id=<id>
+
+    Aggrega i NetworkFlow per country_code (peer remoti pubblici visti dai
+    target). Senza `target_id` ritorna fleet-wide; con `target_id` solo
+    quel target.
+
+    Response:
+        {
+          "total_flows": N,
+          "with_country": N,
+          "countries": [
+            {"country_code": "US", "country_name": "United States",
+             "flows": N, "times_seen": N, "pct": 42.0},
+            ...
+          ]
+        }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            target_id = request.query_params.get("target_id")
+            qs = NetworkFlow.objects.all()
+            if target_id:
+                qs = qs.filter(target_id=int(target_id))
+        except ValueError:
+            qs = NetworkFlow.objects.none()
+
+        total_flows = qs.count()
+        with_country = qs.exclude(country_code="").count()
+
+        if with_country == 0:
+            return Response({
+                "total_flows": total_flows,
+                "with_country": 0,
+                "countries": [],
+            })
+
+        # Aggregato per country
+        grouped = (
+            qs.exclude(country_code="")
+            .values("country_code", "country_name")
+            .annotate(flows=Count("id"), times_seen=Sum("times_seen"))
+            .order_by("-times_seen")[:30]
+        )
+
+        total_seen = sum(g["times_seen"] or 0 for g in grouped) or 1
+        countries = [
+            {
+                "country_code": g["country_code"],
+                "country_name": g["country_name"] or g["country_code"],
+                "flows": g["flows"],
+                "times_seen": g["times_seen"] or 0,
+                "pct": round(((g["times_seen"] or 0) / total_seen) * 100, 1),
+            }
+            for g in grouped
+        ]
+        return Response({
+            "total_flows": total_flows,
+            "with_country": with_country,
+            "countries": countries,
+        })
