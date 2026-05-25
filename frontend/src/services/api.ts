@@ -147,7 +147,12 @@ class ApiService {
       (error) => Promise.reject(error)
     );
 
-    // Response interceptor per gestire refresh token
+    // Response interceptor per gestire refresh token.
+    // Single-flight: quando N richieste falliscono con 401 in parallelo
+    // (es. Dashboard polling che chiama getThreats + getThreatStats + ...),
+    // tutte aspettano lo STESSO refresh inflight invece di scatenarne N
+    // duplicati. Riduce sia il carico backend sia i warning "Unauthorized"
+    // in log a 1 ogni 60 min anziché N ogni 60 min.
     this.api.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
@@ -157,20 +162,12 @@ class ApiService {
           originalRequest._retry = true;
 
           try {
-            const refreshToken = localStorage.getItem('refresh_token');
-            if (refreshToken) {
-              const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/token/refresh/`, {
-                refresh: refreshToken,
-              });
-
-              const { access } = response.data;
-              localStorage.setItem('access_token', access);
-
-              originalRequest.headers.Authorization = `Bearer ${access}`;
+            const newAccess = await this.refreshAccessToken();
+            if (newAccess) {
+              originalRequest.headers.Authorization = `Bearer ${newAccess}`;
               return this.api(originalRequest);
             }
           } catch (refreshError) {
-            // Refresh fallito, logout
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
             window.location.href = '/login';
@@ -181,6 +178,34 @@ class ApiService {
         return Promise.reject(error);
       }
     );
+  }
+
+  // Single-flight refresh: dedupe richieste concorrenti sullo stesso token.
+  private refreshInflight: Promise<string | null> | null = null;
+
+  private async refreshAccessToken(): Promise<string | null> {
+    if (this.refreshInflight) return this.refreshInflight;
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) return null;
+
+    this.refreshInflight = (async () => {
+      try {
+        const response = await axios.post(
+          `${API_BASE_URL.replace('/api', '')}/api/token/refresh/`,
+          { refresh: refreshToken },
+        );
+        const { access } = response.data;
+        localStorage.setItem('access_token', access);
+        return access as string;
+      } finally {
+        // Reset DOPO che la promise risolve, così richieste arrivate durante
+        // il refresh vedono ancora la stessa inflight; nuove richieste dopo
+        // la risoluzione prendono il nuovo token da localStorage al prossimo 401.
+        setTimeout(() => { this.refreshInflight = null; }, 0);
+      }
+    })();
+
+    return this.refreshInflight;
   }
 
   // ========== Authentication ==========
