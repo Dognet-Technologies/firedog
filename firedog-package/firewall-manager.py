@@ -432,21 +432,22 @@ class FirewallManager:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                 count = int(result.stdout.strip())
                 
+                # "count" = pacchetti bloccati dal firewall per questo IP,
+                # estratti da input_dropped.pcap (catturato via NFLOG/ulogd2
+                # dalla catena LOG_INPUT_DROP). Sono tentativi di connessione
+                # respinti, non sessioni andate a buon fine.
                 if count > 100:
                     score += 50
-                    reasons.append(f"Molti tentativi ({count}) +50")
+                    reasons.append(f"Molti pacchetti bloccati dal firewall ({count}) +50")
                 elif count > 50:
                     score += 30
-                    reasons.append(f"Numerosi tentativi ({count}) +30")
+                    reasons.append(f"Numerosi pacchetti bloccati dal firewall ({count}) +30")
                 elif count > 10:
                     score += 15
-                    reasons.append(f"Alcuni tentativi ({count}) +15")
-                
-            except:
+                    reasons.append(f"Alcuni pacchetti bloccati dal firewall ({count}) +15")
+
+            except Exception:
                 pass
-        
-        # Controlla porte comuni attaccate
-        common_attack_ports = [22, 23, 3389, 21, 25]  # SSH, Telnet, RDP, FTP, SMTP
         
         # Normalizza score 0-100
         score = max(0, min(100, score))
