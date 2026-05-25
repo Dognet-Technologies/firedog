@@ -46,7 +46,13 @@ class ThreatLogSerializer(serializers.ModelSerializer):
 
 
 class ThreatLogListSerializer(serializers.ModelSerializer):
-    """Serializer semplificato per lista minacce"""
+    """Serializer per lista minacce.
+
+    Include i campi che il frontend rende sia in tabella (protocol, dest_port,
+    packet_count, country_code) sia nel modal di dettaglio (description,
+    reasons, resolved_at). Tenuto comunque distinto dal serializer pieno per
+    non esporre dati interni che potessero servire in futuro al solo detail.
+    """
 
     target_ip = serializers.CharField(source="target.ip_address", read_only=True)
 
@@ -56,10 +62,17 @@ class ThreatLogListSerializer(serializers.ModelSerializer):
             "id",
             "target_ip",
             "source_ip",
+            "dest_port",
+            "protocol",
             "threat_score",
             "severity",
+            "packet_count",
+            "country_code",
+            "description",
+            "reasons",
             "is_blocked",
             "is_resolved",
+            "resolved_at",
             "detected_at",
         ]
 
