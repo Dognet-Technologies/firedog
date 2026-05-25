@@ -860,6 +860,16 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
             attempts = int(t.get("attempts", 1) or 1)
 
+            # Protocol/dest_port estratti dal pcap dal lato target.
+            # Mancano per record vecchi (pre-arricchimento) e per ICMP (no port).
+            proto = (t.get("protocol") or "").lower()
+            if proto not in ("tcp", "udp", "icmp", ""):
+                proto = ""
+            try:
+                dest_port = int(t.get("dest_port")) if t.get("dest_port") is not None else None
+            except (TypeError, ValueError):
+                dest_port = None
+
             ThreatLog.objects.update_or_create(
                 target=self.target,
                 source_ip=ip,
@@ -870,6 +880,8 @@ class AgentConsumer(AsyncWebsocketConsumer):
                     "packet_count": attempts,
                     "reasons": reasons,
                     "description": ", ".join(str(r) for r in reasons)[:512],
+                    "protocol": proto,
+                    "dest_port": dest_port,
                 },
             )
 

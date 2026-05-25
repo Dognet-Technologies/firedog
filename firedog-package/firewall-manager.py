@@ -494,6 +494,50 @@ class FirewallManager:
         except Exception as e:
             self.error(f"Errore analisi minacce: {e}")
 
+    @staticmethod
+    def _extract_top_port_proto(pcap_lines):
+        """Dato l'output di tcpdump per un singolo source IP, ritorna
+        (dest_port, protocol) più frequenti.
+
+        Formato righe tcpdump '-nn':
+          14:23:01.123 IP 1.2.3.4.5555 > 5.6.7.8.443: Flags [S], ...
+          14:23:01.234 IP6 ... > ... : ...
+          14:23:02.345 IP 1.2.3.4 > 5.6.7.8: ICMP echo request, ...
+
+        Il protocollo è inferito così:
+          - 'ICMP' presente nella riga → icmp
+          - 'Flags' presente (TCP SYN/ACK/...) → tcp
+          - altrimenti se la riga matcha pattern porta → udp
+          - fallback: '' (vuoto, il backend visualizza '-')
+
+        dest_port è preso dopo l'ultimo punto a sinistra dei ':' nel
+        token destinazione (es. '5.6.7.8.443' → 443). Mancante per ICMP.
+        """
+        from collections import Counter
+        import re
+
+        port_counter: Counter = Counter()
+        proto_counter: Counter = Counter()
+        # Pattern destinazione tipo 'a.b.c.d.PORT:' con porta numerica.
+        port_re = re.compile(r'>\s+\S+?\.(\d+):')
+
+        for line in pcap_lines:
+            if 'ICMP' in line:
+                proto_counter['icmp'] += 1
+                continue
+            m = port_re.search(line)
+            if m:
+                try:
+                    port_counter[int(m.group(1))] += 1
+                except ValueError:
+                    pass
+                # 'Flags' in line ⇒ TCP. Niente Flags + porta valida ⇒ UDP.
+                proto_counter['tcp' if 'Flags' in line else 'udp'] += 1
+
+        top_port = port_counter.most_common(1)[0][0] if port_counter else None
+        top_proto = proto_counter.most_common(1)[0][0] if proto_counter else ''
+        return top_port, top_proto
+
     def get_threats_data(self, min_score: int = 30) -> List[Dict]:
         """Ottieni dati minacce in formato strutturato"""
 
@@ -512,16 +556,27 @@ class FirewallManager:
             for ip in ips[:50]:
                 score, reasons = self.get_threat_score(ip)
                 if score >= min_score:
-                    # Conta tentativi
-                    cmd_count = f"tcpdump -nn -r {pcap_input} 'src host {ip}' 2>/dev/null | wc -l"
-                    count_result = subprocess.run(cmd_count, shell=True, capture_output=True, text=True)
-                    attempts = int(count_result.stdout.strip()) if count_result.stdout.strip() else 0
+                    # Estraiamo tutte le righe pcap per questo source IP, ci
+                    # servono sia il count totale sia il dest_port + protocol
+                    # più frequenti.
+                    cmd_lines = f"tcpdump -nn -r {pcap_input} 'src host {ip}' 2>/dev/null"
+                    lines_result = subprocess.run(
+                        cmd_lines, shell=True, capture_output=True, text=True
+                    )
+                    pcap_lines = [
+                        ln for ln in lines_result.stdout.split('\n') if ln.strip()
+                    ]
+                    attempts = len(pcap_lines)
+
+                    dest_port, protocol = self._extract_top_port_proto(pcap_lines)
 
                     threats.append({
                         'ip': ip,
                         'score': score,
                         'attempts': attempts,
-                        'reasons': reasons
+                        'reasons': reasons,
+                        'dest_port': dest_port,
+                        'protocol': protocol,
                     })
 
             # Ordina per score
