@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import threatsService, { ThreatLog, ThreatStats, ThreatsFilter } from '../services/threats.service';
+import apiService from '../services/api';
+import type { ThreatLog, ThreatStats } from '../types';
 import { useTarget } from '../contexts/TargetContext';
 import './Threats.css';
+
+interface ThreatsFilter {
+  target?: number;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  is_blocked?: boolean;
+  is_resolved?: boolean;
+  source_ip?: string;
+  min_score?: number;
+  limit?: number;
+}
 
 const Threats: React.FC = () => {
   const { selectedTarget } = useTarget();
@@ -39,7 +50,7 @@ const Threats: React.FC = () => {
     setError(null);
     
     try {
-      const data = await threatsService.getThreats(filters);
+      const data = await apiService.getThreats(filters);
       setThreats(data.results);
     } catch (err: any) {
       setError(err.message);
@@ -50,7 +61,7 @@ const Threats: React.FC = () => {
 
   const loadStats = async () => {
     try {
-      const data = await threatsService.getStats();
+      const data = await apiService.getThreatStats();
       setStats(data);
     } catch (err: any) {
       console.error('Error loading stats:', err);
@@ -75,7 +86,7 @@ const Threats: React.FC = () => {
     setSuccess(null);
 
     try {
-      await threatsService.resolveThreat(threatId);
+      await apiService.resolveThreat(threatId);
       setSuccess('Minaccia risolta con successo');
       await loadThreats();
       await loadStats();
@@ -247,7 +258,6 @@ const Threats: React.FC = () => {
                 <div className="attacker-rank">#{index + 1}</div>
                 <div className="attacker-ip">{attacker.source_ip}</div>
                 <div className="attacker-count">{attacker.count} attacchi</div>
-                <div className="attacker-score">Score: {attacker.max_score}</div>
               </div>
             ))}
           </div>

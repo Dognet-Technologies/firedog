@@ -371,6 +371,13 @@ class ApiService {
     return response.data;
   }
 
+  async resolveThreat(id: number): Promise<ThreatLog> {
+    // Il ModelViewSet espone PATCH nativamente; il vecchio threats.service.ts
+    // chiamava /threats/{id}/resolve/ che non esisteva, quindi era no-op.
+    const response = await this.api.patch(`/threats/${id}/`, { is_resolved: true });
+    return response.data;
+  }
+
   async markThreatResolved(id: number): Promise<ThreatLog> {
     const response = await this.api.patch(`/threats/${id}/`, { is_resolved: true });
     return response.data;
