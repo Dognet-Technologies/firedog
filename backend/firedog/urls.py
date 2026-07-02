@@ -23,6 +23,9 @@ from settings.views import (
     UserManagementViewSet,
 )
 
+# Import MCP Views
+from mcp.views import MCPView, MCPAPIKeyViewSet
+
 # Import Log Views
 from api.views import LogAPIView, LogSourcesAPIView
 from api.views_system import SystemUpdateCheckView, SystemUpdateInstallView
@@ -50,6 +53,7 @@ router.register(
     r"settings/notifications", NotificationViewSet, basename="notifications"
 )
 router.register(r"settings/user", UserManagementViewSet, basename="user")
+router.register(r"settings/mcp-keys", MCPAPIKeyViewSet, basename="mcp-apikey")
 
 urlpatterns = [
     # Admin
@@ -67,6 +71,8 @@ urlpatterns = [
     path("api/dashboard/fleet-traffic/", FleetTrafficView.as_view(), name="dashboard-fleet-traffic"),
     path("api/dashboard/geo/", FleetGeoView.as_view(), name="dashboard-geo"),
     path("api/dashboard/activity/", FleetActivityView.as_view(), name="dashboard-activity"),
+    # MCP server (JSON-RPC 2.0, Bearer API key) — contratto cross-prodotto Dognet
+    path("api/mcp", MCPView.as_view(), name="mcp"),
     # Gruppi
     path("api/", include("targets.urls_groups")),
     # Settings

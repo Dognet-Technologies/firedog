@@ -87,6 +87,21 @@ import type {
       api_key: AgentAPIKey;
     }
 
+    export interface MCPAPIKey {
+      id: number;
+      name: string;
+      key_prefix: string;
+      is_active: boolean;
+      created_at: string;
+      expires_at: string | null;
+      last_used_at: string | null;
+    }
+
+    export interface MCPAPIKeyCreateResponse extends MCPAPIKey {
+      // La chiave in chiaro è restituita SOLO alla creazione, mai più recuperabile
+      key: string;
+    }
+
     export interface DatabaseStats {
       total_size: string;
       connection_status: 'connected' | 'error';
@@ -801,6 +816,27 @@ class ApiService {
   async retrieveAgentAPIKey(id: number, password: string): Promise<{ raw_key: string; key_id: number }> {
     const response = await this.api.post(`/agent/api-keys/${id}/retrieve_key/`, { password });
     return response.data;
+  }
+
+  // ========== MCP API Keys (server MCP /api/mcp) ==========
+
+  async getMCPAPIKeys(): Promise<MCPAPIKey[]> {
+    const response = await this.api.get('/settings/mcp-keys/');
+    return response.data.results || response.data;
+  }
+
+  async createMCPAPIKey(data: { name: string; expires_at?: string }): Promise<MCPAPIKeyCreateResponse> {
+    const response = await this.api.post('/settings/mcp-keys/', data);
+    return response.data;
+  }
+
+  async revokeMCPAPIKey(id: number): Promise<MCPAPIKey> {
+    const response = await this.api.post(`/settings/mcp-keys/${id}/revoke/`);
+    return response.data;
+  }
+
+  async deleteMCPAPIKey(id: number): Promise<void> {
+    await this.api.delete(`/settings/mcp-keys/${id}/`);
   }
 
   // ========== Agent Groups ==========

@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "discovery.apps.DiscoveryConfig",
     "audit.apps.AuditConfig",
     "agent_manager.apps.AgentManagerConfig",  # Dog Agent management
+    "mcp.apps.McpConfig",  # Server MCP (Model Context Protocol)
     "settings",
     "channels",
 ]
