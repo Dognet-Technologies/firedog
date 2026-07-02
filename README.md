@@ -2,6 +2,10 @@
 
 Sistema di firewall avanzato per Debian/Ubuntu con policy DROP, logging PCAP separato, analisi intelligente del traffico e interfaccia CLI di gestione.
 
+> **Installazione del master FireDog** (backend Django + frontend React +
+> Celery + nginx): vedi [INSTALL.md](INSTALL.md). Questo README riguarda il
+> package lato target.
+
 ## 📋 Caratteristiche
 
 - ✅ Policy DROP di default su INPUT/OUTPUT
