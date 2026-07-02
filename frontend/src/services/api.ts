@@ -265,28 +265,9 @@ class ApiService {
   async deleteTarget(id: number): Promise<void> {
     try {
       const response = await this.api.delete(`/targets/${id}/`);
-      
-      // Log per debug
-      console.log(`Target ${id} eliminato:`, response.data);
-      
-      // Verifica eliminazione
-      if (response.status === 204 || response.status === 200) {
-        console.log('✅ Target eliminato con successo dal server');
-        
-        // Opzionale: verifica che non esista più
-        try {
-          await this.api.get(`/targets/${id}/`);
-          console.warn('⚠️ Target ancora presente dopo eliminazione!');
-        } catch (e: any) {
-          if (e.response?.status === 404) {
-            console.log('✅ Verifica: Target non più presente');
-          }
-        }
-      }
-      
       return response.data;
-    } catch (error: any) {
-      console.error('❌ Errore eliminazione target:', error);
+    } catch (error: unknown) {
+      console.error('Errore eliminazione target:', error);
       throw error;
     }
   }

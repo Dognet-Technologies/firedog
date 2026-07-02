@@ -16,3 +16,7 @@ frontend/build/
 
 # Build artifacts (rebuild with firedog-package/build-package.sh)
 firedog-package/dog-agent/dog-agent
+
+# Log ruotati del backend (celery.log.1, django.log.2, ...)
+backend/logs/*
+!backend/logs/.gitkeep
