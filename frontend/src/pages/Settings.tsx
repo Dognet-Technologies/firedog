@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import './Settings.css';
 import api from '../services/api';
+import MCPKeysTab from '../components/Settings/MCPKeysTab';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
 import type { NotificationConfig, SmtpInfo } from '../types';
@@ -95,7 +96,7 @@ interface UserProfile {
   last_login: string;
 }
 
-type TabType = 'general' | 'appearance' | 'notifications' | 'security' | 'monitoring' | 'ssh' | 'database';
+type TabType = 'general' | 'appearance' | 'notifications' | 'security' | 'monitoring' | 'ssh' | 'database' | 'mcp';
 
 interface UpdateCheckResponse {
   ok: boolean;
@@ -2646,6 +2647,15 @@ const Settings: React.FC = () => {
           API Keys Agent
         </button>
         <button
+          className={`tab ${activeTab === 'mcp' ? 'active' : ''}`}
+          onClick={() => setActiveTab('mcp')}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+          </svg>
+          MCP
+        </button>
+        <button
           className={`tab ${activeTab === 'database' ? 'active' : ''}`}
           onClick={() => setActiveTab('database')}
         >
@@ -2665,6 +2675,7 @@ const Settings: React.FC = () => {
         {activeTab === 'security' && renderSecuritySettings()}
         {activeTab === 'monitoring' && renderMonitoringSettings()}
         {activeTab === 'ssh' && renderAgentAPIKeysSettings()}
+        {activeTab === 'mcp' && <MCPKeysTab />}
         {activeTab === 'database' && renderDatabaseSettings()}
       </div>
 
