@@ -2,9 +2,16 @@
 
 Sistema di firewall avanzato per Debian/Ubuntu con policy DROP, logging PCAP separato, analisi intelligente del traffico e interfaccia CLI di gestione.
 
-> **Installazione del master FireDog** (backend Django + frontend React +
-> Celery + nginx): vedi [INSTALL.md](INSTALL.md). Questo README riguarda il
-> package lato target.
+> **Guide di installazione:**
+> - Master FireDog (backend Django + frontend React + Celery + nginx): [INSTALL.md](INSTALL.md)
+> - Target (strumenti firewall + dog-agent + pairing col master): [INSTALL-TARGET.md](INSTALL-TARGET.md)
+>
+> Installazione rapida di un target:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/develop-v0.0.6/firedog-package/get-firedog.sh | sudo bash
+> ```
+>
+> Questo README descrive gli strumenti firewall contenuti in `firedog-package/`.
 
 ## 📋 Caratteristiche
 
