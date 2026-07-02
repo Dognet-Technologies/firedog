@@ -31,12 +31,6 @@
    - Setup systemd service
    - Verifica e conferma inizializzazione
 
-5. **test-installation.sh** (5.1K)
-   - Suite di test installazione
-   - Verifica dipendenze, file, servizi
-   - Test policy iptables
-   - Report completo pass/fail
-
 ### ⚙️ File Configurazione
 
 6. **ulogd.conf** (1.8K)
@@ -114,13 +108,11 @@
    ↓
 4. Conferma inizializzazione firewall
    ↓
-5. ./test-installation.sh
+5. firewall-manager --list
    ↓
-6. firewall-manager --list
+6. Configura regole custom
    ↓
-7. Configura regole custom
-   ↓
-8. firewall-manager --analyze
+7. firewall-manager --analyze
 ```
 
 ## 📁 Struttura Directory Post-Installazione

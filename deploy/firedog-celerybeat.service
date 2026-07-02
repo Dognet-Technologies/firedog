@@ -1,0 +1,21 @@
+# FireDog Celery Beat Scheduler
+# Installazione: vedi INSTALL.md (sezione systemd)
+
+[Unit]
+Description=FireDog Celery Beat Scheduler
+After=network.target postgresql.service redis-server.service
+Requires=postgresql.service redis-server.service
+
+[Service]
+User=microcyber
+Group=microcyber
+WorkingDirectory=/home/microcyber/firedog/backend
+EnvironmentFile=/home/microcyber/firedog/backend/.env
+ExecStart=/home/microcyber/firedog/backend/venv/bin/celery -A firedog beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
