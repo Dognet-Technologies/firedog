@@ -27,9 +27,11 @@ Layout sul target dopo l'installazione:
 └── export/     export CLI manuali (legacy)
 
 /usr/local/bin/firewall-manager      → symlink a bin/
+/etc/firewall/custom_rules.conf      regole custom persistenti
+
+# installati dal pacchetto .deb del dog-agent (processo separato, vedi sotto)
 /usr/bin/dog-agent                   binario agent
 /etc/dog-agent/agent.conf            configurazione agent (credenziali)
-/etc/firewall/custom_rules.conf      regole custom persistenti
 ```
 
 ## Metodo A — Push dal master (consigliato in LAN)
@@ -48,7 +50,8 @@ pubblica del master autorizzata.
 
 ## Metodo B — Bootstrap da GitHub (curl | bash)
 
-Per installare un target **senza** passare dal master:
+Per installare **gli strumenti firewall** su un target senza passare dal
+master:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/develop-v0.0.6/firedog-package/get-firedog.sh | sudo bash
@@ -60,24 +63,39 @@ Con opzioni (es. senza attivare subito il firewall):
 curl -fsSL .../get-firedog.sh | sudo bash -s -- --skip-init
 ```
 
-Lo script:
+Lo script scarica il tarball del repo (branch/tag configurabile con
+`FIREDOG_REF`, default `develop-v0.0.6`), ne estrae `firedog-package/` ed
+esegue `install.sh`. Se lanciato in pipe senza tty, la conferma interattiva
+di attivazione firewall viene letta da `/dev/tty` oppure viene forzato
+`--skip-init` (mai policy DROP senza conferma esplicita).
 
-1. scarica il **pacchetto completo** (strumenti + binario dog-agent)
-   dall'ultima GitHub Release con asset `firedog-package.tar.gz`
-   (override: `FIREDOG_RELEASE=<tag>`);
-2. se nessuna release è disponibile fa fallback sul tarball della branch
-   (`FIREDOG_REF`, default `develop-v0.0.6`) — in quel caso **senza** agent,
-   perché il binario non è versionato nel repo;
-3. esegue `install.sh`. Se lanciato in pipe senza tty, la conferma
-   interattiva di attivazione firewall viene letta da `/dev/tty` oppure
-   viene forzato `--skip-init`.
-
-`install.sh` è idempotente: si può rilanciare per aggiornare i file.
+`install.sh` installa **solo la parte target** (strumenti firewall, ulogd2,
+cron, apparmor): né il server né il dog-agent, che ha il suo pacchetto
+dedicato (vedi sotto). È idempotente: si può rilanciare per aggiornare.
 
 > **Attenzione**: l'attivazione del firewall applica policy **DROP** su
 > INPUT/OUTPUT. Assicurati di avere accesso console/seriale prima di
 > confermare, o usa `--skip-init` e attiva dopo con
 > `sudo firewall-init.sh && sudo systemctl enable --now firewall-fm`.
+
+## Installazione del dog-agent
+
+Il dog-agent è un componente **della suite Dognet** (serve FireDog,
+CyberSheppard e SentinelCore con un solo binario) e ha il proprio processo
+di installazione: un pacchetto **`.deb`** prodotto dal repo `dog_agent`.
+
+```bash
+# sulla macchina di build (repo dog_agent, richiede cargo-deb)
+make deb          # produce target/debian/dog-agent_<ver>_amd64.deb
+
+# sul target
+sudo dpkg -i dog-agent_<ver>_amd64.deb
+```
+
+Il pacchetto installa `/usr/bin/dog-agent`, seeda
+`/etc/dog-agent/agent.conf.example` e registra l'unità systemd
+`dog-agent.service` (non abilitata finché la config non è pronta).
+`install.sh` degli strumenti firewall **non** tocca l'agent.
 
 ## Connessione e autenticazione agent ↔ master (pairing)
 
@@ -147,14 +165,3 @@ systemctl status dog-agent         # agent connesso al master
 ls /opt/sentinelsuite/firedog      # layout base
 ```
 
-## Pubblicare una nuova release del pacchetto
-
-Il pacchetto completo negli asset di release si rigenera così (dal repo, con
-il repo `dog_agent` come sibling e `musl-tools` installati):
-
-```bash
-./firedog-package/build-package.sh          # builda e stagea dog-agent
-tar czf firedog-package.tar.gz firedog-package/
-gh release create firedog-package-vX.Y.Z firedog-package.tar.gz \
-  --title "firedog-package vX.Y.Z" --notes "pacchetto target completo"
-```
