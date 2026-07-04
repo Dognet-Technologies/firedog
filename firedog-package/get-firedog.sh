@@ -5,13 +5,13 @@
 # Installa gli strumenti firewall del target (/opt/sentinelsuite/firedog)
 # scaricando firedog-package dal repo GitHub:
 #
-#   curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/develop-v0.0.6/firedog-package/get-firedog.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
 #
 # Opzioni di install.sh (dopo "-s --"):
 #   curl -fsSL .../get-firedog.sh | sudo bash -s -- --skip-init
 #
 # Variabili d'ambiente:
-#   FIREDOG_REF   branch o tag da installare (default: develop-v0.0.6)
+#   FIREDOG_REF   branch o tag da installare (default: stabile)
 #
 # NOTA: questo script installa SOLO gli strumenti firewall del target.
 # Il dog-agent (heartbeat/pairing col master) si installa separatamente
@@ -20,7 +20,7 @@
 set -euo pipefail
 
 REPO="Dognet-Technologies/firedog"
-REF="${FIREDOG_REF:-develop-v0.0.6}"
+REF="${FIREDOG_REF:-stabile}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info() { echo -e "${GREEN}[get-firedog]${NC} $*"; }
