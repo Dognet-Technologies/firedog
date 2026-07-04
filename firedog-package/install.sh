@@ -56,14 +56,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${GREEN}== FireDog target install ==${NC} base=${BASE_DIR}"
 
-# ── 1/8 packages ─────────────────────────────────────────────────────────────
-echo -e "${GREEN}[1/8]${NC} apt deps"
+# ── 1/7 packages ─────────────────────────────────────────────────────────────
+echo -e "${GREEN}[1/7]${NC} apt deps"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq iptables iptables-persistent ulogd2 python3 tcpdump logrotate
 
-# ── 2/8 directory tree ───────────────────────────────────────────────────────
-echo -e "${GREEN}[2/8]${NC} tree ${BASE_DIR}"
+# ── 2/7 directory tree ───────────────────────────────────────────────────────
+echo -e "${GREEN}[2/7]${NC} tree ${BASE_DIR}"
 install -d -m 0755 "${BASE_DIR}"/{bin,conf,data,logs,rules,export}
 install -d -m 0700 /etc/firewall
 install -d -m 0700 /var/lib/firewall
@@ -72,8 +72,8 @@ if id microcyber &>/dev/null; then
     chown -R microcyber:microcyber "${BASE_DIR}"/{data,logs,rules,export}
 fi
 
-# ── 3/8 binaries -> /opt + symlinks under /usr/local ─────────────────────────
-echo -e "${GREEN}[3/8]${NC} binaries"
+# ── 3/7 binaries -> /opt + symlinks under /usr/local ─────────────────────────
+echo -e "${GREEN}[3/7]${NC} binaries"
 install -m 0755 "${SCRIPT_DIR}/firewall-manager.py" "${BASE_DIR}/bin/firewall-manager"
 install -m 0755 "${SCRIPT_DIR}/traffic-analyzer.py" "${BASE_DIR}/bin/traffic-analyzer"
 install -m 0755 "${SCRIPT_DIR}/firewall-init.sh"    "${BASE_DIR}/bin/firewall-init.sh"
@@ -81,8 +81,8 @@ ln -sfn "${BASE_DIR}/bin/firewall-manager" /usr/local/bin/firewall-manager
 ln -sfn "${BASE_DIR}/bin/traffic-analyzer" /usr/local/bin/traffic-analyzer
 ln -sfn "${BASE_DIR}/bin/firewall-init.sh" /usr/local/sbin/firewall-init.sh
 
-# ── 4/8 configs -> /opt + symlinks where OS daemons read them ────────────────
-echo -e "${GREEN}[4/8]${NC} configs"
+# ── 4/7 configs -> /opt + symlinks where OS daemons read them ────────────────
+echo -e "${GREEN}[4/7]${NC} configs"
 install -m 0644 "${SCRIPT_DIR}/file_config/ulogd.conf"                "${BASE_DIR}/conf/ulogd.conf"
 install -m 0644 "${SCRIPT_DIR}/file_config/firewall-pcap-logrotate"   "${BASE_DIR}/conf/firewall-pcap-logrotate"
 install -m 0644 "${SCRIPT_DIR}/file_config/custom_rules.conf.example" "${BASE_DIR}/conf/custom_rules.conf.example"
@@ -106,8 +106,8 @@ install -d -m 0750 -o root -g adm /var/log/ulogd
 systemctl daemon-reload
 systemctl enable --now ulogd2
 
-# ── 5/8 cron (only if microcyber exists) ─────────────────────────────────────
-echo -e "${GREEN}[5/8]${NC} cron"
+# ── 5/7 cron (only if microcyber exists) ─────────────────────────────────────
+echo -e "${GREEN}[5/7]${NC} cron"
 if id microcyber &>/dev/null; then
     ln -sfn "${BASE_DIR}/conf/firedog-cron" /etc/cron.d/firedog
     chmod 0644 "${BASE_DIR}/conf/firedog-cron"
@@ -115,8 +115,8 @@ else
     echo -e "${YELLOW}  [skip]${NC} microcyber missing, firedog-cron not linked"
 fi
 
-# ── 6/8 AppArmor (best-effort) ──────────────────────────────────────────────
-echo -e "${GREEN}[6/8]${NC} apparmor (best-effort)"
+# ── 6/7 AppArmor (best-effort) ──────────────────────────────────────────────
+echo -e "${GREEN}[6/7]${NC} apparmor (best-effort)"
 if command -v apparmor_parser &>/dev/null; then
     ln -sfn "${BASE_DIR}/conf/apparmor-firewall-manager" /etc/apparmor.d/usr.local.bin.firewall-manager
     apparmor_parser -r /etc/apparmor.d/usr.local.bin.firewall-manager 2>/dev/null || \
@@ -125,40 +125,12 @@ else
     echo -e "${YELLOW}  [skip]${NC} apparmor not present"
 fi
 
-# ── 7/8 dog-agent (static musl binary, no system deps) ──────────────────────
-echo -e "${GREEN}[7/8]${NC} dog-agent"
-AGENT_DIR="${SCRIPT_DIR}/dog-agent"
-if [[ -x "${AGENT_DIR}/dog-agent" ]]; then
-    # system user
-    id -u dog-agent &>/dev/null || \
-        useradd --system --no-create-home --shell /usr/sbin/nologin dog-agent
-
-    # binary + config + service
-    install -m 0755 "${AGENT_DIR}/dog-agent"             /usr/bin/dog-agent
-    install -d -m 0750 -o dog-agent -g dog-agent /etc/dog-agent
-    install -m 0644 -o dog-agent -g dog-agent \
-        "${AGENT_DIR}/agent.conf.example"                /etc/dog-agent/agent.conf.example
-    if [[ ! -f /etc/dog-agent/agent.conf ]]; then
-        install -m 0640 -o dog-agent -g dog-agent \
-            "${AGENT_DIR}/agent.conf.example"            /etc/dog-agent/agent.conf
-        echo -e "${YELLOW}  → /etc/dog-agent/agent.conf seeded from example, MUST be edited before start${NC}"
-    fi
-    install -d -m 0755 -o dog-agent -g dog-agent /var/log/dog-agent
-    install -d -m 0755 -o dog-agent -g dog-agent /var/run/dog-agent
-    install -m 0644 "${AGENT_DIR}/dog-agent.service"     /lib/systemd/system/dog-agent.service
-
-    systemctl daemon-reload
-    echo -e "${CYAN}  configure /etc/dog-agent/agent.conf then: systemctl enable --now dog-agent${NC}"
-else
-    echo -e "${YELLOW}  [skip]${NC} dog-agent/ payload not present"
-fi
-
-# ── 8/8 init firewall (interactive) ─────────────────────────────────────────
+# ── 7/7 init firewall (interactive) ─────────────────────────────────────────
 if $SKIP_INIT; then
-    echo -e "${YELLOW}[8/8]${NC} --skip-init: firewall NOT activated"
+    echo -e "${YELLOW}[7/7]${NC} --skip-init: firewall NOT activated"
     echo -e "${CYAN}      run: sudo firewall-init.sh && systemctl enable --now firewall-fm${NC}"
 else
-    echo -e "${GREEN}[8/8]${NC} firewall init"
+    echo -e "${GREEN}[7/7]${NC} firewall init"
     echo -e "${YELLOW}      policy DROP will be applied. ensure console/serial access.${NC}"
     read -rp "      proceed? (yes/no): " confirm
     if [[ "$confirm" == "yes" ]]; then
@@ -174,6 +146,5 @@ echo -e "${GREEN}== done ==${NC}"
 echo "  base dir:       ${BASE_DIR}"
 echo "  CLI:            firewall-manager --help"
 echo "  firewall svc:   systemctl status firewall-fm"
-echo "  agent svc:      systemctl status dog-agent"
 echo "  custom rules:   /etc/firewall/custom_rules.conf"
 echo "  pcap logs:      /var/log/ulogd/"
