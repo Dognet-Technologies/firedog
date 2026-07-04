@@ -130,7 +130,6 @@ const FirewallRules: React.FC = () => {
         });
       } else if (targetSelection === 'single' && selectedTarget) {
         // Send rule to single target
-        console.log('Adding rule to target:', selectedTarget, newRule);
         showToast({
           type: 'success',
           title: 'Regola aggiunta',
@@ -165,7 +164,6 @@ const FirewallRules: React.FC = () => {
       type: 'danger',
       onConfirm: async () => {
         try {
-          console.log('Removing rule:', rule);
           showToast({
             type: 'success',
             title: 'Regola rimossa',
@@ -187,7 +185,6 @@ const FirewallRules: React.FC = () => {
 
   const handleSaveRules = async () => {
     try {
-      console.log('Saving rules permanently');
       showToast({
         type: 'success',
         title: 'Regole salvate',
@@ -213,7 +210,6 @@ const FirewallRules: React.FC = () => {
       type: 'warning',
       onConfirm: async () => {
         try {
-          console.log('Restoring rules');
           showToast({
             type: 'success',
             title: 'Regole ripristinate',

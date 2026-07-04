@@ -1,48 +1,24 @@
-# FireDog Cron Jobs
-# File: /etc/cron.d/firedog
+# FireDog Cron Jobs — installed at /etc/cron.d/firedog (symlink)
 #
-# Scheduled tasks for FireDog monitoring and maintenance
-# Install: sudo cp firedog-cron /etc/cron.d/firedog && sudo chmod 644 /etc/cron.d/firedog
+# Tutti i job girano come `microcyber` con NOPASSWD sudo dove serve.
+# Output di firewall-manager / iptables vanno in /opt/sentinelsuite/firedog/{data,export,rules}.
+# Il dog-agent legge periodicamente export/status.json e lo invia al server.
 
-# ========== TRAFFIC ANALYSIS ==========
-# Run full traffic analysis every 5 minutes
-*/5 * * * * microcyber /usr/local/bin/traffic-analyzer --full > /opt/firedog/data/traffic-$(date +\%Y\%m\%d-\%H\%M).json 2>&1
+# ========== STATUS EXPORT (fonte principale per il server) ==========
+# Snapshot completo firewall+system in JSON ogni 5 minuti.
+# Sovrascrive lo stesso file: l'agent lo legge e lo invia via WS.
+*/5 * * * * microcyber sudo /usr/local/bin/firewall-manager --export-json /opt/sentinelsuite/firedog/export/status.json 2>&1 | logger -t firedog-export
 
-# ========== FIREWALL STATISTICS ==========
-# Collect firewall statistics every 10 minutes
-*/10 * * * * microcyber /usr/local/bin/firewall-manager --stats > /opt/firedog/data/firewall-stats-$(date +\%Y\%m\%d-\%H\%M).json 2>&1
-
-# ========== PORT SCAN DETECTION ==========
-# Check for port scanning every 15 minutes
-*/15 * * * * microcyber /usr/local/bin/traffic-analyzer --scan-detect > /opt/firedog/data/scan-detect-$(date +\%Y\%m\%d-\%H\%M).json 2>&1
+# ========== IPTABLES BACKUP ==========
+# Backup giornaliero alle 3:00.
+0 3 * * * microcyber sudo /usr/sbin/iptables-save > /opt/sentinelsuite/firedog/rules/iptables.backup-$(date +\%Y\%m\%d).rules 2>/dev/null
 
 # ========== LOG ROTATION ==========
-# Clean old analysis files (older than 7 days) daily at 2 AM
-0 2 * * * microcyber find /opt/firedog/data -name "*.json" -mtime +7 -delete 2>&1
-0 2 * * * microcyber find /opt/firedog/logs -name "*.log" -mtime +7 -delete 2>&1
-0 2 * * * microcyber find /opt/firedog/pcap -name "*.pcap" -mtime +3 -delete 2>&1
-
-# ========== BACKUP IPTABLES RULES ==========
-# Backup iptables rules daily at 3 AM
-0 3 * * * microcyber sudo /usr/sbin/iptables-save > /opt/firedog/rules/iptables.backup-$(date +\%Y\%m\%d).rules 2>&1
-
-# Clean old rule backups (older than 30 days)
-0 3 * * * microcyber find /opt/firedog/rules -name "iptables.backup-*.rules" -mtime +30 -delete 2>&1
+# Pulizia file vecchi.
+0 2 * * * microcyber find /opt/sentinelsuite/firedog/data  -name "*.json"          -mtime +7  -delete 2>/dev/null
+0 2 * * * microcyber find /opt/sentinelsuite/firedog/logs  -name "*.log"           -mtime +7  -delete 2>/dev/null
+0 3 * * * microcyber find /opt/sentinelsuite/firedog/rules -name "iptables.backup-*.rules" -mtime +30 -delete 2>/dev/null
 
 # ========== HEALTH CHECK ==========
-# Check service status every hour
-0 * * * * microcyber sudo systemctl is-active firedog > /opt/firedog/logs/health-check.log 2>&1
-
-# ========== INTERFACE STATISTICS ==========
-# Collect network interface statistics hourly
-0 * * * * microcyber /usr/local/bin/traffic-analyzer --interfaces > /opt/firedog/data/interfaces-$(date +\%Y\%m\%d-\%H00).json 2>&1
-
-# ========== WEEKLY REPORTS ==========
-# Generate weekly summary report (every Sunday at midnight)
-0 0 * * 0 microcyber /usr/local/bin/generate-weekly-report.sh > /opt/firedog/reports/weekly-$(date +\%Y\%W).txt 2>&1
-
-# ========== NOTES ==========
-# - All jobs run as 'microcyber' user
-# - Ensure microcyber has sudo NOPASSWD permissions for required commands (see sudoers-microcyber)
-# - Adjust frequency based on your monitoring requirements
-# - Monitor cron execution: sudo grep CRON /var/log/syslog
+# Stato del firewall service ogni ora (al log file locale).
+0 * * * * microcyber sudo systemctl is-active firewall-fm > /opt/sentinelsuite/firedog/logs/health-check.log 2>&1

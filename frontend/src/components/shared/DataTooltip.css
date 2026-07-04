@@ -1,0 +1,79 @@
+/* DataTooltip — 2-second hover contextual info card */
+
+.dtt-wrapper {
+  display: block;
+  width: 100%;
+}
+
+/* Preserve inline context for table cells */
+.dtt-wrapper--inline {
+  display: inline-block;
+  width: auto;
+}
+
+/* Fixed-position card, rendered via inline style */
+.dtt-card {
+  position: fixed;
+  z-index: 9999;
+  width: 272px;
+  background: var(--bg-elevated, #1c1c1e);
+  border: 1px solid var(--border-primary, rgba(255,255,255,0.08));
+  border-radius: var(--radius-xl, 12px);
+  padding: 12px 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  animation: dtt-appear 0.15s ease;
+}
+
+@keyframes dtt-appear {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dtt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.dtt-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #f5f5f7);
+  flex: 1;
+  min-width: 0;
+}
+
+.dtt-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 100px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.dtt-badge-avg   { background: rgba(0,201,255,0.14);  color: var(--accent-primary, #00c9ff); border: 1px solid rgba(0,201,255,0.28); }
+.dtt-badge-count { background: rgba(50,215,75,0.14);  color: var(--status-success, #32d74b); border: 1px solid rgba(50,215,75,0.28); }
+.dtt-badge-sum   { background: rgba(255,159,10,0.14); color: var(--status-warning, #ff9f0a); border: 1px solid rgba(255,159,10,0.28); }
+.dtt-badge-rate  { background: rgba(94,92,230,0.14);  color: #9b99ff;                        border: 1px solid rgba(94,92,230,0.28); }
+.dtt-badge-last  { background: rgba(150,150,150,0.12); color: var(--text-secondary, #a1a1aa); border: 1px solid var(--border-primary); }
+.dtt-badge-delta { background: rgba(255,69,58,0.12);  color: var(--status-danger, #ff453a);  border: 1px solid rgba(255,69,58,0.25); }
+
+.dtt-desc {
+  font-size: 12px;
+  color: var(--text-secondary, #a1a1aa);
+  line-height: 1.55;
+  margin: 0 0 8px 0;
+}
+
+.dtt-source {
+  font-size: 10px;
+  color: var(--text-tertiary, #636366);
+  font-family: var(--font-mono, monospace);
+  padding-top: 6px;
+  border-top: 1px solid var(--border-primary, rgba(255,255,255,0.06));
+}

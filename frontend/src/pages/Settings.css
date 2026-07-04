@@ -23,9 +23,9 @@
 }
 
 .header-content h1 {
-  font-size: 2rem;
+  font-size: var(--font-2xl);
   font-weight: 600;
-  color: #00d4ff;
+  color: var(--text-primary);
   margin: 0 0 0.5rem 0;
 }
 

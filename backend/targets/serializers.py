@@ -3,7 +3,7 @@ Serializers per l'app Targets
 """
 
 from rest_framework import serializers
-from .models import Target
+from .models import Target, FirewallStats
 
 """
 Serializers per Whitelist e BlockedIPs
@@ -27,6 +27,7 @@ class TargetSerializer(serializers.ModelSerializer):
             "id",
             "ip_address",
             "hostname",
+            "mac_address",
             "description",
             "status",
             "firedog_version",
@@ -110,6 +111,7 @@ class TargetCreateSerializer(serializers.ModelSerializer):
         fields = [
             "ip_address",
             "hostname",
+            "mac_address",
             "description",
             "ssh_port",
             "ssh_user",
@@ -121,6 +123,19 @@ class TargetCreateSerializer(serializers.ModelSerializer):
         if Target.objects.filter(ip_address=value).exists():
             raise serializers.ValidationError("Questo IP è già registrato come target")
         return value
+
+    def validate_mac_address(self, value):
+        """Normalizza il MAC in lowercase con colon-separator e valida il formato."""
+        if not value:
+            return value
+        import re
+
+        normalized = value.strip().lower().replace("-", ":")
+        if not re.fullmatch(r"([0-9a-f]{2}:){5}[0-9a-f]{2}", normalized):
+            raise serializers.ValidationError(
+                "MAC address non valido (formato atteso AA:BB:CC:DD:EE:FF)"
+            )
+        return normalized
 
     def create(self, validated_data):
         """Crea target e assegna ai gruppi specificati"""
@@ -388,3 +403,36 @@ class BlockedIPStatsSerializer(serializers.Serializer):
     total_packets_blocked = serializers.IntegerField()
     top_blocked_ips = serializers.ListField(child=serializers.DictField())
     blocks_by_reason = serializers.DictField()
+
+
+class FirewallStatsSerializer(serializers.ModelSerializer):
+    """Serializer per statistiche firewall (traffico)"""
+
+    target_hostname = serializers.CharField(source="target.hostname", read_only=True)
+
+    class Meta:
+        model = FirewallStats
+        fields = [
+            "id",
+            "target",
+            "target_hostname",
+            "hostname",
+            "firedog_version",
+            "os_version",
+            "kernel_version",
+            "uptime_seconds",
+            "input_packets",
+            "output_packets",
+            "forward_packets",
+            "pcap_input_dropped_bytes",
+            "pcap_output_dropped_bytes",
+            "dropped_input_packets",
+            "dropped_output_packets",
+            "protocols",
+            "conntrack_count",
+            "conntrack_max",
+            "status",
+            "collected_at",
+            "imported_at",
+        ]
+        read_only_fields = ["id", "imported_at"]

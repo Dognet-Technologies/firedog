@@ -14,7 +14,7 @@ from dashboards.views import DashboardViewSet, WidgetViewSet
 from integrity.views import FileIntegrityViewSet
 from discovery.views import DiscoveredHostViewSet
 from audit.views import AuditLogViewSet
-from targets.views import WhitelistEntryViewSet, BlockedIPViewSet, TargetViewSet
+from targets.views import WhitelistEntryViewSet, BlockedIPViewSet, TargetViewSet, FirewallStatsViewSet
 from settings.views import (
     SystemSettingsViewSet,
     SSHKeyViewSet,
@@ -23,8 +23,13 @@ from settings.views import (
     UserManagementViewSet,
 )
 
+# Import MCP Views
+from mcp.views import MCPView, MCPAPIKeyViewSet
+
 # Import Log Views
 from api.views import LogAPIView, LogSourcesAPIView
+from api.views_system import SystemUpdateCheckView, SystemUpdateInstallView
+from api.views_dashboard import FleetTrafficView, FleetGeoView, FleetActivityView
 
 # Router per API REST
 router = DefaultRouter()
@@ -38,6 +43,7 @@ router.register(r"discovery", DiscoveredHostViewSet, basename="discoveredhost")
 router.register(r"audit", AuditLogViewSet, basename="auditlog")
 router.register(r"whitelist", WhitelistEntryViewSet, basename="whitelist")
 router.register(r"blocked-ips", BlockedIPViewSet, basename="blocked-ip")
+router.register(r"firewall-stats", FirewallStatsViewSet, basename="firewall-stats")
 
 # Settings ViewSets  ← AGGIUNGI
 router.register(r"settings/settings", SystemSettingsViewSet, basename="systemsettings")
@@ -47,6 +53,7 @@ router.register(
     r"settings/notifications", NotificationViewSet, basename="notifications"
 )
 router.register(r"settings/user", UserManagementViewSet, basename="user")
+router.register(r"settings/mcp-keys", MCPAPIKeyViewSet, basename="mcp-apikey")
 
 urlpatterns = [
     # Admin
@@ -57,6 +64,15 @@ urlpatterns = [
     # Log APIs
     path("api/logs/", LogAPIView.as_view(), name="logs"),
     path("api/logs/sources/", LogSourcesAPIView.as_view(), name="logs-sources"),
+    # System update (git pull + build + migrate + restart)
+    path("api/system/update/check/", SystemUpdateCheckView.as_view(), name="system-update-check"),
+    path("api/system/update/install/", SystemUpdateInstallView.as_view(), name="system-update-install"),
+    # Dashboard aggregations
+    path("api/dashboard/fleet-traffic/", FleetTrafficView.as_view(), name="dashboard-fleet-traffic"),
+    path("api/dashboard/geo/", FleetGeoView.as_view(), name="dashboard-geo"),
+    path("api/dashboard/activity/", FleetActivityView.as_view(), name="dashboard-activity"),
+    # MCP server (JSON-RPC 2.0, Bearer API key) — contratto cross-prodotto Dognet
+    path("api/mcp", MCPView.as_view(), name="mcp"),
     # Gruppi
     path("api/", include("targets.urls_groups")),
     # Settings

@@ -104,6 +104,20 @@ class FirewallRule(models.Model):
         default=False, help_text="Indica se la regola è sincronizzata sul target"
     )
 
+    # Origine: se la regola è stata creata via "Add Group Rule" punta al gruppo
+    # che l'ha generata. Le regole single-target hanno questo a NULL.
+    group_origin = models.ForeignKey(
+        "targets.TargetGroup",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="applied_rules",
+        help_text=(
+            "Gruppo da cui questa rule è stata propagata. NULL = rule creata "
+            "direttamente sul singolo target."
+        ),
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -185,3 +199,63 @@ class FirewallRule(models.Model):
             cmd_parts.extend(["-m", "comment", "--comment", self.comment[:256]])
 
         return " ".join(cmd_parts)
+
+
+class FirewallRuleBackup(models.Model):
+    """Snapshot delle FirewallRule di un target prima di un'operazione distruttiva.
+
+    Creato dall'endpoint `Apply Group Rules` quando l'utente sceglie modalità
+    "Overwrite" + flag "Backup". Conserva le rule serializzate in JSON così è
+    possibile fare restore futuri senza dover ricostruire il payload via agent.
+    """
+
+    REASON_CHOICES = [
+        ("group_apply_overwrite", "Pre apply group rules (overwrite)"),
+        ("manual", "Manual backup"),
+        ("other", "Other"),
+    ]
+
+    target = models.ForeignKey(
+        "targets.Target",
+        on_delete=models.CASCADE,
+        related_name="rule_backups",
+        help_text="Target di cui sono state salvate le rule",
+    )
+    reason = models.CharField(
+        max_length=40, choices=REASON_CHOICES, default="manual",
+        help_text="Motivo del backup",
+    )
+    triggered_by = models.ForeignKey(
+        "auth.User", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="firewall_rule_backups",
+        help_text="Utente che ha avviato l'azione (se applicabile)",
+    )
+    related_group = models.ForeignKey(
+        "targets.TargetGroup", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="triggered_rule_backups",
+        help_text="Gruppo che ha causato il backup (se applicabile)",
+    )
+
+    snapshot = models.JSONField(
+        default=list,
+        help_text=(
+            "Lista di dict serializzati delle FirewallRule esistenti al momento "
+            "del backup. Schema per dict: chain, rule_number, protocol, port, "
+            "source_ip, dest_ip, action, comment, is_custom, is_synced, group_origin_id."
+        ),
+    )
+    rules_count = models.PositiveIntegerField(default=0)
+    note = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["target", "-created_at"]),
+        ]
+        verbose_name = "Firewall Rule Backup"
+        verbose_name_plural = "Firewall Rule Backups"
+
+    def __str__(self):
+        return f"Backup {self.target} ({self.rules_count} rules) @ {self.created_at:%Y-%m-%d %H:%M}"

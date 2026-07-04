@@ -87,6 +87,21 @@ import type {
       api_key: AgentAPIKey;
     }
 
+    export interface MCPAPIKey {
+      id: number;
+      name: string;
+      key_prefix: string;
+      is_active: boolean;
+      created_at: string;
+      expires_at: string | null;
+      last_used_at: string | null;
+    }
+
+    export interface MCPAPIKeyCreateResponse extends MCPAPIKey {
+      // La chiave in chiaro è restituita SOLO alla creazione, mai più recuperabile
+      key: string;
+    }
+
     export interface DatabaseStats {
       total_size: string;
       connection_status: 'connected' | 'error';
@@ -147,7 +162,12 @@ class ApiService {
       (error) => Promise.reject(error)
     );
 
-    // Response interceptor per gestire refresh token
+    // Response interceptor per gestire refresh token.
+    // Single-flight: quando N richieste falliscono con 401 in parallelo
+    // (es. Dashboard polling che chiama getThreats + getThreatStats + ...),
+    // tutte aspettano lo STESSO refresh inflight invece di scatenarne N
+    // duplicati. Riduce sia il carico backend sia i warning "Unauthorized"
+    // in log a 1 ogni 60 min anziché N ogni 60 min.
     this.api.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
@@ -157,20 +177,12 @@ class ApiService {
           originalRequest._retry = true;
 
           try {
-            const refreshToken = localStorage.getItem('refresh_token');
-            if (refreshToken) {
-              const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/token/refresh/`, {
-                refresh: refreshToken,
-              });
-
-              const { access } = response.data;
-              localStorage.setItem('access_token', access);
-
-              originalRequest.headers.Authorization = `Bearer ${access}`;
+            const newAccess = await this.refreshAccessToken();
+            if (newAccess) {
+              originalRequest.headers.Authorization = `Bearer ${newAccess}`;
               return this.api(originalRequest);
             }
           } catch (refreshError) {
-            // Refresh fallito, logout
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
             window.location.href = '/login';
@@ -181,6 +193,34 @@ class ApiService {
         return Promise.reject(error);
       }
     );
+  }
+
+  // Single-flight refresh: dedupe richieste concorrenti sullo stesso token.
+  private refreshInflight: Promise<string | null> | null = null;
+
+  private async refreshAccessToken(): Promise<string | null> {
+    if (this.refreshInflight) return this.refreshInflight;
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) return null;
+
+    this.refreshInflight = (async () => {
+      try {
+        const response = await axios.post(
+          `${API_BASE_URL.replace('/api', '')}/api/token/refresh/`,
+          { refresh: refreshToken },
+        );
+        const { access } = response.data;
+        localStorage.setItem('access_token', access);
+        return access as string;
+      } finally {
+        // Reset DOPO che la promise risolve, così richieste arrivate durante
+        // il refresh vedono ancora la stessa inflight; nuove richieste dopo
+        // la risoluzione prendono il nuovo token da localStorage al prossimo 401.
+        setTimeout(() => { this.refreshInflight = null; }, 0);
+      }
+    })();
+
+    return this.refreshInflight;
   }
 
   // ========== Authentication ==========
@@ -212,6 +252,11 @@ class ApiService {
     return response.data;
   }
 
+  async startPairing(targetId: number): Promise<{ id: number; status: string; expires_at: string }> {
+    const response = await this.api.post('/agent/pairing/start/', { target_id: targetId });
+    return response.data;
+  }
+
   async updateTarget(id: number, data: Partial<Target>): Promise<Target> {
     const response = await this.api.patch(`/targets/${id}/`, data);
     return response.data;
@@ -220,28 +265,9 @@ class ApiService {
   async deleteTarget(id: number): Promise<void> {
     try {
       const response = await this.api.delete(`/targets/${id}/`);
-      
-      // Log per debug
-      console.log(`Target ${id} eliminato:`, response.data);
-      
-      // Verifica eliminazione
-      if (response.status === 204 || response.status === 200) {
-        console.log('✅ Target eliminato con successo dal server');
-        
-        // Opzionale: verifica che non esista più
-        try {
-          await this.api.get(`/targets/${id}/`);
-          console.warn('⚠️ Target ancora presente dopo eliminazione!');
-        } catch (e: any) {
-          if (e.response?.status === 404) {
-            console.log('✅ Verifica: Target non più presente');
-          }
-        }
-      }
-      
       return response.data;
-    } catch (error: any) {
-      console.error('❌ Errore eliminazione target:', error);
+    } catch (error: unknown) {
+      console.error('Errore eliminazione target:', error);
       throw error;
     }
   }
@@ -279,6 +305,22 @@ class ApiService {
   async getTargetStatus(id: number): Promise<TargetStatus> {
     const response = await this.api.get(`/targets/${id}/status/`);
     return response.data;
+  }
+
+  // ========== Monitoring ==========
+
+  async getHeartbeats(targetId: number, limit = 96): Promise<any[]> {
+    const response = await this.api.get('/agent/heartbeats/', {
+      params: { target_id: targetId, limit },
+    });
+    return response.data.results ?? response.data;
+  }
+
+  async getFirewallStats(targetId: number, limit = 96): Promise<any[]> {
+    const response = await this.api.get('/firewall-stats/', {
+      params: { target_id: targetId, limit },
+    });
+    return response.data.results ?? response.data;
   }
 
   // ========== Firewall Rules ==========
@@ -322,6 +364,13 @@ class ApiService {
 
   async getThreatStats(): Promise<ThreatStats> {
     const response = await this.api.get('/threats/stats/');
+    return response.data;
+  }
+
+  async resolveThreat(id: number): Promise<ThreatLog> {
+    // Il ModelViewSet espone PATCH nativamente; il vecchio threats.service.ts
+    // chiamava /threats/{id}/resolve/ che non esisteva, quindi era no-op.
+    const response = await this.api.patch(`/threats/${id}/`, { is_resolved: true });
     return response.data;
   }
 
@@ -505,7 +554,111 @@ class ApiService {
     );
     return response.data;
   }
-    // Whitelist methods
+
+  async getGroupRules(groupId: number): Promise<{ count: number; results: FirewallRule[] }> {
+    const response = await this.api.get(`/groups/${groupId}/rules/`);
+    return response.data;
+  }
+
+  async addGroupRule(
+    groupId: number,
+    data: { chain: string; protocol: string; port?: number | null; source_ip?: string | null; dest_ip?: string | null; action: string; comment?: string }
+  ): Promise<{ group: number; rules: { target_id: number; rule_id: number; dispatched: boolean }[]; dispatch_errors: Record<string, string> }> {
+    const response = await this.api.post(`/groups/${groupId}/add-rule/`, data);
+    return response.data;
+  }
+
+  async removeGroupRule(groupId: number, ruleId: number): Promise<{ removed: number[]; dispatch_errors: Record<string, string> }> {
+    const response = await this.api.post(`/groups/${groupId}/remove-rule/${ruleId}/`);
+    return response.data;
+  }
+
+  async getGroupOutOfSync(groupId: number): Promise<{
+    group_id: number;
+    canonical_total: number;
+    out_of_sync_count: number;
+    members: {
+      target_id: number;
+      target_label: string;
+      in_sync: boolean;
+      canonical_total: number;
+      present_count: number;
+      missing_count: number;
+      missing_signatures: { chain: string; action: string; protocol: string; port: number | null; source_ip: string | null; dest_ip: string | null; comment: string }[];
+      individual_rules_count: number;
+    }[];
+  }> {
+    const response = await this.api.get(`/groups/${groupId}/out-of-sync/`);
+    return response.data;
+  }
+
+  async applyGroupRulesToTarget(
+    groupId: number,
+    targetId: number,
+    body: { overwrite: boolean; backup: boolean },
+  ): Promise<{
+    group_id: number;
+    target_id: number;
+    applied: { rule_id: number; dispatched: boolean }[];
+    removed_individual: number[];
+    dispatch_errors: Record<string, string>;
+  }> {
+    const response = await this.api.post(`/groups/${groupId}/apply-to-target/${targetId}/`, body);
+    return response.data;
+  }
+
+  async syncTargetRules(targetId: number): Promise<{ command_id: string; status: string }> {
+    const response = await this.api.post(`/targets/${targetId}/sync-rules/`);
+    return response.data;
+  }
+
+  async checkSystemUpdate(): Promise<{ ok: boolean; error?: string; branch?: string; installed?: string; available?: string; commits_behind?: number; changelog?: string[]; up_to_date?: boolean }> {
+    const response = await this.api.get('/system/update/check/');
+    return response.data;
+  }
+
+  async installSystemUpdate(): Promise<{ ok: boolean; exit_code?: number; stdout?: string; stderr?: string; error?: string }> {
+    // L'install può durare anche 1-2 minuti (npm ci + build + migrate + restart).
+    // Aumento timeout default di axios per evitare di abortire prematuramente.
+    const response = await this.api.post('/system/update/install/', undefined, { timeout: 10 * 60 * 1000 });
+    return response.data;
+  }
+
+  async getDashboardFleetTraffic(hours = 24): Promise<{
+    hours: number;
+    series: { time: string; in: number; out: number; timestamp: string }[];
+  }> {
+    const response = await this.api.get('/dashboard/fleet-traffic/', { params: { hours } });
+    return response.data;
+  }
+
+  async getDashboardGeo(targetId?: number): Promise<{
+    total_flows: number;
+    with_country: number;
+    countries: { country_code: string; country_name: string; flows: number; times_seen: number; pct: number }[];
+  }> {
+    const response = await this.api.get('/dashboard/geo/', { params: targetId ? { target_id: targetId } : {} });
+    return response.data;
+  }
+
+  async getDashboardActivity(limit = 20, hours = 24): Promise<{
+    hours: number;
+    count: number;
+    events: {
+      kind: 'threat' | 'block' | 'audit';
+      timestamp: string;
+      message: string;
+      severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+      target_id: number | null;
+      target_hostname: string;
+      meta: Record<string, unknown>;
+    }[];
+  }> {
+    const response = await this.api.get('/dashboard/activity/', { params: { limit, hours } });
+    return response.data;
+  }
+
+  // Whitelist methods
   async getWhitelistByTarget(targetId: number) {
     const response = await this.api.get(`/whitelist/by_target/?target_id=${targetId}`);
     return response.data;
@@ -644,6 +797,27 @@ class ApiService {
   async retrieveAgentAPIKey(id: number, password: string): Promise<{ raw_key: string; key_id: number }> {
     const response = await this.api.post(`/agent/api-keys/${id}/retrieve_key/`, { password });
     return response.data;
+  }
+
+  // ========== MCP API Keys (server MCP /api/mcp) ==========
+
+  async getMCPAPIKeys(): Promise<MCPAPIKey[]> {
+    const response = await this.api.get('/settings/mcp-keys/');
+    return response.data.results || response.data;
+  }
+
+  async createMCPAPIKey(data: { name: string; expires_at?: string }): Promise<MCPAPIKeyCreateResponse> {
+    const response = await this.api.post('/settings/mcp-keys/', data);
+    return response.data;
+  }
+
+  async revokeMCPAPIKey(id: number): Promise<MCPAPIKey> {
+    const response = await this.api.post(`/settings/mcp-keys/${id}/revoke/`);
+    return response.data;
+  }
+
+  async deleteMCPAPIKey(id: number): Promise<void> {
+    await this.api.delete(`/settings/mcp-keys/${id}/`);
   }
 
   // ========== Agent Groups ==========

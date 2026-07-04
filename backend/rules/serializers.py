@@ -32,6 +32,7 @@ class FirewallRuleSerializer(serializers.ModelSerializer):
             "comment",
             "is_custom",
             "is_synced",
+            "group_origin",
             "created_at",
             "updated_at",
             "rule_description",
@@ -98,70 +99,30 @@ class FirewallRuleListSerializer(serializers.ModelSerializer):
         model = FirewallRule
         fields = [
             "id",
+            "target",
             "target_ip",
             "chain",
+            "rule_number",
             "protocol",
             "port",
+            "source_ip",
+            "dest_ip",
             "action",
+            "comment",
+            "is_custom",
             "is_synced",
+            "group_origin",
             "rule_description",
+            "created_at",
+            "updated_at",
         ]
 
 
-class FirewallRuleSerializer(serializers.Serializer):
-    """Serializer per FirewallRule model"""
-
-    id = serializers.IntegerField(read_only=True)
-    target_id = serializers.IntegerField()
-    chain = serializers.CharField()
-    rule_number = serializers.IntegerField()
-    protocol = serializers.CharField()
-    port = serializers.IntegerField(allow_null=True)
-    source_ip = serializers.IPAddressField(allow_null=True)
-    dest_ip = serializers.IPAddressField(allow_null=True)
-    action = serializers.CharField()
-    comment = serializers.CharField(allow_blank=True)
-    packets = serializers.IntegerField()
-    bytes = serializers.IntegerField()
-    synced_at = serializers.DateTimeField()
-
-    # Extra
-    target_hostname = serializers.SerializerMethodField()
-    formatted_rule = serializers.SerializerMethodField()
-
-    def get_target_hostname(self, obj):
-        return obj.target.hostname if obj.target else None
-
-    def get_formatted_rule(self, obj):
-        """Formatta regola per display"""
-        parts = [obj.action, obj.protocol.upper()]
-
-        if obj.port:
-            parts.append(f"port {obj.port}")
-
-        if obj.source_ip:
-            parts.append(f"from {obj.source_ip}")
-
-        if obj.dest_ip:
-            parts.append(f"to {obj.dest_ip}")
-
-        if obj.comment:
-            parts.append(f"# {obj.comment}")
-
-        return " ".join(parts)
-
-
-class FirewallRuleListSerializer(serializers.Serializer):
-    """Serializer compatto per liste"""
-
-    id = serializers.IntegerField(read_only=True)
-    chain = serializers.CharField()
-    rule_number = serializers.IntegerField()
-    protocol = serializers.CharField()
-    port = serializers.IntegerField(allow_null=True)
-    action = serializers.CharField()
-    comment = serializers.CharField()
-    packets = serializers.IntegerField()
+# Note: la versione legacy di FirewallRuleSerializer/FirewallRuleListSerializer
+# (Serializer plain con campi packets/bytes/synced_at che non esistono nel modello)
+# è stata rimossa. Le definizioni canoniche sono quelle ModelSerializer in cima
+# a questo file: erano shadowed da queste duplicate e bloccavano POST /api/rules/
+# con errori "Campo obbligatorio" su campi inesistenti.
 
 
 # Serializers per operazioni SSH (add/remove via comando remoto)

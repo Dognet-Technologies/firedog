@@ -2,12 +2,13 @@
  * Targets Management Page - Table View with Gruppo
  */
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import apiService from '../services/api';
 import type { Target, TargetCreate } from '../types';
 import './Targets.css';
 import { useNotifications } from '../contexts/NotificationContext';
-import CollapsibleTerminalPanel from '../components/CollapsibleTerminalPanel';
-import TabbedTerminalManager, { TerminalOperation } from '../components/TabbedTerminalManager';
+import PageHeader from '../components/shared/PageHeader';
+import StatusDot from '../components/shared/StatusDot';
 
 type SortField = 'ip_address' | 'hostname' | 'firedog_version' | 'last_seen' | 'status' | 'gruppo';
 type SortDirection = 'asc' | 'desc';
@@ -45,43 +46,65 @@ const Targets: React.FC = () => {
   const [formData, setFormData] = useState<TargetCreate & { group_ids?: number[] }>({
     ip_address: '',
     hostname: '',
+    mac_address: '',
     description: '',
     group_ids: [],
   });
 
-  // Terminal operations state (max 5 parallel)
-  const [terminalOperations, setTerminalOperations] = useState<TerminalOperation[]>([]);
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [queuedTargets, setQueuedTargets] = useState<Target[]>([]);
+  // Set di target che hanno appena cambiato status verso "online" — usato per
+  // animare il dot per ~10s e poi tornare statico. Niente euristiche su
+  // last_seen (che si aggiorna ad ogni heartbeat e quindi è sempre "fresh"
+  // per i target online).
+  const [justPairedIds, setJustPairedIds] = useState<Set<number>>(new Set());
+  // ref alla mappa precedente id → status, per detection delle transizioni
+  // ad ogni poll. Inizialmente null → first load non triggera il pulse.
+  const prevStatusRef = React.useRef<Map<number, string> | null>(null);
 
   useEffect(() => {
     loadTargets();
     loadGroups();
+    // Auto-refresh dei target ogni 5s (status, last_seen, ecc. cambiano lato server
+    // quando un agent si associa o invia heartbeat). Polling — da sostituire con
+    // una subscription WebSocket dedicata quando il backend espone l'evento.
+    const intervalId = setInterval(loadTargets, 5000);
+    return () => clearInterval(intervalId);
   }, []);
-
-  // Auto-fill slots when operations complete and queue has items
-  useEffect(() => {
-    if (queuedTargets.length > 0 && terminalOperations.length < 5) {
-      const slotsAvailable = 5 - terminalOperations.length;
-      const targetsToAdd = queuedTargets.slice(0, slotsAvailable);
-      const remainingQueue = queuedTargets.slice(slotsAvailable);
-
-      const newOperations: TerminalOperation[] = targetsToAdd.map(target => ({
-        id: `op-${Date.now()}-${Math.random()}`,
-        target,
-        type: target.firedog_version ? 'reinstall' : 'install',
-        status: 'running',
-        requiresFocus: false
-      }));
-
-      setTerminalOperations(prev => [...prev, ...newOperations]);
-      setQueuedTargets(remainingQueue);
-    }
-  }, [queuedTargets, terminalOperations]);
 
   const loadTargets = async () => {
     try {
       const data = await apiService.getTargets();
+      // Detection delle transizioni di status (X → online) per attivare il
+      // pulse iniziale solo per qualche secondo. La PRIMA load non triggera
+      // niente (prevStatusRef è null), così aprire la pagina non fa lampeggiare
+      // tutti i target già online.
+      if (prevStatusRef.current !== null) {
+        const newlyOnline: number[] = [];
+        for (const t of data.results) {
+          const prev = prevStatusRef.current.get(t.id);
+          if (prev && prev !== 'online' && t.status === 'online') {
+            newlyOnline.push(t.id);
+          }
+        }
+        if (newlyOnline.length > 0) {
+          setJustPairedIds(prev => {
+            const next = new Set(prev);
+            newlyOnline.forEach(id => next.add(id));
+            return next;
+          });
+          // Dopo ~10s (≈ 5 iterazioni × 2s del pulse), rimuovi la classe.
+          newlyOnline.forEach(id => {
+            setTimeout(() => {
+              setJustPairedIds(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+              });
+            }, 10_000);
+          });
+        }
+      }
+      // Aggiorna lo snapshot per il prossimo poll
+      prevStatusRef.current = new Map(data.results.map(t => [t.id, t.status]));
       setTargets(data.results);
     } catch (error) {
       console.error('Error loading targets:', error);
@@ -118,6 +141,7 @@ const Targets: React.FC = () => {
       setFormData({
         ip_address: '',
         hostname: '',
+        mac_address: '',
         description: '',
         group_ids: []
       });
@@ -137,191 +161,40 @@ const Targets: React.FC = () => {
     }
   };
 
-  const handleTestConnection = async (id: number) => {
-    try {
-      const result = await apiService.testConnection(id);
-      
-      if (result.success) {
+  const handlePair = async (id: number, label: string, currentStatus: string) => {
+    const startPair = async () => {
+      try {
+        const session = await apiService.startPairing(id);
         showToast({
           type: 'success',
-          title: 'Connessione riuscita!',
-          message: `SSH connection successful`
+          title: 'Pairing avviato',
+          message: `Sessione #${session.id} aperta per ${label}. Avvia l'agent entro 3 minuti.`
         });
-      } else {
-        showToast({
-          type: 'error',
-          title: 'Connessione fallita',
-          message: result.error || 'Connection failed'
-        });
+        loadTargets();
+      } catch (error: unknown) {
+        const msg =
+          (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+          'Errore avvio pairing (controlla che IP/hostname/MAC siano impostati)';
+        showToast({ type: 'error', title: 'Pairing fallito', message: msg });
       }
-      
-      loadTargets();
-    } catch (error) {
-      showToast({
-        type: 'error',
-        title: 'Errore',
-        message: 'Connection test failed'
-      });
-    }
-  };
+    };
 
-  const handleInstall = async (id: number) => {
-    const target = targets.find(t => t.id === id);
-    if (!target) return;
-
-    const isReinstall = target.firedog_version != null;
-    const isFirstInstall = !isReinstall;
-
-    // Check if we can add more operations
-    if (terminalOperations.length >= 5) {
-      showToast({
+    // Target già accoppiato in passato (online/offline/error) → chiedi
+    // conferma: l'utente potrebbe aver cliccato per sbaglio sul pulsante
+    // di un target che funziona già.
+    const alreadyKnown = ['online', 'offline', 'error'].includes(currentStatus);
+    if (alreadyKnown) {
+      showConfirm({
+        title: 'Riassociare il target?',
+        message: `${label} è già associato (stato: ${currentStatus}). Vuoi davvero aprire una nuova sessione di pairing? L'agent corrente continua a funzionare; se la nuova sessione scade (3 min) il target torna allo stato precedente automaticamente.`,
+        confirmText: 'Sì, riassocia',
+        cancelText: 'Annulla',
         type: 'warning',
-        title: 'Troppi Operazioni',
-        message: 'Max 5 installazioni parallele. Completa o chiudi alcune operazioni prima di procedere.'
+        onConfirm: startPair,
       });
       return;
     }
-
-    // Per prima installazione, chiedi password SSH
-    if (isFirstInstall) {
-      const password = prompt(
-        `🔐 Password SSH per ${target.hostname || target.ip_address}\n\n` +
-        `Inserisci la password SSH dell'utente ${target.ssh_user}.\n` +
-        `Questa password verrà usata solo per la connessione iniziale.\n` +
-        `FireDog configurerà automaticamente l'autenticazione con chiave pubblica.`
-      );
-
-      if (!password) {
-        showToast({
-          type: 'warning',
-          title: 'Installazione annullata',
-          message: 'Password SSH richiesta per la prima installazione'
-        });
-        return;
-      }
-
-      // Avvia installazione con password
-      const newOperation: TerminalOperation = {
-        id: `op-${Date.now()}-${Math.random()}`,
-        target,
-        type: 'install',
-        status: 'running',
-        requiresFocus: false,
-        sshPassword: password
-      };
-
-      setTerminalOperations(prev => [...prev, newOperation]);
-      setIsPanelOpen(true);
-
-      showToast({
-        type: 'info',
-        title: 'Installazione Avviata',
-        message: `Installazione su ${target.hostname || target.ip_address} avviata`
-      });
-    } else {
-      // Reinstallazione: usa chiave pubblica già configurata
-      showConfirm({
-        title: 'Conferma Reinstallazione',
-        message: 'Vuoi reinstallare FireDog su questo target? TUTTE le regole firewall esistenti verranno rimosse.',
-        confirmText: 'Avvia Reinstallazione',
-        cancelText: 'Annulla',
-        onConfirm: () => {
-          const newOperation: TerminalOperation = {
-            id: `op-${Date.now()}-${Math.random()}`,
-            target,
-            type: 'reinstall',
-            status: 'running',
-            requiresFocus: false
-          };
-
-          setTerminalOperations(prev => [...prev, newOperation]);
-          setIsPanelOpen(true);
-
-          showToast({
-            type: 'info',
-            title: 'Reinstallazione Avviata',
-            message: `Reinstallazione su ${target.hostname || target.ip_address} avviata`
-          });
-        }
-      });
-    }
-  };
-
-  const handleInstallGroup = () => {
-    const groupTargets = filteredAndSortedTargets.filter(t =>
-      t.target_groups?.some(g => g.name === filterGruppo)
-    );
-
-    if (groupTargets.length === 0) {
-      showToast({
-        type: 'warning',
-        title: 'Nessun Target',
-        message: 'Nessun target trovato in questo gruppo'
-      });
-      return;
-    }
-
-    const gruppoLabel = filterGruppo;
-
-    // Alert se > 5 target
-    if (groupTargets.length > 5) {
-      showConfirm({
-        title: 'Installazione su Gruppo',
-        message: `Stai per installare FireDog su ${groupTargets.length} target del gruppo "${gruppoLabel}".\n\n✓ Verranno eseguite max 5 installazioni in parallelo\n⚠️ CONSIGLIO: Configura sudo NOPASSWD per accelerare il processo\n\nVuoi procedere?`,
-        confirmText: 'Procedi con Installazione',
-        cancelText: 'Annulla',
-        type: 'warning',
-        onConfirm: () => {
-          // Primi 5 vanno subito nelle operazioni attive
-          const batch = groupTargets.slice(0, 5);
-          const queued = groupTargets.slice(5);
-
-          const newOperations: TerminalOperation[] = batch.map(target => ({
-            id: `op-${Date.now()}-${Math.random()}`,
-            target,
-            type: target.firedog_version ? 'reinstall' : 'install',
-            status: 'running',
-            requiresFocus: false
-          }));
-
-          setTerminalOperations(newOperations);
-          setQueuedTargets(queued);
-          setIsPanelOpen(true);
-
-          showToast({
-            type: 'info',
-            title: 'Installazione Gruppo Avviata',
-            message: `Installazione su ${batch.length} target in parallelo. ${queued.length} in coda.`
-          });
-        }
-      });
-    } else {
-      // ≤ 5 target: tutti in parallelo
-      showConfirm({
-        title: 'Installazione su Gruppo',
-        message: `Vuoi installare FireDog su ${groupTargets.length} target del gruppo "${gruppoLabel}"?\n\nTutti i target verranno processati in parallelo.`,
-        confirmText: 'Inizia Installazione',
-        cancelText: 'Annulla',
-        onConfirm: () => {
-          const newOperations: TerminalOperation[] = groupTargets.map(target => ({
-            id: `op-${Date.now()}-${Math.random()}`,
-            target,
-            type: target.firedog_version ? 'reinstall' : 'install',
-            status: 'running',
-            requiresFocus: false
-          }));
-
-          setTerminalOperations(newOperations);
-          setIsPanelOpen(true);
-
-          showToast({
-            type: 'info',
-            title: 'Installazione Gruppo Avviata',
-            message: `Installazione su ${groupTargets.length} target in parallelo`
-          });
-        }
-      });
-    }
+    await startPair();
   };
 
   const handleDelete = async (id: number) => {
@@ -349,76 +222,6 @@ const Targets: React.FC = () => {
         }
       }
     });
-  };
-
-  // Terminal operation handlers
-  const handleOperationComplete = (operationId: string) => {
-    const operation = terminalOperations.find(op => op.id === operationId);
-
-    if (operation) {
-      showToast({
-        type: 'success',
-        title: 'Installazione Completata',
-        message: `${operation.target.hostname || operation.target.ip_address} installato con successo`
-      });
-    }
-
-    // Rimuovi l'operazione completata
-    setTerminalOperations(prev => prev.filter(op => op.id !== operationId));
-    loadTargets();
-
-    // Se non ci sono più operazioni e la coda è vuota, chiudi il panel
-    if (terminalOperations.length === 1 && queuedTargets.length === 0) {
-      setTimeout(() => setIsPanelOpen(false), 1000);
-    }
-  };
-
-  const handleOperationError = (operationId: string) => {
-    const operation = terminalOperations.find(op => op.id === operationId);
-
-    if (operation) {
-      showToast({
-        type: 'error',
-        title: 'Errore Installazione',
-        message: `Errore su ${operation.target.hostname || operation.target.ip_address}`
-      });
-    }
-  };
-
-  const handleCloseOperation = (operationId: string) => {
-    setTerminalOperations(prev => prev.filter(op => op.id !== operationId));
-
-    // Se non ci sono più operazioni, chiudi il panel
-    if (terminalOperations.length === 1 && queuedTargets.length === 0) {
-      setIsPanelOpen(false);
-      setQueuedTargets([]); // Clear queue
-    }
-  };
-
-  const handleUpdateOperation = (operationId: string, updates: Partial<TerminalOperation>) => {
-    setTerminalOperations(prev =>
-      prev.map(op => (op.id === operationId ? { ...op, ...updates } : op))
-    );
-  };
-
-  const handleClosePanel = () => {
-    if (terminalOperations.length > 0) {
-      showConfirm({
-        title: 'Chiudi Panel',
-        message: 'Ci sono operazioni in corso. Sei sicuro di voler chiudere? Le operazioni verranno interrotte.',
-        confirmText: 'Chiudi',
-        cancelText: 'Annulla',
-        type: 'warning',
-        onConfirm: () => {
-          setTerminalOperations([]);
-          setQueuedTargets([]);
-          setIsPanelOpen(false);
-        }
-      });
-    } else {
-      setIsPanelOpen(false);
-      setQueuedTargets([]);
-    }
   };
 
   // Funzione ordinamento
@@ -482,20 +285,23 @@ const Targets: React.FC = () => {
       return 0;
     });
 
-  // Icona stato
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'online':
-        return <span className="status-dot status-online" title="Online"></span>;
-      case 'offline':
-        return <span className="status-dot status-offline" title="Offline"></span>;
-      case 'error':
-        return <span className="status-dot status-error" title="Error"></span>;
-      case 'installing':
-        return <span className="status-dot status-installing" title="Installing"></span>;
-      default:
-        return <span className="status-dot status-pending" title="Pending"></span>;
-    }
+  // Icona stato — anello colorato:
+  //  verde   = paired + raggiungibile (online)
+  //  rosso   = paired ma irraggiungibile (offline/error)
+  //  arancio = noto ma non ancora associato (unpaired/pending/pairing)
+  //  giallo  = installazione in corso
+  // status-dot--just-paired è applicato solo per ~10s dopo la transizione
+  // verso online (gestita da loadTargets via justPairedIds set).
+  const getStatusIcon = (target: Target) => {
+    const status = target.status;
+    let cls = 'status-pending';
+    let title = 'Pending';
+    if (status === 'online') { cls = 'status-success'; title = 'Paired · online'; }
+    else if (status === 'offline' || status === 'error') { cls = 'status-danger'; title = status === 'error' ? 'Error' : 'Paired · offline'; }
+    else if (status === 'unpaired' || status === 'pending' || status === 'pairing') { cls = 'status-warning'; title = status === 'pairing' ? 'Pairing in progress' : 'Not paired yet'; }
+    else if (status === 'installing') { cls = 'status-info'; title = 'Installing'; }
+    const justPaired = justPairedIds.has(target.id) ? ' status-dot--just-paired' : '';
+    return <span className={`status-dot ${cls}${justPaired}`} title={title}></span>;
   };
 
   // Formatta Last Seen
@@ -505,7 +311,7 @@ const Targets: React.FC = () => {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    
+
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m ago`;
     const diffHours = Math.floor(diffMins / 60);
@@ -549,7 +355,7 @@ const Targets: React.FC = () => {
         </svg>
       );
     }
-    
+
     return sortDirection === 'asc' ? (
       <svg className="sort-icon active" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <path d="M7 15l5 5 5-5" />
@@ -578,8 +384,8 @@ const Targets: React.FC = () => {
         </button>
       </div>
 
-      {/* Main content with split layout */}
-      <div className={`targets-content-wrapper ${isPanelOpen ? 'panel-open' : ''}`}>
+      {/* Main content */}
+      <div className="targets-content-wrapper">
         <div className="targets-main-content">
           {/* Filtri */}
           <div className="filters-section">
@@ -611,24 +417,6 @@ const Targets: React.FC = () => {
         <div className="filter-stats">
           <span>Visualizzati: <strong>{filteredAndSortedTargets.length}</strong></span>
         </div>
-
-        {/* Install on Group Button */}
-        {filterGruppo && filteredAndSortedTargets.length > 0 && (
-          <button
-            onClick={handleInstallGroup}
-            className="btn-primary btn-install-group"
-            disabled={terminalOperations.length >= 5}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            {terminalOperations.length > 0
-              ? `Installing (${terminalOperations.length} active)...`
-              : `Install on Group (${filteredAndSortedTargets.length})`}
-          </button>
-        )}
       </div>
 
           {/* Targets Table */}
@@ -671,7 +459,7 @@ const Targets: React.FC = () => {
               </tr>
             ) : (
               filteredAndSortedTargets.map(target => (
-                <tr key={target.id} className={`target-row status-${target.status}`}>
+                <tr key={target.id} className={`target-row target-row--${target.status}`}>
                   <td className="ip-cell">
                     <code>{target.ip_address}</code>
                   </td>
@@ -692,37 +480,21 @@ const Targets: React.FC = () => {
                     {formatLastSeen(target.last_seen)}
                   </td>
                   <td className="status-cell">
-                    {getStatusIcon(target.status)}
+                    {getStatusIcon(target)}
                   </td>
                   <td className="actions-cell">
                     <div className="action-buttons">
                       <button
-                        onClick={() => handleTestConnection(target.id)}
+                        onClick={() => handlePair(target.id, target.hostname || target.ip_address, target.status)}
                         className="btn-icon"
-                        title="Test SSH Connection"
-                        disabled={target.status === 'installing'}
+                        title="Open pairing session (3 min) for the agent"
+                        disabled={target.status === 'pairing' || target.status === 'installing'}
                       >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-                          <polyline points="22 4 12 14.01 9 11.01" />
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M10 14a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                          <path d="M14 10a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                         </svg>
                       </button>
-                      
-                      {(target.status !== 'online' || !target.firedog_version) && (
-                        <button
-                          onClick={() => handleInstall(target.id)}
-                          className="btn-icon btn-success"
-                          title={target.firedog_version ? 'Reinstall FireDog' : 'Install FireDog'}
-                          disabled={target.status === 'installing'}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                            <polyline points="7 10 12 15 17 10" />
-                            <line x1="12" y1="15" x2="12" y2="3" />
-                          </svg>
-                        </button>
-                      )}
-                      
                       <button
                         onClick={() => handleDelete(target.id)}
                         className="btn-icon btn-danger"
@@ -743,21 +515,6 @@ const Targets: React.FC = () => {
             </table>
           </div>
         </div>
-
-        {/* Collapsible Terminal Panel - Right Sidebar */}
-        <CollapsibleTerminalPanel
-          isOpen={isPanelOpen}
-          onClose={handleClosePanel}
-          title={`Installation Progress ${queuedTargets.length > 0 ? `(${queuedTargets.length} in queue)` : ''}`}
-        >
-          <TabbedTerminalManager
-            operations={terminalOperations}
-            onOperationComplete={handleOperationComplete}
-            onOperationError={handleOperationError}
-            onCloseOperation={handleCloseOperation}
-            onUpdateOperation={handleUpdateOperation}
-          />
-        </CollapsibleTerminalPanel>
       </div>
 
       {/* Add Target Modal */}
@@ -787,6 +544,20 @@ const Targets: React.FC = () => {
                   onChange={e => setFormData({...formData, hostname: e.target.value})}
                   placeholder="server-01"
                 />
+              </div>
+              <div className="form-group">
+                <label>MAC Address <span className="required">*</span></label>
+                <input
+                  type="text"
+                  value={formData.mac_address || ''}
+                  onChange={e => setFormData({...formData, mac_address: e.target.value})}
+                  placeholder="AA:BB:CC:DD:EE:FF"
+                  pattern="^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$"
+                  required
+                />
+                <small style={{ color: '#888' }}>
+                  Necessario per l'identity hash usato dal pairing dell'agent
+                </small>
               </div>
               <div className="form-group">
                 <label>Gruppi (seleziona uno o più)</label>

@@ -8,6 +8,7 @@
  * 4. Groups Management (NEW)
  */
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import apiService from '../services/api';
 import type { DiscoveredHost, Target } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -59,8 +60,18 @@ const GRUPPO_OPTIONS = [
 ];
 
 const Discovery: React.FC = () => {
+  // ?tab=arp-scan|file|manual|groups & ?group=<id> consente di linkare
+  // direttamente al tab Groups con un gruppo pre-selezionato (es. dalla
+  // pagina /groups cliccando "+ Add Target").
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const tabParam = queryParams.get('tab') as 'arp-scan' | 'file' | 'manual' | 'groups' | null;
+  const groupParam = queryParams.get('group');
+
   // State
-  const [activeTab, setActiveTab] = useState<'arp-scan' | 'file' | 'manual' | 'groups'>('arp-scan');
+  const [activeTab, setActiveTab] = useState<'arp-scan' | 'file' | 'manual' | 'groups'>(
+    (tabParam && ['arp-scan', 'file', 'manual', 'groups'].includes(tabParam)) ? tabParam : 'arp-scan'
+  );
   const [discoveredHosts, setDiscoveredHosts] = useState<DiscoveredHost[]>([]);
   const [selectedHosts, setSelectedHosts] = useState<Set<number>>(new Set());
   const { showToast, showConfirm } = useNotifications();
@@ -75,6 +86,7 @@ const Discovery: React.FC = () => {
   const [manualForm, setManualForm] = useState({
     ip_address: '',
     hostname: '',
+    mac_address: '',
     description: '',
     group_ids: [] as number[]
   });
@@ -113,13 +125,31 @@ const Discovery: React.FC = () => {
       const interval = setInterval(async () => {
         try {
           const response = await apiService.getDiscoveryScanStatus(scanStatus.taskId!);
-          
+
           if (response.status === 'SUCCESS') {
-            setScanStatus({ status: 'completed', message: 'Scan completed' });
-            loadDiscoveredHosts();
+            // Il task Celery è terminato senza eccezioni, ma la business-logic
+            // interna può comunque avere fallito (es. arp-scan binary mancante,
+            // o tutte le reti scansionate in errore). Verifichiamo result.success
+            // prima di dichiarare lo scan riuscito.
+            const result = (response as { result?: { success?: boolean; error?: string; hosts_found?: number; network_errors?: Record<string, string> } }).result;
+            if (result && result.success === false) {
+              const detail = result.network_errors
+                ? Object.entries(result.network_errors).map(([net, err]) => `${net}: ${err}`).join(' · ')
+                : result.error || 'Scan fallito senza dettagli';
+              setScanStatus({ status: 'error', message: detail });
+              showToast({ type: 'error', title: 'Scan fallito', message: detail });
+            } else {
+              const found = result?.hosts_found ?? 0;
+              setScanStatus({ status: 'completed', message: `Scan completed: ${found} host` });
+              loadDiscoveredHosts();
+            }
             clearInterval(interval);
           } else if (response.status === 'FAILURE') {
-            setScanStatus({ status: 'error', message: 'Scan failed' });
+            // Eccezione non gestita nel worker → result è la traceback string
+            const rawResult: unknown = (response as unknown as { result?: unknown }).result;
+            const errMsg = typeof rawResult === 'string' ? rawResult : 'Scan failed';
+            setScanStatus({ status: 'error', message: errMsg });
+            showToast({ type: 'error', title: 'Scan fallito', message: errMsg });
             clearInterval(interval);
           }
         } catch (error) {
@@ -349,6 +379,22 @@ const Discovery: React.FC = () => {
       });
       return;
     }
+    if (!manualForm.mac_address) {
+      showToast({
+        type: 'error',
+        title: 'Validation Error',
+        message: 'MAC address is required (necessario per l\'identity hash del pairing agent)'
+      });
+      return;
+    }
+    if (!/^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$/.test(manualForm.mac_address)) {
+      showToast({
+        type: 'error',
+        title: 'Validation Error',
+        message: 'MAC address non valido (formato atteso AA:BB:CC:DD:EE:FF)'
+      });
+      return;
+    }
 
     try {
       setLoading(true);
@@ -363,6 +409,7 @@ const Discovery: React.FC = () => {
       setManualForm({
         ip_address: '',
         hostname: '',
+        mac_address: '',
         description: '',
         group_ids: []
       });
@@ -383,7 +430,14 @@ const Discovery: React.FC = () => {
   const loadGroups = async () => {
     try {
       const groups = await apiService.getGroups();
-      setGroups(Array.isArray(groups) ? groups : []);
+      const list = Array.isArray(groups) ? groups : [];
+      setGroups(list);
+      // Se l'URL includeva ?group=<id> e il tab è "groups", auto-seleziona
+      // quel gruppo per saltare lo step intermedio dell'utente.
+      if (groupParam && activeTab === 'groups' && !selectedGroup) {
+        const target = list.find((g) => String(g.id) === String(groupParam));
+        if (target) handleSelectGroup(target);
+      }
     } catch (error) {
       console.error('Error loading groups:', error);
       showToast({
@@ -744,15 +798,19 @@ const Discovery: React.FC = () => {
               <h2>Bulk Import from File</h2>
               <p className="import-description">
                 Upload a text file with one host per line.<br/>
-                Format: <code>IP_ADDRESS HOSTNAME [DESCRIPTION]</code>
+                Format raccomandato: <code>IP_ADDRESS MAC_ADDRESS HOSTNAME [DESCRIPTION]</code><br/>
+                <small>(senza MAC il target è importato ma non può completare il pairing dell'agent finché non lo aggiungi a mano)</small>
               </p>
 
               <div className="file-format-example">
                 <h3>Example File:</h3>
                 <pre>
-{`192.168.1.100 server01 Production web server
-192.168.1.101 server02 Database server
-192.168.1.102 server03 Backup server`}
+{`192.168.1.100 AA:BB:CC:11:22:33 server01 Production web server
+192.168.1.101 AA:BB:CC:11:22:44 server02 Database server
+192.168.1.102 AA:BB:CC:11:22:55 server03 Backup server
+
+# Formato legacy (senza MAC, ancora supportato ma sconsigliato):
+192.168.1.103 server04 Legacy host`}
                 </pre>
               </div>
 
@@ -852,6 +910,20 @@ const Discovery: React.FC = () => {
                 </div>
 
                 <div className="form-group">
+                  <label htmlFor="mac_address">MAC Address *</label>
+                  <input
+                    type="text"
+                    id="mac_address"
+                    value={manualForm.mac_address}
+                    onChange={(e) => setManualForm({...manualForm, mac_address: e.target.value})}
+                    placeholder="AA:BB:CC:DD:EE:FF"
+                    pattern="^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$"
+                    required
+                  />
+                  <small className="form-hint">Necessario per l'identity hash usato dal pairing dell'agent</small>
+                </div>
+
+                <div className="form-group">
                   <label htmlFor="description">Description</label>
                   <textarea
                     id="description"
@@ -884,7 +956,7 @@ const Discovery: React.FC = () => {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={loading || !manualForm.ip_address}
+                  disabled={loading || !manualForm.ip_address || !manualForm.mac_address}
                 >
                   {loading ? 'Adding...' : 'Add Target'}
                 </button>

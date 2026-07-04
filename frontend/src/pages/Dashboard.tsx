@@ -1,368 +1,727 @@
 /**
- * Dashboard Page - Chronograf Style with Resizable Widgets
+ * Dashboard Page — refactored with react-grid-layout, widget builder modal,
+ * time range + auto-refresh selectors, edit mode
  */
-import React, { useEffect, useState } from 'react';
-import { Responsive, WidthProvider, Layout } from 'react-grid-layout';
-import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Responsive, WidthProvider } from 'react-grid-layout';
+import type { Layout } from 'react-grid-layout';
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Link } from 'react-router-dom';
 import apiService from '../services/api';
-import type { ThreatStats, Target } from '../types';
+import type { ThreatStats, Target, Dashboard as DashboardType, Widget as ApiWidget } from '../types';
+import StatusDot from '../components/shared/StatusDot';
+import DataTooltip from '../components/shared/DataTooltip';
+import SeverityBadge from '../components/shared/SeverityBadge';
+import CountryFlag from '../components/shared/CountryFlag';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import './Dashboard.css';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
-interface Widget {
+type TimeRange = '24h' | '7d' | '30d';
+type AutoRefresh = 'off' | '30s' | '1m' | '5m';
+
+interface GridWidget {
   i: string;
   x: number;
   y: number;
   w: number;
   h: number;
-  type: 'hosts' | 'threats' | 'traffic' | 'top-ips' | 'line-chart' | 'bar-chart';
+  type: ApiWidget['widget_type'];
   title: string;
+  apiId?: number;
 }
 
-const Dashboard: React.FC = () => {
-  const [stats, setStats] = useState<ThreatStats | null>(null);
-  const [targets, setTargets] = useState<Target[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddWidget, setShowAddWidget] = useState(false);
-  const [widgets, setWidgets] = useState<Widget[]>([
-    { i: 'hosts', x: 0, y: 0, w: 6, h: 2, type: 'hosts', title: 'Host Alive' },
-    { i: 'threats', x: 6, y: 0, w: 6, h: 2, type: 'threats', title: 'Top Threats' },
-    { i: 'traffic', x: 0, y: 2, w: 6, h: 3, type: 'traffic', title: 'Network Traffic' },
-    { i: 'top-ips', x: 6, y: 2, w: 6, h: 3, type: 'top-ips', title: 'Top IP Addresses' },
-  ]);
+interface WidgetBuilderStep {
+  step: 1 | 2 | 3;
+  selectedType?: ApiWidget['widget_type'];
+  title: string;
+  timeRange: TimeRange;
+}
 
-  // Real data - no mocks
-  const trafficData: Array<{time: string, upload: number, download: number}> = [];
-  const topThreatsData: Array<{name: string, count: number, severity: string}> = [];
-  const topIPsData: Array<{ip: string, traffic: number, status: string}> = [];
+const WIDGET_TYPE_LABELS: Record<ApiWidget['widget_type'], string> = {
+  threat_summary: 'Threat Summary',
+  threat_chart: 'Threat Chart',
+  target_status: 'Target Status',
+  recent_threats: 'Recent Threats',
+  top_attackers: 'Top Attackers',
+  rule_count: 'Rule Count',
+  traffic_stats: 'Traffic Stats',
+  activity_timeline: 'Activity Timeline',
+  geo_map: 'Geo Map',
+  custom: 'Custom',
+};
+
+const DEFAULT_WIDGETS: GridWidget[] = [
+  { i: 'threat_summary', x: 0, y: 0, w: 3, h: 2, type: 'threat_summary', title: 'Threat Summary' },
+  { i: 'target_status', x: 3, y: 0, w: 5, h: 2, type: 'target_status', title: 'Target Status' },
+  { i: 'traffic_stats', x: 8, y: 0, w: 4, h: 2, type: 'traffic_stats', title: 'Traffic Stats' },
+  { i: 'recent_threats', x: 0, y: 2, w: 6, h: 3, type: 'recent_threats', title: 'Recent Threats' },
+  { i: 'top_attackers', x: 6, y: 2, w: 6, h: 3, type: 'top_attackers', title: 'Top Attackers' },
+  { i: 'activity_timeline', x: 0, y: 5, w: 6, h: 3, type: 'activity_timeline', title: 'Activity Timeline' },
+  { i: 'geo_map', x: 6, y: 5, w: 6, h: 3, type: 'geo_map', title: 'Geo Map' },
+];
+
+// Traffic fleet-wide arriva da apiService.getDashboardFleetTraffic dentro al
+// componente. Niente più mock random: se l'endpoint non risponde restiamo
+// con array vuoto (il widget mostra grafico vuoto).
+
+// ============================================================
+// Widget sub-components
+// ============================================================
+
+const ThreatSummaryWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) => (
+  <div className="widget-threat-summary">
+    <DataTooltip
+      title="Total Threats"
+      type="count"
+      description="Numero totale di eventi di sicurezza rilevati su tutta la flotta. Comprende minacce attive e risolte di tutti i livelli di severità."
+      source="ThreatLog · /api/threats/stats/"
+    >
+      <div className="wts-number">{stats?.total_threats ?? '—'}</div>
+    </DataTooltip>
+    <div className="wts-label">Total Threats</div>
+    <div className="wts-breakdown">
+      <DataTooltip inline title="Critical Threats" type="count" description="Minacce con severity='critical': attacchi ad alto rischio che richiedono intervento immediato." source="ThreatLog">
+        <span className="wts-crit">C: {stats?.critical_threats ?? 0}</span>
+      </DataTooltip>
+      <DataTooltip inline title="High Threats" type="count" description="Minacce con severity='high': eventi significativi che andrebbero analizzati entro breve." source="ThreatLog">
+        <span className="wts-high">H: {stats?.high_threats ?? 0}</span>
+      </DataTooltip>
+      <DataTooltip inline title="Medium Threats" type="count" description="Minacce con severity='medium': anomalie rilevate che meritano monitoraggio ma non blocco immediato." source="ThreatLog">
+        <span className="wts-med">M: {stats?.medium_threats ?? 0}</span>
+      </DataTooltip>
+    </div>
+  </div>
+);
+
+const TrafficStatsWidget: React.FC<{ data: Array<{ time: string; in: number; out: number }> }> = ({ data }) => (
+  <DataTooltip
+    title="Network Traffic (24h)"
+    type="delta"
+    description="Traffico di rete inbound/outbound nelle ultime 24 ore. Ogni punto del grafico rappresenta la variazione (delta) dei pacchetti rispetto al campione precedente di FirewallStats, campionato ogni ora."
+    source="FirewallStats API (dati approssimativi)"
+  >
+  <ResponsiveContainer width="100%" height="100%">
+    <AreaChart data={data} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+      <defs>
+        <linearGradient id="tIn" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor="var(--accent-primary)" stopOpacity={0.3} />
+          <stop offset="95%" stopColor="var(--accent-primary)" stopOpacity={0} />
+        </linearGradient>
+        <linearGradient id="tOut" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor="var(--status-success)" stopOpacity={0.3} />
+          <stop offset="95%" stopColor="var(--status-success)" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
+      <XAxis dataKey="time" tick={{ fill: 'var(--text-tertiary)', fontSize: 9 }} interval={4} />
+      <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 9 }} />
+      <Tooltip
+        contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: '8px', fontSize: '12px' }}
+      />
+      <Area type="monotone" dataKey="in" stroke="var(--accent-primary)" fill="url(#tIn)" name="Inbound" />
+      <Area type="monotone" dataKey="out" stroke="var(--status-success)" fill="url(#tOut)" name="Outbound" />
+    </AreaChart>
+  </ResponsiveContainer>
+  </DataTooltip>
+);
+
+const TargetStatusWidget: React.FC<{ targets: Target[] }> = ({ targets }) => (
+  <div className="widget-target-status">
+    {targets.length === 0 ? (
+      <div className="widget-empty">No targets configured</div>
+    ) : (
+      <div className="wts-grid">
+        {targets.slice(0, 12).map((t) => (
+          <Link key={t.id} to={`/targets/${t.id}`} className="wts-target-mini">
+            <StatusDot status={t.status as 'online' | 'offline' | 'error' | 'installing' | 'pending'} />
+            <span className="wts-target-name">{t.hostname || t.ip_address}</span>
+          </Link>
+        ))}
+        {targets.length > 12 && (
+          <Link to="/targets" className="wts-target-more">+{targets.length - 12} more</Link>
+        )}
+      </div>
+    )}
+  </div>
+);
+
+const RecentThreatsWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) => {
+  const threats = stats?.recent_threats ?? [];
+  if (threats.length === 0) {
+    return <div className="widget-empty">No recent threats</div>;
+  }
+  return (
+    <div className="widget-recent-threats">
+      {threats.slice(0, 8).map((t) => (
+        <div key={t.id} className="wrt-item">
+          <SeverityBadge severity={t.severity} />
+          <span className="wrt-ip">{t.source_ip}</span>
+          <span className="wrt-proto">{t.protocol}</span>
+          <span className="wrt-time">{new Date(t.detected_at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const TopAttackersWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats }) => {
+  const attackers = stats?.top_attackers ?? [];
+  if (attackers.length === 0) {
+    return <div className="widget-empty">No attacker data</div>;
+  }
+  return (
+    <div className="widget-top-attackers">
+      <div className="wta-header">
+        <span>IP</span>
+        <span>Hits</span>
+      </div>
+      {attackers.slice(0, 8).map((a, idx) => (
+        <div key={idx} className="wta-item">
+          <span className="wta-ip">{a.source_ip}</span>
+          <DataTooltip inline title="Attacchi da questo IP" type="count"
+            description="Numero di eventi di minaccia registrati per questo indirizzo IP sorgente nel periodo selezionato. Un singolo IP può generare più eventi in sessioni distinte."
+            source="ThreatLog.source_ip">
+            <span className="wta-count">{a.count}</span>
+          </DataTooltip>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+type ActivityEvent = Awaited<ReturnType<typeof apiService.getDashboardActivity>>['events'][number];
+
+const KIND_LABEL: Record<ActivityEvent['kind'], string> = {
+  threat: 'Threat',
+  block: 'Block',
+  audit: 'Audit',
+};
+
+const ActivityTimelineWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats: _stats }) => {
+  // Sorgente: /api/dashboard/activity/ — merge fleet-wide di ThreatLog,
+  // BlockedIP e AuditLog. Più completo del semplice recent_threats che era
+  // mostrato prima (ora il widget reagisce anche a blocchi e azioni utente).
+  const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    const fetchActivity = () => {
+      apiService.getDashboardActivity(12, 24)
+        .then(resp => {
+          if (cancelled) return;
+          setEvents(resp.events);
+        })
+        .catch(() => { if (!cancelled) setEvents([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    };
+    fetchActivity();
+    const id = setInterval(fetchActivity, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  const loadData = async () => {
-    try {
-      const [threatsData, targetsData] = await Promise.all([
-        apiService.getThreatStats(),
-        apiService.getTargets()
-      ]);
-      setStats(threatsData);
-      setTargets(targetsData.results);
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (loading) return <div className="widget-empty">Loading…</div>;
+  if (events.length === 0) return <div className="widget-empty">No activity in last 24h</div>;
 
-  const handleLayoutChange = (layout: Layout[]) => {
-    const updatedWidgets = widgets.map(widget => {
-      const layoutItem = layout.find(l => l.i === widget.i);
-      if (layoutItem) {
-        return { ...widget, x: layoutItem.x, y: layoutItem.y, w: layoutItem.w, h: layoutItem.h };
-      }
-      return widget;
-    });
-    setWidgets(updatedWidgets);
-  };
-
-  const addWidget = (type: Widget['type']) => {
-    const newWidget: Widget = {
-      i: `widget-${Date.now()}`,
-      x: 0,
-      y: Infinity, // Adds to bottom
-      w: 6,
-      h: 3,
-      type,
-      title: getWidgetTitle(type),
-    };
-    setWidgets([...widgets, newWidget]);
-    setShowAddWidget(false);
-  };
-
-  const removeWidget = (widgetId: string) => {
-    setWidgets(widgets.filter(w => w.i !== widgetId));
-  };
-
-  const getWidgetTitle = (type: Widget['type']): string => {
-    const titles = {
-      hosts: 'Host Alive',
-      threats: 'Top Threats',
-      traffic: 'Network Traffic',
-      'top-ips': 'Top IP Addresses',
-      'line-chart': 'Line Chart',
-      'bar-chart': 'Bar Chart',
-    };
-    return titles[type];
-  };
-
-  const renderWidget = (widget: Widget) => {
-    switch (widget.type) {
-      case 'hosts':
-        return (
-          <div className="widget-content">
-            <div className="hosts-list">
-              {targets.slice(0, 5).map((target, idx) => (
-                <div key={idx} className="host-item">
-                  <div className="host-info">
-                    <span className={`status-dot ${target.status === 'online' ? 'online' : 'offline'}`}></span>
-                    <span className="host-name">{target.hostname}</span>
-                    <span className="host-ip">{target.ip_address}</span>
-                  </div>
-                  <span className={`host-status ${target.status}`}>{target.status}</span>
-                </div>
-              ))}
-              {targets.length === 0 && (
-                <div className="empty-widget">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                  <p>No hosts configured</p>
-                </div>
-              )}
-            </div>
+  return (
+    <div className="widget-timeline">
+      {events.slice(0, 6).map((ev, idx) => (
+        <div key={`${ev.kind}-${ev.timestamp}-${idx}`} className={`wat-item wat-item--${ev.kind}`}>
+          <div className={`wat-dot wat-dot--${ev.severity}`} />
+          <div className="wat-content">
+            <span className="wat-msg">
+              <span className="wat-kind">[{KIND_LABEL[ev.kind]}]</span> {ev.message}
+              {ev.target_hostname && <span className="wat-host"> · {ev.target_hostname}</span>}
+            </span>
+            <span className="wat-time">{new Date(ev.timestamp).toLocaleString('it-IT')}</span>
           </div>
-        );
+          {ev.kind !== 'audit' && ev.severity !== 'info' && <SeverityBadge severity={ev.severity} />}
+        </div>
+      ))}
+    </div>
+  );
+};
 
-      case 'threats':
-        return (
-          <div className="widget-content">
-            <div className="threats-list">
-              {topThreatsData.length > 0 ? topThreatsData.map((threat, idx) => (
-                <div key={idx} className="threat-item">
-                  <div className="threat-info">
-                    <span className={`severity-badge ${threat.severity}`}>{threat.severity}</span>
-                    <span className="threat-name">{threat.name}</span>
-                  </div>
-                  <span className="threat-count">{threat.count}</span>
-                </div>
-              )) : (
-                <div className="empty-widget">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                  <p>No threat data available</p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
+const GeoMapWidget: React.FC<{ stats: ThreatStats | null }> = ({ stats: _stats }) => {
+  // Sorgente: /api/dashboard/geo/ — aggregato dei NetworkFlow per country_code
+  // (peer remoti pubblici visti dai target, lookup via geoip2 lato server).
+  // Funziona indipendentemente dai ThreatLog: mostra traffico legittimo
+  // outbound + qualunque connessione attiva verso IP pubblici.
+  const [geoData, setGeoData] = useState<Array<{ country: string; count: number; pct: number; name: string }>>([]);
+  const [loading, setLoading] = useState(true);
 
-      case 'traffic':
-        return (
-          <div className="widget-content">
-            {trafficData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trafficData}>
-                  <defs>
-                    <linearGradient id="uploadGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#00c9ff" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#00c9ff" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="downloadGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#32d74b" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#32d74b" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2d3139" />
-                  <XAxis dataKey="time" stroke="#8e91a0" />
-                  <YAxis stroke="#8e91a0" />
-                  <Tooltip
-                    contentStyle={{
-                      background: '#1f2228',
-                      border: '1px solid #2d3139',
-                      borderRadius: '8px',
-                      color: '#fff'
-                    }}
-                  />
-                  <Area type="monotone" dataKey="upload" stroke="#00c9ff" fillOpacity={1} fill="url(#uploadGradient)" />
-                  <Area type="monotone" dataKey="download" stroke="#32d74b" fillOpacity={1} fill="url(#downloadGradient)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="empty-widget">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                </svg>
-                <p>No traffic data available</p>
-              </div>
-            )}
-          </div>
-        );
+  useEffect(() => {
+    let cancelled = false;
+    apiService.getDashboardGeo()
+      .then(resp => {
+        if (cancelled) return;
+        setGeoData(resp.countries.slice(0, 6).map(c => ({
+          country: c.country_code, name: c.country_name, count: c.times_seen, pct: c.pct,
+        })));
+      })
+      .catch(() => { if (!cancelled) setGeoData([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    // refresh allineato al polling default della Dashboard (loadData ogni 30s+);
+    // un re-fetch ogni 60s qui evita di legare il widget allo state del parent.
+    const id = setInterval(() => {
+      apiService.getDashboardGeo()
+        .then(resp => setGeoData(resp.countries.slice(0, 6).map(c => ({
+          country: c.country_code, name: c.country_name, count: c.times_seen, pct: c.pct,
+        }))))
+        .catch(() => {});
+    }, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
-      case 'top-ips':
-        return (
-          <div className="widget-content">
-            <div className="ips-list">
-              {topIPsData.length > 0 ? topIPsData.map((item, idx) => (
-                <div key={idx} className="ip-item">
-                  <div className="ip-info">
-                    <span className="ip-rank">#{idx + 1}</span>
-                    <span className="ip-address">{item.ip}</span>
-                  </div>
-                  <div className="ip-traffic">
-                    <div className="traffic-bar">
-                      <div
-                        className={`traffic-fill ${item.status}`}
-                        style={{ width: `${(item.traffic / 10000) * 100}%` }}
-                      ></div>
-                    </div>
-                    <span className="traffic-value">{(item.traffic / 1000).toFixed(1)} GB</span>
-                  </div>
-                </div>
-              )) : (
-                <div className="empty-widget">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="8" y1="6" x2="21" y2="6" />
-                    <line x1="8" y1="12" x2="21" y2="12" />
-                    <line x1="8" y1="18" x2="21" y2="18" />
-                    <line x1="3" y1="6" x2="3.01" y2="6" />
-                    <line x1="3" y1="12" x2="3.01" y2="12" />
-                    <line x1="3" y1="18" x2="3.01" y2="18" />
-                  </svg>
-                  <p>No IP data available</p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-
-      default:
-        return (
-          <div className="widget-content">
-            <div className="empty-widget">
-              <p>Widget type: {widget.type}</p>
-            </div>
-          </div>
-        );
-    }
-  };
-
-  if (loading) {
+  if (loading) return <div className="widget-empty">Loading…</div>;
+  if (geoData.length === 0) {
     return (
-      <div className="dashboard-loading">
-        <div className="spinner"></div>
-        <p>Loading dashboard...</p>
+      <div className="widget-empty">
+        Nessun dato geografico ancora — i peer remoti vengono raccolti dai target via cron (5min) e geo-localizzati lato server.
       </div>
     );
   }
 
   return (
-    <div className="dashboard-chronograf">
-      {/* Dashboard Header */}
-      <div className="dashboard-header">
-        <div className="header-left">
-          <h1>Dashboard</h1>
-          <button className="btn-icon" onClick={loadData} title="Refresh">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="23 4 23 10 17 10" />
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-            </svg>
-          </button>
+    <div className="widget-geo">
+      {geoData.map((g) => (
+        <div key={g.country} className="wg-item">
+          <CountryFlag countryCode={g.country} showName />
+          <DataTooltip inline title={`Attacchi da ${g.country}`} type="count"
+            description={`Numero stimato di minacce provenienti da questo paese (${g.pct}% del totale), basato sulla geolocalizzazione degli IP sorgente rilevati nei log. Dato approssimativo.`}
+            source="GeoIP lookup · ThreatLog.source_ip (dati demo)">
+            <div className="wg-bar-wrap">
+              <div className="wg-bar" style={{ width: `${g.pct}%` }} />
+            </div>
+          </DataTooltip>
+          <DataTooltip inline title={`Conteggio assoluto · ${g.country}`} type="count"
+            description="Numero assoluto di eventi minaccia attribuiti a questo paese nel periodo selezionato."
+            source="ThreatLog (dati demo)">
+            <span className="wg-count">{g.count}</span>
+          </DataTooltip>
         </div>
-        <div className="header-right">
-          <button className="btn-add-cell" onClick={() => setShowAddWidget(!showAddWidget)}>
+      ))}
+    </div>
+  );
+};
+
+// ============================================================
+// Main Dashboard Component
+// ============================================================
+
+const Dashboard: React.FC = () => {
+  const [stats, setStats] = useState<ThreatStats | null>(null);
+  const [targets, setTargets] = useState<Target[]>([]);
+  const [dashboards, setDashboards] = useState<DashboardType[]>([]);
+  const [selectedDashboardId, setSelectedDashboardId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editMode, setEditMode] = useState(false);
+  // Le preferenze "time range" e "auto refresh" sono persistite in localStorage
+  // così sopravvivono a reload/navigazione/logout. Lazy initializer per leggere
+  // una sola volta al mount; setter custom per scriverle al cambio.
+  const [timeRange, setTimeRangeState] = useState<TimeRange>(() => {
+    const v = typeof window !== 'undefined' ? window.localStorage.getItem('fd.dashboard.timeRange') : null;
+    return (v === '24h' || v === '7d' || v === '30d') ? v : '24h';
+  });
+  const setTimeRange = (v: TimeRange) => {
+    setTimeRangeState(v);
+    try { window.localStorage.setItem('fd.dashboard.timeRange', v); } catch { /* private mode */ }
+  };
+
+  const [autoRefresh, setAutoRefreshState] = useState<AutoRefresh>(() => {
+    const v = typeof window !== 'undefined' ? window.localStorage.getItem('fd.dashboard.autoRefresh') : null;
+    return (v === 'off' || v === '30s' || v === '1m' || v === '5m') ? v : 'off';
+  });
+  const setAutoRefresh = (v: AutoRefresh) => {
+    setAutoRefreshState(v);
+    try { window.localStorage.setItem('fd.dashboard.autoRefresh', v); } catch { /* private mode */ }
+  };
+  const [showAddWidget, setShowAddWidget] = useState(false);
+  const [widgets, setWidgets] = useState<GridWidget[]>(DEFAULT_WIDGETS);
+  // trafficData: alimentato da /api/dashboard/fleet-traffic/ (aggregato
+  // fleet-wide dei delta input/output_packets per ora). Vedi loadData().
+  const [trafficData, setTrafficData] = useState<Array<{ time: string; in: number; out: number }>>([]);
+
+  // Widget builder state
+  const [builderState, setBuilderState] = useState<WidgetBuilderStep>({
+    step: 1,
+    title: '',
+    timeRange: '24h',
+  });
+
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [statsData, targetsData, trafficResp] = await Promise.all([
+        apiService.getThreatStats(),
+        apiService.getTargets(),
+        apiService.getDashboardFleetTraffic(24).catch(() => ({ series: [] as Array<{ time: string; in: number; out: number }> })),
+      ]);
+      setStats(statsData);
+      setTargets(targetsData.results);
+      setTrafficData(trafficResp.series.map(s => ({ time: s.time, in: s.in, out: s.out })));
+    } catch (err) {
+      console.error('Dashboard loadData error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadDashboards = useCallback(async () => {
+    try {
+      const resp = await apiService.getDashboards();
+      setDashboards(resp.results);
+      if (resp.results.length > 0 && !selectedDashboardId) {
+        const defaultDb = resp.results.find((d) => d.is_default) || resp.results[0];
+        setSelectedDashboardId(defaultDb.id);
+        // Load widgets from dashboard if they have layout_config
+        if (defaultDb.layout_config?.widgets) {
+          setWidgets(defaultDb.layout_config.widgets);
+        }
+      }
+    } catch (err) {
+      console.error('Dashboard loadDashboards error:', err);
+    }
+  }, [selectedDashboardId]);
+
+  useEffect(() => {
+    loadData();
+    loadDashboards();
+  }, []);
+
+  // Auto refresh
+  useEffect(() => {
+    if (autoRefresh === 'off') return;
+    const ms = autoRefresh === '30s' ? 30000 : autoRefresh === '1m' ? 60000 : 300000;
+    const timer = setInterval(loadData, ms);
+    return () => clearInterval(timer);
+  }, [autoRefresh, loadData]);
+
+  const handleLayoutChange = (layout: Layout[]) => {
+    const updated = widgets.map((w) => {
+      const li = layout.find((l) => l.i === w.i);
+      if (li) return { ...w, x: li.x, y: li.y, w: li.w, h: li.h };
+      return w;
+    });
+    setWidgets(updated);
+
+    // Debounced save to backend
+    if (selectedDashboardId) {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(async () => {
+        try {
+          await apiService.updateDashboard(selectedDashboardId, {
+            layout_config: { widgets: updated },
+          });
+        } catch (err) {
+          console.error('Dashboard layout save error:', err);
+        }
+      }, 1000);
+    }
+  };
+
+  const handleAddWidget = () => {
+    if (!builderState.selectedType) return;
+    const newWidget: GridWidget = {
+      i: `${builderState.selectedType}-${Date.now()}`,
+      x: 0,
+      y: Infinity,
+      w: 4,
+      h: 3,
+      type: builderState.selectedType,
+      title: builderState.title || WIDGET_TYPE_LABELS[builderState.selectedType],
+    };
+    setWidgets([...widgets, newWidget]);
+    setShowAddWidget(false);
+    setBuilderState({ step: 1, title: '', timeRange: '24h' });
+  };
+
+  const handleRemoveWidget = (widgetId: string) => {
+    setWidgets(widgets.filter((w) => w.i !== widgetId));
+  };
+
+  const renderWidgetContent = (widget: GridWidget) => {
+    switch (widget.type) {
+      case 'threat_summary':
+        return <ThreatSummaryWidget stats={stats} />;
+      case 'traffic_stats':
+        return <TrafficStatsWidget data={trafficData} />;
+      case 'target_status':
+        return <TargetStatusWidget targets={targets} />;
+      case 'recent_threats':
+        return <RecentThreatsWidget stats={stats} />;
+      case 'top_attackers':
+        return <TopAttackersWidget stats={stats} />;
+      case 'activity_timeline':
+        return <ActivityTimelineWidget stats={stats} />;
+      case 'geo_map':
+        return <GeoMapWidget stats={stats} />;
+      default:
+        return <div className="widget-empty">Widget type: {widget.type}</div>;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="loading-state">
+        <div className="spinner" />
+        <p>Loading dashboard...</p>
+      </div>
+    );
+  }
+
+  const currentDashboard = dashboards.find((d) => d.id === selectedDashboardId);
+
+  return (
+    <div className="dashboard-page">
+      {/* ===== HEADER BAR ===== */}
+      <div className="db-header">
+        <div className="db-header-left">
+          {dashboards.length > 1 ? (
+            <select
+              className="db-select"
+              value={selectedDashboardId ?? ''}
+              onChange={(e) => setSelectedDashboardId(parseInt(e.target.value, 10))}
+            >
+              {dashboards.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          ) : (
+            <h2 className="db-title">{currentDashboard?.name ?? 'Dashboard'}</h2>
+          )}
+        </div>
+
+        <div className="db-header-right">
+          <select
+            className="db-select"
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value as TimeRange)}
+          >
+            <option value="24h">Last 24h</option>
+            <option value="7d">Last 7d</option>
+            <option value="30d">Last 30d</option>
+          </select>
+
+          <select
+            className="db-select"
+            value={autoRefresh}
+            onChange={(e) => setAutoRefresh(e.target.value as AutoRefresh)}
+          >
+            <option value="off">Auto-refresh: Off</option>
+            <option value="30s">Every 30s</option>
+            <option value="1m">Every 1m</option>
+            <option value="5m">Every 5m</option>
+          </select>
+
+          <button
+            className={`db-btn${editMode ? ' db-btn-active' : ''}`}
+            onClick={() => setEditMode(!editMode)}
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
-            Add Cell
+            {editMode ? 'Done' : 'Edit'}
           </button>
+
+          {editMode && (
+            <button className="db-btn db-btn-primary" onClick={() => setShowAddWidget(true)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Widget
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Add Widget Menu */}
-      {showAddWidget && (
-        <div className="add-widget-menu">
-          <div className="menu-header">
-            <h3>Add Cell</h3>
-            <button className="btn-close" onClick={() => setShowAddWidget(false)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
+      {/* ===== STATS STRIP ===== */}
+      {stats && (
+        <div className="db-stats-strip">
+          <div className="db-stat">
+            <span className="db-stat-value">{stats.total_threats}</span>
+            <span className="db-stat-label">Total Threats</span>
           </div>
-          <div className="widget-types">
-            <button className="widget-type-btn" onClick={() => addWidget('hosts')}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-              </svg>
-              Host Status
-            </button>
-            <button className="widget-type-btn" onClick={() => addWidget('threats')}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              Threats
-            </button>
-            <button className="widget-type-btn" onClick={() => addWidget('traffic')}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-              Traffic
-            </button>
-            <button className="widget-type-btn" onClick={() => addWidget('top-ips')}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="8" y1="6" x2="21" y2="6" />
-                <line x1="8" y1="12" x2="21" y2="12" />
-                <line x1="8" y1="18" x2="21" y2="18" />
-                <line x1="3" y1="6" x2="3.01" y2="6" />
-                <line x1="3" y1="12" x2="3.01" y2="12" />
-                <line x1="3" y1="18" x2="3.01" y2="18" />
-              </svg>
-              Top IPs
-            </button>
+          <div className="db-stat db-stat-danger">
+            <span className="db-stat-value">{stats.critical_threats}</span>
+            <span className="db-stat-label">Critical</span>
+          </div>
+          <div className="db-stat db-stat-warning">
+            <span className="db-stat-value">{stats.high_threats}</span>
+            <span className="db-stat-label">High</span>
+          </div>
+          <div className="db-stat db-stat-info">
+            <span className="db-stat-value">{stats.medium_threats}</span>
+            <span className="db-stat-label">Medium</span>
+          </div>
+          <div className="db-stat">
+            <span className="db-stat-value">{stats.blocked_ips}</span>
+            <span className="db-stat-label">Blocked IPs</span>
+          </div>
+          <div className="db-stat db-stat-success">
+            <span className="db-stat-value">{targets.filter((t) => t.status === 'online').length}</span>
+            <span className="db-stat-label">Online Targets</span>
           </div>
         </div>
       )}
 
-      {/* Widgets Grid */}
-      <ResponsiveGridLayout
-        className="dashboard-grid"
-        layouts={{ lg: widgets }}
-        breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-        cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
-        rowHeight={80}
-        onLayoutChange={handleLayoutChange}
-        isDraggable={true}
-        isResizable={true}
-        compactType="vertical"
-        preventCollision={false}
-      >
-        {widgets.map((widget) => (
-          <div key={widget.i} className="widget-card">
-            <div className="widget-header">
-              <h3 className="widget-title">{widget.title}</h3>
-              <div className="widget-actions">
-                <button 
-                  className="btn-icon-sm" 
-                  onClick={() => removeWidget(widget.i)}
-                  title="Remove"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+      {/* ===== WIDGET GRID ===== */}
+      <div className="db-grid-container">
+        <ResponsiveGridLayout
+          className="layout"
+          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+          cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
+          rowHeight={80}
+          isDraggable={editMode}
+          isResizable={editMode}
+          onLayoutChange={handleLayoutChange}
+          layouts={{
+            lg: widgets.map((w) => ({ i: w.i, x: w.x, y: w.y, w: w.w, h: w.h, minW: 2, minH: 2 })),
+          }}
+        >
+          {widgets.map((widget) => (
+            <div key={widget.i} className={`db-widget${editMode ? ' db-widget-edit' : ''}`}>
+              <div className="db-widget-header">
+                {editMode && (
+                  <span className="db-widget-drag-handle" title="Drag to move">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="9" cy="5" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="9" cy="19" r="1" />
+                      <circle cx="15" cy="5" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="15" cy="19" r="1" />
+                    </svg>
+                  </span>
+                )}
+                <span className="db-widget-title">{widget.title}</span>
+                {editMode && (
+                  <button
+                    className="db-widget-remove"
+                    onClick={() => handleRemoveWidget(widget.i)}
+                    title="Remove widget"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              <div className="db-widget-content">
+                {renderWidgetContent(widget)}
               </div>
             </div>
-            {renderWidget(widget)}
+          ))}
+        </ResponsiveGridLayout>
+      </div>
+
+      {/* ===== WIDGET BUILDER MODAL ===== */}
+      {showAddWidget && (
+        <div className="modal-backdrop" onClick={() => setShowAddWidget(false)}>
+          <div className="db-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="db-modal-header">
+              <h3>Add Widget — Step {builderState.step} of 3</h3>
+              <button className="db-modal-close" onClick={() => setShowAddWidget(false)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="db-modal-body">
+              {builderState.step === 1 && (
+                <div className="db-builder-step1">
+                  <p className="db-builder-hint">Select a widget type:</p>
+                  <div className="db-widget-type-grid">
+                    {(Object.entries(WIDGET_TYPE_LABELS) as Array<[ApiWidget['widget_type'], string]>).map(([type, label]) => (
+                      <button
+                        key={type}
+                        className={`db-widget-type-btn${builderState.selectedType === type ? ' selected' : ''}`}
+                        onClick={() => setBuilderState({ ...builderState, selectedType: type })}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {builderState.step === 2 && (
+                <div className="db-builder-step2">
+                  <div className="db-form-group">
+                    <label className="db-label">Widget Title</label>
+                    <input
+                      type="text"
+                      className="db-input"
+                      value={builderState.title}
+                      onChange={(e) => setBuilderState({ ...builderState, title: e.target.value })}
+                      placeholder={builderState.selectedType ? WIDGET_TYPE_LABELS[builderState.selectedType] : ''}
+                    />
+                  </div>
+                  <div className="db-form-group">
+                    <label className="db-label">Time Range</label>
+                    <select
+                      className="db-input"
+                      value={builderState.timeRange}
+                      onChange={(e) => setBuilderState({ ...builderState, timeRange: e.target.value as TimeRange })}
+                    >
+                      <option value="24h">Last 24h</option>
+                      <option value="7d">Last 7d</option>
+                      <option value="30d">Last 30d</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {builderState.step === 3 && (
+                <div className="db-builder-step3">
+                  <p className="db-builder-hint">Preview:</p>
+                  <div className="db-builder-preview">
+                    <div className="db-widget" style={{ height: '200px' }}>
+                      <div className="db-widget-header">
+                        <span className="db-widget-title">
+                          {builderState.title || (builderState.selectedType ? WIDGET_TYPE_LABELS[builderState.selectedType] : 'Widget')}
+                        </span>
+                      </div>
+                      <div className="db-widget-content" style={{ height: 'calc(100% - 36px)' }}>
+                        {builderState.selectedType && renderWidgetContent({ i: 'preview', x: 0, y: 0, w: 4, h: 3, type: builderState.selectedType, title: '' })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="db-modal-footer">
+              {builderState.step > 1 && (
+                <button
+                  className="db-btn"
+                  onClick={() => setBuilderState({ ...builderState, step: (builderState.step - 1) as 1 | 2 | 3 })}
+                >
+                  ← Back
+                </button>
+              )}
+              {builderState.step < 3 ? (
+                <button
+                  className="db-btn db-btn-primary"
+                  disabled={builderState.step === 1 && !builderState.selectedType}
+                  onClick={() => setBuilderState({ ...builderState, step: (builderState.step + 1) as 1 | 2 | 3 })}
+                >
+                  Next →
+                </button>
+              ) : (
+                <button className="db-btn db-btn-primary" onClick={handleAddWidget}>
+                  Add to Dashboard
+                </button>
+              )}
+            </div>
           </div>
-        ))}
-      </ResponsiveGridLayout>
+        </div>
+      )}
     </div>
   );
 };

@@ -46,7 +46,13 @@ class ThreatLogSerializer(serializers.ModelSerializer):
 
 
 class ThreatLogListSerializer(serializers.ModelSerializer):
-    """Serializer semplificato per lista minacce"""
+    """Serializer per lista minacce.
+
+    Include i campi che il frontend rende sia in tabella (protocol, dest_port,
+    packet_count, country_code) sia nel modal di dettaglio (description,
+    reasons, resolved_at). Tenuto comunque distinto dal serializer pieno per
+    non esporre dati interni che potessero servire in futuro al solo detail.
+    """
 
     target_ip = serializers.CharField(source="target.ip_address", read_only=True)
 
@@ -56,10 +62,17 @@ class ThreatLogListSerializer(serializers.ModelSerializer):
             "id",
             "target_ip",
             "source_ip",
+            "dest_port",
+            "protocol",
             "threat_score",
             "severity",
+            "packet_count",
+            "country_code",
+            "description",
+            "reasons",
             "is_blocked",
             "is_resolved",
+            "resolved_at",
             "detected_at",
         ]
 
@@ -77,50 +90,3 @@ class ThreatLogStatsSerializer(serializers.Serializer):
     unresolved_threats = serializers.IntegerField()
     top_attackers = serializers.ListField(child=serializers.DictField())
     recent_threats = ThreatLogListSerializer(many=True)
-
-
-# === Aggiunto per modfica === #
-class ThreatLogSerializer(serializers.Serializer):
-    """Serializer per ThreatLog model"""
-
-    id = serializers.IntegerField(read_only=True)
-    target_id = serializers.IntegerField()
-    source_ip = serializers.IPAddressField()
-    threat_score = serializers.IntegerField()
-    packets = serializers.IntegerField()
-    ports_count = serializers.IntegerField()
-    protocols = serializers.CharField()
-    threat_type = serializers.CharField()
-    classification = serializers.CharField()
-    detected_at = serializers.DateTimeField()
-    acknowledged = serializers.BooleanField()
-
-    # Extra info
-    target_hostname = serializers.SerializerMethodField()
-    severity_color = serializers.SerializerMethodField()
-
-    def get_target_hostname(self, obj):
-        """Ottieni hostname del target"""
-        return obj.target.hostname if obj.target else None
-
-    def get_severity_color(self, obj):
-        """Colore per UI in base a classification"""
-        colors = {
-            "CRITICAL": "#dc2626",  # red-600
-            "HIGH": "#ea580c",  # orange-600
-            "MEDIUM": "#ca8a04",  # yellow-600
-            "LOW": "#65a30d",  # lime-600
-        }
-        return colors.get(obj.classification, "#6b7280")  # gray-500 default
-
-
-class ThreatLogListSerializer(serializers.Serializer):
-    """Serializer compatto per liste"""
-
-    id = serializers.IntegerField(read_only=True)
-    source_ip = serializers.IPAddressField()
-    threat_score = serializers.IntegerField()
-    threat_type = serializers.CharField()
-    classification = serializers.CharField()
-    detected_at = serializers.DateTimeField()
-    acknowledged = serializers.BooleanField()

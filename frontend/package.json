@@ -8,20 +8,18 @@
     "@testing-library/user-event": "^13.5.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^16.18.108",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^18.2.17",
     "@types/react-grid-layout": "^1.3.5",
     "axios": "^1.6.2",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
     "react-grid-layout": "^1.4.4",
     "react-router-dom": "^6.20.1",
     "react-scripts": "5.0.1",
     "recharts": "^2.10.3",
     "typescript": "^4.9.5",
-    "web-vitals": "^2.1.4",
-    "xterm": "^5.3.0",
-    "xterm-addon-fit": "^0.8.0"
+    "web-vitals": "^2.1.4"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -48,15 +46,13 @@
     ]
   },
   "devDependencies": {
-    "@types/recharts": "^1.8.29",
-    "@types/xterm": "^3.0.0",
-    "lucide-react": "^1.7.0"
+    "@types/recharts": "^1.8.29"
   },
   "overrides": {
     "nth-check": ">=2.0.1",
     "postcss": ">=8.4.31",
     "serialize-javascript": ">=7.0.5",
-    "webpack-dev-server": ">=5.2.1",
+    "webpack-dev-server": "4.15.2",
     "svgo": ">=2.8.1",
     "underscore": ">=1.13.8",
     "lodash": ">=4.18.1"

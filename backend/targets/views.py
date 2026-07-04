@@ -12,7 +12,6 @@ import logging
 
 from .models import Target
 from .serializers import TargetSerializer, TargetListSerializer, TargetCreateSerializer
-from core.ssh_manager import SSHManager, SSHConnectionError
 from audit.models import AuditLog
 
 """
@@ -24,13 +23,14 @@ from django.db.models import Count, Sum, Q
 from datetime import timedelta
 import logging
 
-from .models import WhitelistEntry, BlockedIP
+from .models import WhitelistEntry, BlockedIP, FirewallStats
 from .serializers import (
     WhitelistEntrySerializer,
     WhitelistEntryCreateSerializer,
     BlockedIPSerializer,
     BlockedIPCreateSerializer,
     BlockedIPStatsSerializer,
+    FirewallStatsSerializer,
 )
 from targets.models import Target
 from audit.models import AuditLog
@@ -53,82 +53,6 @@ class TargetViewSet(viewsets.ModelViewSet):
         elif self.action == "create":
             return TargetCreateSerializer
         return TargetSerializer
-
-    @action(detail=True, methods=["post"])
-    def test_connection(self, request, pk=None):
-        """Testa connessione SSH al target"""
-        target = self.get_object()
-
-        try:
-            ssh = SSHManager(
-                host=target.ip_address, port=target.ssh_port, username=target.ssh_user
-            )
-            ssh.connect()
-            user_exists = ssh.check_user_exists(target.ssh_user)
-            exit_code, stdout, stderr = ssh.execute_command("whoami")
-            ssh.disconnect()
-
-            target.mark_online()
-
-            return Response(
-                {
-                    "success": True,
-                    "message": "Connessione SSH riuscita",
-                    "user_exists": user_exists,
-                    "whoami": stdout.strip(),
-                }
-            )
-
-        except SSHConnectionError as e:
-            target.mark_offline(str(e))
-            return Response(
-                {"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-    @action(detail=True, methods=["post"])
-    def install(self, request, pk=None):
-        """Installa pacchetto firedog sul target"""
-        target = self.get_object()
-
-        # Permetti reinstall se richiesto esplicitamente
-        force_reinstall = request.data.get("force_reinstall", False)
-
-        if target.status == "online" and target.firedog_version and not force_reinstall:
-            return Response(
-                {
-                    "error": "Firedog già installato",
-                    "hint": "Use force_reinstall=true to reinstall",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Se è una reinstall, logga l'evento
-        if target.status == "online" and target.firedog_version:
-            from audit.models import AuditLog
-
-            AuditLog.objects.create(
-                username=request.user.username,
-                action="target.reinstall",
-                target=target,
-                details={"previous_version": target.firedog_version},
-                ip_address=request.META.get("REMOTE_ADDR"),
-            )
-
-        target.status = "installing"
-        target.save(update_fields=["status"])
-
-        # Qui verrà chiamato il task Celery
-        from targets.tasks import install_firedog_on_target
-
-        install_firedog_on_target.delay(target.id, request.user.id)
-
-        return Response(
-            {
-                "success": True,
-                "message": "Installazione avviata",
-                "status": "installing",
-            }
-        )
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -175,6 +99,24 @@ class TargetViewSet(viewsets.ModelViewSet):
                 {"success": False, "error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    @action(detail=True, methods=["post"], url_path="sync-rules")
+    def sync_rules(self, request, pk=None):
+        """Forza un refresh delle FirewallRule del target.
+
+        Dispatcha CommandAction::SyncRules all'agent. L'agent esegue
+        `firewall-manager --export-json` e rispedisce il JSON nella
+        command_response; il consumer lo ingestisce in tempo reale, così
+        la UI vede le rule aggiornate al prossimo poll.
+        """
+        from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
+
+        target = self.get_object()
+        try:
+            cmd = dispatch_command_to_agent(target, action="sync_rules", payload={})
+            return Response({"command_id": str(cmd.command_id), "status": "dispatched"}, status=202)
+        except AgentNotConnected as e:
+            return Response({"error": str(e)}, status=409)
 
     @action(detail=False, methods=["get"], url_path="check-ip")
     def check_ip(self, request):
@@ -356,8 +298,23 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
             return BlockedIPStatsSerializer
         return BlockedIPSerializer
 
+    # Mapping reason → (severity, threat_score) per il ThreatLog companion.
+    # Un blocco "manual" non genera ThreatLog: non c'è una minaccia rilevata,
+    # è solo una decisione dell'operatore. Le altre reason corrispondono a
+    # minacce reali che devono apparire in /api/threats/ per coerenza con la
+    # Dashboard (Recent Threats, Threat Distribution, Activity Timeline).
+    THREAT_FROM_REASON = {
+        "ddos":            ("critical", 95),
+        "syn_flood":       ("critical", 90),
+        "malware":         ("critical", 95),
+        "brute_force":     ("high",     80),
+        "port_scan":       ("high",     70),
+        "threat_detected": ("high",     75),
+        "other":           ("low",      30),
+    }
+
     def perform_create(self, serializer):
-        """Crea blocco con logging audit"""
+        """Crea blocco con logging audit e ThreatLog companion se non-manual."""
         block = serializer.save()
 
         # Log audit
@@ -373,6 +330,29 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
                 "reason": block.block_reason,
             },
         )
+
+        # ThreatLog companion. Senza questo, /api/threats/ resterebbe vuoto
+        # per i blocchi e l'utente non vedrebbe il "brute_force" sul dettaglio
+        # del target né nei conteggi della Dashboard.
+        if block.block_reason != "manual":
+            from threats.models import ThreatLog
+            sev, score = self.THREAT_FROM_REASON.get(
+                block.block_reason, ("medium", 50)
+            )
+            reason_label = block.get_block_reason_display()
+            ThreatLog.objects.create(
+                target=block.target,
+                source_ip=block.ip_address,
+                threat_score=score,
+                severity=sev,
+                packet_count=block.packet_count or 1,
+                reasons=[block.block_reason],
+                description=(
+                    block.description or
+                    f"{reason_label} detected from {block.ip_address}"
+                ),
+                is_blocked=True,
+            )
 
         logger.warning(
             f"IP blocked: {block.ip_address} on target {block.target.id} - Reason: {block.block_reason}"
@@ -556,3 +536,26 @@ def bulk_update_gruppo(self, request):
     )
 
     return Response({"success": True, "updated_count": updated, "gruppo": gruppo})
+
+
+class FirewallStatsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet read-only per statistiche firewall (traffico).
+    Filtra per target_id e supporta limit per limitare i risultati.
+    GET /api/firewall-stats/?target_id=X&limit=48
+    """
+
+    serializer_class = FirewallStatsSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = FirewallStats.objects.all()
+        target_id = self.request.query_params.get("target_id")
+        if target_id:
+            queryset = queryset.filter(target_id=target_id)
+        try:
+            limit = int(self.request.query_params.get("limit", 100))
+            limit = min(max(limit, 1), 500)
+        except (TypeError, ValueError):
+            limit = 100
+        return queryset[:limit]

@@ -11,7 +11,7 @@ import sys
 import os
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import ipaddress
@@ -432,21 +432,22 @@ class FirewallManager:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                 count = int(result.stdout.strip())
                 
+                # "count" = pacchetti bloccati dal firewall per questo IP,
+                # estratti da input_dropped.pcap (catturato via NFLOG/ulogd2
+                # dalla catena LOG_INPUT_DROP). Sono tentativi di connessione
+                # respinti, non sessioni andate a buon fine.
                 if count > 100:
                     score += 50
-                    reasons.append(f"Molti tentativi ({count}) +50")
+                    reasons.append(f"Molti pacchetti bloccati dal firewall ({count}) +50")
                 elif count > 50:
                     score += 30
-                    reasons.append(f"Numerosi tentativi ({count}) +30")
+                    reasons.append(f"Numerosi pacchetti bloccati dal firewall ({count}) +30")
                 elif count > 10:
                     score += 15
-                    reasons.append(f"Alcuni tentativi ({count}) +15")
-                
-            except:
+                    reasons.append(f"Alcuni pacchetti bloccati dal firewall ({count}) +15")
+
+            except Exception:
                 pass
-        
-        # Controlla porte comuni attaccate
-        common_attack_ports = [22, 23, 3389, 21, 25]  # SSH, Telnet, RDP, FTP, SMTP
         
         # Normalizza score 0-100
         score = max(0, min(100, score))
@@ -494,6 +495,50 @@ class FirewallManager:
         except Exception as e:
             self.error(f"Errore analisi minacce: {e}")
 
+    @staticmethod
+    def _extract_top_port_proto(pcap_lines):
+        """Dato l'output di tcpdump per un singolo source IP, ritorna
+        (dest_port, protocol) più frequenti.
+
+        Formato righe tcpdump '-nn':
+          14:23:01.123 IP 1.2.3.4.5555 > 5.6.7.8.443: Flags [S], ...
+          14:23:01.234 IP6 ... > ... : ...
+          14:23:02.345 IP 1.2.3.4 > 5.6.7.8: ICMP echo request, ...
+
+        Il protocollo è inferito così:
+          - 'ICMP' presente nella riga → icmp
+          - 'Flags' presente (TCP SYN/ACK/...) → tcp
+          - altrimenti se la riga matcha pattern porta → udp
+          - fallback: '' (vuoto, il backend visualizza '-')
+
+        dest_port è preso dopo l'ultimo punto a sinistra dei ':' nel
+        token destinazione (es. '5.6.7.8.443' → 443). Mancante per ICMP.
+        """
+        from collections import Counter
+        import re
+
+        port_counter: Counter = Counter()
+        proto_counter: Counter = Counter()
+        # Pattern destinazione tipo 'a.b.c.d.PORT:' con porta numerica.
+        port_re = re.compile(r'>\s+\S+?\.(\d+):')
+
+        for line in pcap_lines:
+            if 'ICMP' in line:
+                proto_counter['icmp'] += 1
+                continue
+            m = port_re.search(line)
+            if m:
+                try:
+                    port_counter[int(m.group(1))] += 1
+                except ValueError:
+                    pass
+                # 'Flags' in line ⇒ TCP. Niente Flags + porta valida ⇒ UDP.
+                proto_counter['tcp' if 'Flags' in line else 'udp'] += 1
+
+        top_port = port_counter.most_common(1)[0][0] if port_counter else None
+        top_proto = proto_counter.most_common(1)[0][0] if proto_counter else ''
+        return top_port, top_proto
+
     def get_threats_data(self, min_score: int = 30) -> List[Dict]:
         """Ottieni dati minacce in formato strutturato"""
 
@@ -512,16 +557,27 @@ class FirewallManager:
             for ip in ips[:50]:
                 score, reasons = self.get_threat_score(ip)
                 if score >= min_score:
-                    # Conta tentativi
-                    cmd_count = f"tcpdump -nn -r {pcap_input} 'src host {ip}' 2>/dev/null | wc -l"
-                    count_result = subprocess.run(cmd_count, shell=True, capture_output=True, text=True)
-                    attempts = int(count_result.stdout.strip()) if count_result.stdout.strip() else 0
+                    # Estraiamo tutte le righe pcap per questo source IP, ci
+                    # servono sia il count totale sia il dest_port + protocol
+                    # più frequenti.
+                    cmd_lines = f"tcpdump -nn -r {pcap_input} 'src host {ip}' 2>/dev/null"
+                    lines_result = subprocess.run(
+                        cmd_lines, shell=True, capture_output=True, text=True
+                    )
+                    pcap_lines = [
+                        ln for ln in lines_result.stdout.split('\n') if ln.strip()
+                    ]
+                    attempts = len(pcap_lines)
+
+                    dest_port, protocol = self._extract_top_port_proto(pcap_lines)
 
                     threats.append({
                         'ip': ip,
                         'score': score,
                         'attempts': attempts,
-                        'reasons': reasons
+                        'reasons': reasons,
+                        'dest_port': dest_port,
+                        'protocol': protocol,
                     })
 
             # Ordina per score
@@ -580,6 +636,141 @@ class FirewallManager:
 
         return rules
 
+    def get_network_flows(self, limit: int = 200) -> List[Dict]:
+        """Snapshot dei peer remoti con cui il target sta dialogando.
+
+        Sorgente: `ss -tun state established` (filtri TCP+UDP, solo connessioni
+        attive). Non /proc/net/nf_conntrack perché negli LXC container quel
+        file è filtrato e non leggibile.
+
+        Filtra IP locali (127.0.0.0/8) e privati RFC1918/CGNAT (10/8, 172.16/12,
+        192.168/16, 100.64/10) — la geo map ha senso solo per IP pubblici.
+
+        Restituisce lista di dict {ip, count, ports}: count = numero di
+        connessioni distinte verso quell'IP; ports = lista delle peer-port
+        viste (max 10) utile per debug ma compatta nel payload.
+        """
+        import ipaddress
+        out: Dict[str, Dict] = {}
+
+        try:
+            # Includiamo anche TIME-WAIT (linger ~60s post-close) e
+            # CLOSE-WAIT/FIN-WAIT-* per catturare connessioni brevi (HTTP
+            # request/response). `connected` matcha tutti gli stati eccetto
+            # LISTEN/CLOSED. Più rumore ma molto meglio per workload "burst".
+            # Niente `-H`: non supportato da iproute2 < 5.x (Debian 11).
+            result = self.run_command(
+                ['ss', '-tun', 'state', 'connected'], check=False
+            )
+            if result.returncode != 0:
+                return []
+            for line in result.stdout.split('\n'):
+                parts = line.split()
+                # Header riga: Netid State Recv-Q Send-Q Local Peer
+                # Data row con state: Netid State Recv-Q Send-Q Local Peer
+                # Data row senza state (-H): Netid Recv-Q Send-Q Local Peer
+                # Skip header line e linee inconsistenti.
+                if len(parts) < 5 or parts[0] == 'Netid':
+                    continue
+                # Determina indice della colonna Peer in base alla presenza di State.
+                # Se parts[1] è una STATE word maiuscola (es. ESTAB, TIME-WAIT),
+                # Peer è parts[5]; altrimenti parts[4].
+                if parts[1].isupper() and not parts[1].isdigit():
+                    if len(parts) < 6:
+                        continue
+                    peer = parts[5]
+                else:
+                    peer = parts[4]
+                # IPv6 brackets: "[2001:db8::1]:443"
+                if peer.startswith('['):
+                    ip_str, _, port_str = peer.rpartition(':')
+                    ip_str = ip_str.strip('[]')
+                else:
+                    ip_str, _, port_str = peer.rpartition(':')
+                if not ip_str or ip_str == '*':
+                    continue
+                try:
+                    ip_obj = ipaddress.ip_address(ip_str)
+                except ValueError:
+                    continue
+                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local \
+                   or ip_obj.is_multicast or ip_obj.is_unspecified or ip_obj.is_reserved:
+                    continue
+                entry = out.setdefault(ip_str, {'ip': ip_str, 'count': 0, 'ports': []})
+                entry['count'] += 1
+                if port_str and port_str.isdigit() and len(entry['ports']) < 10:
+                    p = int(port_str)
+                    if p not in entry['ports']:
+                        entry['ports'].append(p)
+        except Exception:
+            return []
+
+        # Top N per count (taglia il payload se ci sono migliaia di connessioni)
+        flows = sorted(out.values(), key=lambda x: x['count'], reverse=True)[:limit]
+        return flows
+
+    def get_conntrack_stats(self) -> Dict:
+        """Connessioni tracciate dal modulo netfilter conntrack.
+
+        È il numero di flussi TCP/UDP/ICMP attivi visti dal firewall, non solo
+        le sessioni TCP ESTABLISHED — copre anche UDP "pseudo-stateful" e ICMP
+        request/reply. Letto da /proc/sys/net/netfilter/nf_conntrack_{count,max}.
+        """
+        result = {'count': 0, 'max': 0}
+        for key, path in (('count', '/proc/sys/net/netfilter/nf_conntrack_count'),
+                          ('max',   '/proc/sys/net/netfilter/nf_conntrack_max')):
+            try:
+                with open(path, 'r') as f:
+                    result[key] = int(f.read().strip())
+            except (FileNotFoundError, ValueError, PermissionError):
+                pass
+        return result
+
+    def get_protocol_stats(self) -> Dict:
+        """Estrae i counter cumulativi per protocollo da /proc/net/snmp.
+
+        Restituisce InSegs/OutSegs (TCP), InDatagrams/OutDatagrams (UDP),
+        InMsgs/OutMsgs (ICMP). I valori sono counter del kernel (mai resettati
+        a runtime), il server li scala in delta tra snapshot consecutivi.
+        """
+        result = {
+            'tcp':  {'in_packets': 0, 'out_packets': 0},
+            'udp':  {'in_packets': 0, 'out_packets': 0},
+            'icmp': {'in_packets': 0, 'out_packets': 0},
+        }
+        try:
+            with open('/proc/net/snmp', 'r') as f:
+                lines = f.readlines()
+            # Le coppie sono header / values con stesso prefisso (es. "Tcp:")
+            headers = {}
+            values = {}
+            for line in lines:
+                if ':' not in line:
+                    continue
+                proto, rest = line.split(':', 1)
+                fields = rest.split()
+                if proto in headers:
+                    values[proto] = fields
+                else:
+                    headers[proto] = fields
+
+            def col(proto, name, default=0):
+                try:
+                    idx = headers[proto].index(name)
+                    return int(values[proto][idx])
+                except (KeyError, ValueError, IndexError):
+                    return default
+
+            result['tcp']['in_packets']  = col('Tcp', 'InSegs')
+            result['tcp']['out_packets'] = col('Tcp', 'OutSegs')
+            result['udp']['in_packets']  = col('Udp', 'InDatagrams')
+            result['udp']['out_packets'] = col('Udp', 'OutDatagrams')
+            result['icmp']['in_packets'] = col('Icmp', 'InMsgs')
+            result['icmp']['out_packets'] = col('Icmp', 'OutMsgs')
+        except Exception:
+            pass
+        return result
+
     def get_system_info(self) -> Dict:
         """Ottieni informazioni di sistema"""
 
@@ -627,7 +818,7 @@ class FirewallManager:
 
         return '0.0.0.0'
 
-    def export_json(self, output_path: str = '/opt/firedog/export/status.json'):
+    def export_json(self, output_path: str = '/opt/sentinelsuite/firedog/export/status.json'):
         """Esporta stato completo firewall in JSON"""
 
         try:
@@ -639,9 +830,23 @@ class FirewallManager:
             data = {
                 'hostname': subprocess.run(['hostname'], capture_output=True, text=True).stdout.strip(),
                 'ip_address': self.get_primary_ip(),
-                'timestamp': datetime.now().isoformat(),
+                # Timestamp ISO-8601 con TZ UTC esplicito. datetime.now() senza
+                # argomenti restituisce un naive datetime → il server lo
+                # interpreta come ora locale (Europe/Rome) e applica un doppio
+                # offset, sfasando di 2h tutto il chart.
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'firedog_version': '1.0.0',
                 'system': self.get_system_info(),
+                # Counters per protocollo da /proc/net/snmp (cumulativi del kernel).
+                # Il server scala in delta per il Protocol Distribution chart.
+                'protocols': self.get_protocol_stats(),
+                # Connessioni attive tracciate da netfilter conntrack: snapshot
+                # istantaneo (non delta), utile per il chart "Connections over
+                # time" che usa la serie temporale di snapshot.
+                'conntrack': self.get_conntrack_stats(),
+                # Peer remoti pubblici con cui il target sta dialogando.
+                # Alimenta la GeoMap server-side (geoip2 lookup).
+                'network_flows': self.get_network_flows(),
                 'rules': {
                     'INPUT': self.parse_iptables_rules('INPUT'),
                     'OUTPUT': self.parse_iptables_rules('OUTPUT'),
@@ -649,7 +854,14 @@ class FirewallManager:
                 },
                 'stats': {
                     'total_packets': {},
+                    # `dropped_packets` (legacy, totale aggregato) resta per
+                    # retro-compat; `dropped` espone i counter delle chain di
+                    # drop create da firewall-init.sh, separati per direzione.
                     'dropped_packets': 0,
+                    'dropped': {
+                        'input': 0,
+                        'output': 0,
+                    },
                     'pcap_sizes': {}
                 },
                 'threats': self.get_threats_data(min_score=30),
@@ -666,6 +878,38 @@ class FirewallManager:
                         data['stats']['total_packets'][chain] = total
                 except Exception:
                     data['stats']['total_packets'][chain] = 0
+
+            # Counters delle chain di drop create da firewall-init.sh.
+            # Quando il firewall non è inizializzato, le chain non esistono
+            # → mettiamo 0 silenziosamente.
+            for direction, chain_name in (('input', 'LOG_INPUT_DROP'), ('output', 'LOG_OUTPUT_DROP')):
+                try:
+                    res = self.run_command(['iptables', '-L', chain_name, '-v', '-n', '-x'], check=False)
+                    if res.returncode != 0:
+                        continue
+                    # L'header chain è del tipo:
+                    #   "Chain LOG_INPUT_DROP (NN references)"
+                    # Il riepilogo del totale pacchetti non è nell'header;
+                    # sommiamo i pkts di ogni regola della chain.
+                    total = 0
+                    for line in res.stdout.split('\n'):
+                        line = line.strip()
+                        if not line or line.startswith('Chain ') or line.startswith('pkts'):
+                            continue
+                        parts = line.split()
+                        if not parts:
+                            continue
+                        try:
+                            total += int(parts[0])
+                        except (ValueError, IndexError):
+                            continue
+                    data['stats']['dropped'][direction] = total
+                except Exception:
+                    pass
+            # Manteniamo `dropped_packets` come somma aggregata per retro-compat.
+            data['stats']['dropped_packets'] = (
+                data['stats']['dropped']['input'] + data['stats']['dropped']['output']
+            )
 
             # Dimensioni PCAP
             for pcap_name in ['input_dropped.pcap', 'output_dropped.pcap']:
@@ -755,8 +999,8 @@ Esempi:
                        help='Ripristina regole salvate')
 
     parser.add_argument('--export-json', metavar='OUTPUT_PATH',
-                       nargs='?', const='/opt/firedog/export/status.json',
-                       help='Esporta stato completo in JSON (default: /opt/firedog/export/status.json)')
+                       nargs='?', const='/opt/sentinelsuite/firedog/export/status.json',
+                       help='Esporta stato completo in JSON (default: /opt/sentinelsuite/firedog/export/status.json)')
 
     args = parser.parse_args()
     

@@ -50,6 +50,10 @@ def discover_network_task(self):
         all_discovered = []
         hosts_new = 0
         hosts_updated = 0
+        # Errori per-rete: vengono propagati al chiamante così la UI può
+        # mostrare il motivo reale del fallimento invece di un generico
+        # "scan completato con 0 host".
+        per_network_errors: dict[str, str] = {}
 
         for network in networks:
             try:
@@ -101,12 +105,25 @@ def discover_network_task(self):
                     all_discovered.append(host.id)
 
             except Exception as e:
-                logger.error(f"Error scanning network {network}: {e}")
+                msg = str(e)
+                logger.error(f"Error scanning network {network}: {msg}")
+                per_network_errors[network] = msg
                 continue
 
         # ==================== STEP 3: Marca host non visti come offline ====================
         if all_discovered:
             DiscoveredHost.objects.exclude(id__in=all_discovered).update(is_alive=False)
+
+        # Se TUTTE le reti sono fallite, è un fallimento di task, non
+        # un "scan completato con 0 host". Surface l'errore al chiamante.
+        if per_network_errors and not all_discovered:
+            return {
+                "success": False,
+                "error": "Tutte le reti hanno fallito lo scan",
+                "networks_scanned": networks,
+                "network_errors": per_network_errors,
+                "hosts_found": 0,
+            }
 
         result = {
             "success": True,
@@ -115,6 +132,10 @@ def discover_network_task(self):
             "hosts_new": hosts_new,
             "hosts_updated": hosts_updated,
         }
+        # Eventuali errori parziali (alcune reti OK, altre no) vengono comunque
+        # esposti così l'operatore vede esattamente cosa è andato storto.
+        if per_network_errors:
+            result["network_errors"] = per_network_errors
 
         logger.info(f"Network discovery completed: {result}")
 
@@ -214,12 +235,34 @@ def scan_network_arp(network):
 
         return hosts
 
+    except FileNotFoundError as e:
+        # Binario `sudo` o `arp-scan` mancante sul master. Errore comune in
+        # post-deploy: facciamo un messaggio operativo (cosa installare).
+        missing = "arp-scan" if "arp-scan" in str(e) else str(e)
+        logger.error(f"arp-scan binary missing: {e}")
+        raise Exception(
+            f"Comando '{missing}' non trovato sul server. "
+            f"Installalo con: sudo apt-get install -y arp-scan"
+        ) from e
+    except PermissionError as e:
+        logger.error(f"arp-scan permission denied: {e}")
+        raise Exception(
+            "Permessi insufficienti per arp-scan. "
+            "Aggiungi una regola NOPASSWD a /etc/sudoers.d/ per microcyber."
+        ) from e
     except subprocess.CalledProcessError as e:
-        logger.error(f"arp-scan failed for {network}: {e.stderr}")
-        raise Exception(f"arp-scan failed: {e.stderr}")
+        stderr = (e.stderr or "").strip() or f"exit {e.returncode}"
+        logger.error(f"arp-scan failed for {network}: {stderr}")
+        # Casi comuni: sudo password prompt → "a terminal is required to read the password"
+        if "password" in stderr.lower():
+            raise Exception(
+                "sudo richiede la password per arp-scan: configura NOPASSWD in "
+                "/etc/sudoers.d/ per l'utente microcyber."
+            ) from e
+        raise Exception(f"arp-scan failed: {stderr}") from e
     except subprocess.TimeoutExpired:
         logger.error(f"arp-scan timeout for {network}")
-        raise Exception("arp-scan timeout")
+        raise Exception("arp-scan timeout (>60s)") from None
     except Exception as e:
         logger.error(f"Error scanning network {network}: {e}")
         raise

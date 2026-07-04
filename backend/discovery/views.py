@@ -238,22 +238,36 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
             if not line or line.startswith("#"):
                 continue
 
-            # Parse line: IP HOSTNAME [DESCRIPTION]
-            parts = line.split(maxsplit=2)
+            # Parse line. Due formati supportati:
+            #   IP MAC HOSTNAME [DESCRIPTION]   (raccomandato — MAC necessario
+            #                                   per il pairing dell'agent)
+            #   IP HOSTNAME [DESCRIPTION]       (legacy, MAC vuoto)
+            # Si distingue guardando il secondo token: se matcha il formato MAC,
+            # è il MAC; altrimenti è l'hostname (formato vecchio).
+            import re as _re
+            parts = line.split(maxsplit=3)
 
             if len(parts) < 2:
                 results["errors"].append(
                     {
                         "line": line_num,
-                        "error": "Invalid format (expected: IP HOSTNAME [DESCRIPTION])",
+                        "error": "Invalid format (expected: IP [MAC] HOSTNAME [DESCRIPTION])",
                         "content": line,
                     }
                 )
                 continue
 
             ip_address = parts[0]
-            hostname = parts[1]
-            notes = parts[2] if len(parts) > 2 else ""
+            mac_re = _re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
+            if len(parts) >= 3 and mac_re.match(parts[1]):
+                mac_address = parts[1].lower().replace("-", ":")
+                hostname = parts[2]
+                notes = parts[3] if len(parts) > 3 else ""
+            else:
+                # formato legacy: niente MAC, parts[1] è hostname
+                mac_address = ""
+                hostname = parts[1]
+                notes = " ".join(parts[2:]) if len(parts) > 2 else ""
 
             # Validate IP
             import ipaddress
@@ -278,6 +292,7 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
                 ip_address=ip_address,
                 defaults={
                     "hostname": hostname,
+                    "mac_address": mac_address,
                     "notes": notes,
                     "is_imported": already_target,
                 },
@@ -290,6 +305,8 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
                 # Update existing
                 if not host.hostname:
                     host.hostname = hostname
+                if mac_address and not host.mac_address:
+                    host.mac_address = mac_address
                 if notes and not host.notes:
                     host.notes = notes
                 host.save()
@@ -471,9 +488,13 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
                     discovered_host.hostname or f"host-{discovered_host.ip_address}"
                 )
 
+                # Propaga il MAC dal DiscoveredHost: senza di esso il pairing
+                # dell'agent non potrebbe completare la verifica fase 2
+                # (identity_hash = sha512(ip+hostname+mac)).
                 target = Target.objects.create(
                     ip_address=discovered_host.ip_address,
                     hostname=hostname,
+                    mac_address=(discovered_host.mac_address or "").lower(),
                     description=f"Imported from discovery - Vendor: {discovered_host.vendor}",
                     status="pending",
                 )
