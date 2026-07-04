@@ -54,7 +54,7 @@ Per installare **gli strumenti firewall** su un target senza passare dal
 master:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/develop-v0.0.6/firedog-package/get-firedog.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
 ```
 
 Con opzioni (es. senza attivare subito il firewall):
@@ -64,7 +64,7 @@ curl -fsSL .../get-firedog.sh | sudo bash -s -- --skip-init
 ```
 
 Lo script scarica il tarball del repo (branch/tag configurabile con
-`FIREDOG_REF`, default `develop-v0.0.6`), ne estrae `firedog-package/` ed
+`FIREDOG_REF`, default `stabile`), ne estrae `firedog-package/` ed
 esegue `install.sh`. Se lanciato in pipe senza tty, la conferma interattiva
 di attivazione firewall viene letta da `/dev/tty` oppure viene forzato
 `--skip-init` (mai policy DROP senza conferma esplicita).
