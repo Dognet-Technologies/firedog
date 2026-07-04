@@ -8,7 +8,7 @@ Sistema di firewall avanzato per Debian/Ubuntu con policy DROP, logging PCAP sep
 >
 > Installazione rapida di un target:
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/develop-v0.0.6/firedog-package/get-firedog.sh | sudo bash
+> curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
 > ```
 >
 > Questo README descrive gli strumenti firewall contenuti in `firedog-package/`.
