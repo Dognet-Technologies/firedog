@@ -82,8 +82,9 @@ else
     echo -e "${GREEN}[1/7]${NC} zypper deps"
     zypper --non-interactive --quiet refresh
     # no iptables-persistent on SUSE: boot persistence is handled by firewall-fm.service
+    # util-linux-systemd: provides `logger`, used by the firedog-cron jobs
     zypper --non-interactive install --no-recommends \
-        iptables python3 tcpdump logrotate cronie curl
+        iptables python3 tcpdump logrotate cronie curl util-linux-systemd
     # ulogd lives in the security:netfilter OBS repo on Leap/SLES (not in the
     # main repos); there the pcap output plugin is a separate subpackage
     install_ulogd() {
