@@ -83,12 +83,28 @@ else
     zypper --non-interactive --quiet refresh
     # no iptables-persistent on SUSE: boot persistence is handled by firewall-fm.service
     zypper --non-interactive install --no-recommends \
-        iptables python3 tcpdump logrotate cronie
-    # ulogd package is named ulogd2 or ulogd depending on repo/release
-    zypper --non-interactive install --no-recommends ulogd2 2>/dev/null || \
-        zypper --non-interactive install --no-recommends ulogd || {
-            echo -e "${RED}[ERROR]${NC} ulogd2/ulogd package not found (add the security:netfilter repo?)"; exit 1;
+        iptables python3 tcpdump logrotate cronie curl
+    # ulogd lives in the security:netfilter OBS repo on Leap/SLES (not in the
+    # main repos); there the pcap output plugin is a separate subpackage
+    install_ulogd() {
+        zypper --non-interactive install --no-recommends ulogd ulogd-pcap 2>/dev/null || \
+        zypper --non-interactive install --no-recommends ulogd2 2>/dev/null
+    }
+    if ! install_ulogd; then
+        for obs_target in "${VERSION_ID:-}" "openSUSE_Leap_${VERSION_ID:-}" "openSUSE_Tumbleweed"; do
+            [[ -n "$obs_target" ]] || continue
+            repo_url="https://download.opensuse.org/repositories/security:/netfilter/${obs_target}/security:netfilter.repo"
+            if curl -fsI "$repo_url" &>/dev/null; then
+                echo -e "${CYAN}  [info]${NC} adding OBS repo security:netfilter (${obs_target}) for ulogd"
+                zypper --non-interactive addrepo -f "$repo_url" 2>/dev/null || true
+                zypper --non-interactive --gpg-auto-import-keys refresh
+                break
+            fi
+        done
+        install_ulogd || {
+            echo -e "${RED}[ERROR]${NC} ulogd package not found (security:netfilter repo unavailable for this release)"; exit 1;
         }
+    fi
     # cron.d support needs the cron daemon running (not enabled by default on SUSE)
     systemctl enable --now cron
 fi
@@ -127,6 +143,14 @@ ln -sfn "${BASE_DIR}/bin/firewall-init.sh" /usr/local/sbin/firewall-init.sh
 # ── 4/7 configs -> /opt + symlinks where OS daemons read them ────────────────
 echo -e "${GREEN}[4/7]${NC} configs"
 install -m 0644 "${SCRIPT_DIR}/file_config/ulogd.conf"                "${BASE_DIR}/conf/ulogd.conf"
+# ulogd.conf ships with Debian multiarch plugin paths: rewrite them to the
+# plugin dir that actually exists on this system (SUSE uses /usr/lib64/ulogd)
+for plugin_dir in /usr/lib/x86_64-linux-gnu/ulogd /usr/lib64/ulogd /usr/lib/ulogd; do
+    if [[ -e "${plugin_dir}/ulogd_inppkt_NFLOG.so" ]]; then
+        sed -i "s|/usr/lib/x86_64-linux-gnu/ulogd|${plugin_dir}|g" "${BASE_DIR}/conf/ulogd.conf"
+        break
+    fi
+done
 install -m 0644 "${SCRIPT_DIR}/file_config/firewall-pcap-logrotate"   "${BASE_DIR}/conf/firewall-pcap-logrotate"
 install -m 0644 "${SCRIPT_DIR}/file_config/custom_rules.conf.example" "${BASE_DIR}/conf/custom_rules.conf.example"
 install -m 0644 "${SCRIPT_DIR}/file_config/firedog-cron"              "${BASE_DIR}/conf/firedog-cron"
@@ -161,8 +185,10 @@ else
 fi
 
 # ── 6/7 AppArmor (best-effort) ──────────────────────────────────────────────
+# the parser alone is not enough: the kernel must have AppArmor active
+# (e.g. openSUSE Leap 16 ships apparmor_parser but runs SELinux by default)
 echo -e "${GREEN}[6/7]${NC} apparmor (best-effort)"
-if command -v apparmor_parser &>/dev/null; then
+if command -v apparmor_parser &>/dev/null && [[ -d /sys/kernel/security/apparmor ]]; then
     ln -sfn "${BASE_DIR}/conf/apparmor-firewall-manager" /etc/apparmor.d/usr.local.bin.firewall-manager
     apparmor_parser -r /etc/apparmor.d/usr.local.bin.firewall-manager 2>/dev/null || \
         echo -e "${YELLOW}  [warn]${NC} apparmor reload failed (non-fatal)"
@@ -188,8 +214,11 @@ else
         if $FIREWALLD_ACTIVE; then
             systemctl disable --now firewalld
         fi
+        # enable before init: if the session dies in the DROP window (remote
+        # installs) the unit is already registered for the next boot
+        systemctl enable firewall-fm
         /usr/local/sbin/firewall-init.sh
-        systemctl enable --now firewall-fm
+        systemctl start firewall-fm
     else
         echo -e "${YELLOW}      skipped. activate later: systemctl enable --now firewall-fm${NC}"
     fi
