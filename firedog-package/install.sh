@@ -32,6 +32,8 @@
 # The new Rust dog-agent installs separately via its own .deb under /usr/bin/dog-agent
 # and talks to the master over WebSocket — there is no SSH pull anymore.
 #
+# Supported distros: Debian/Ubuntu (apt) and openSUSE/SLES (zypper).
+#
 # Usage:  sudo ./install.sh [--skip-init]
 #
 
@@ -49,18 +51,59 @@ for arg in "$@"; do
 done
 
 [[ $EUID -eq 0 ]] || { echo -e "${RED}[ERROR]${NC} root required"; exit 1; }
-grep -Eiq 'debian|ubuntu' /etc/os-release || { echo -e "${YELLOW}[WARN]${NC} non-Debian system, aborting"; exit 1; }
+
+# ── distro detection (debian family / suse family) ──────────────────────────
+[[ -r /etc/os-release ]] || { echo -e "${RED}[ERROR]${NC} /etc/os-release missing"; exit 1; }
+. /etc/os-release
+OS_FAMILY=""
+for os_id in ${ID:-} ${ID_LIKE:-}; do
+    case "$os_id" in
+        debian|ubuntu)          OS_FAMILY="debian"; break ;;
+        *suse*|sles)            OS_FAMILY="suse";   break ;;
+    esac
+done
+[[ -n "$OS_FAMILY" ]] || {
+    echo -e "${YELLOW}[WARN]${NC} unsupported distro '${ID:-?}' (supported: Debian/Ubuntu, openSUSE/SLES), aborting"
+    exit 1
+}
 
 BASE_DIR="/opt/sentinelsuite/firedog"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo -e "${GREEN}== FireDog target install ==${NC} base=${BASE_DIR}"
+echo -e "${GREEN}== FireDog target install ==${NC} base=${BASE_DIR} distro=${ID:-?} (${OS_FAMILY})"
 
 # ── 1/7 packages ─────────────────────────────────────────────────────────────
-echo -e "${GREEN}[1/7]${NC} apt deps"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq iptables iptables-persistent ulogd2 python3 tcpdump logrotate
+if [[ "$OS_FAMILY" == "debian" ]]; then
+    echo -e "${GREEN}[1/7]${NC} apt deps"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq iptables iptables-persistent ulogd2 python3 tcpdump logrotate cron
+else
+    echo -e "${GREEN}[1/7]${NC} zypper deps"
+    zypper --non-interactive --quiet refresh
+    # no iptables-persistent on SUSE: boot persistence is handled by firewall-fm.service
+    zypper --non-interactive install --no-recommends \
+        iptables python3 tcpdump logrotate cronie
+    # ulogd package is named ulogd2 or ulogd depending on repo/release
+    zypper --non-interactive install --no-recommends ulogd2 2>/dev/null || \
+        zypper --non-interactive install --no-recommends ulogd || {
+            echo -e "${RED}[ERROR]${NC} ulogd2/ulogd package not found (add the security:netfilter repo?)"; exit 1;
+        }
+    # cron.d support needs the cron daemon running (not enabled by default on SUSE)
+    systemctl enable --now cron
+fi
+
+# resolve ulogd unit name (ulogd2.service on Debian, ulogd.service on SUSE)
+ULOGD_SVC="ulogd2"
+systemctl cat ulogd2.service &>/dev/null || \
+    { systemctl cat ulogd.service &>/dev/null && ULOGD_SVC="ulogd"; }
+
+# firewalld conflicts with the raw-iptables setup (openSUSE enables it by default)
+FIREWALLD_ACTIVE=false
+if systemctl is-active --quiet firewalld 2>/dev/null; then
+    FIREWALLD_ACTIVE=true
+    echo -e "${YELLOW}  [warn]${NC} firewalld is active: it will be disabled when the FireDog firewall is activated"
+fi
 
 # ── 2/7 directory tree ───────────────────────────────────────────────────────
 echo -e "${GREEN}[2/7]${NC} tree ${BASE_DIR}"
@@ -97,14 +140,16 @@ fi
 ln -sfn "${BASE_DIR}/conf/ulogd.conf"              /etc/ulogd.conf
 ln -sfn "${BASE_DIR}/conf/firewall-pcap-logrotate" /etc/logrotate.d/firewall-pcap
 ln -sfn "${BASE_DIR}/conf/firewall-fm.service"     /etc/systemd/system/firewall-fm.service
-install -d -m 0750 -o root -g adm /var/log/ulogd
+# adm group does not exist on every SUSE install: fall back to root
+LOG_GRP="root"; getent group adm &>/dev/null && LOG_GRP="adm"
+install -d -m 0750 -o root -g "$LOG_GRP" /var/log/ulogd
 
 # /etc/firewall/custom_rules.conf seed (only on first install)
 [[ -f /etc/firewall/custom_rules.conf ]] || \
     install -m 0644 "${BASE_DIR}/conf/custom_rules.conf.example" /etc/firewall/custom_rules.conf
 
 systemctl daemon-reload
-systemctl enable --now ulogd2
+systemctl enable --now "$ULOGD_SVC"
 
 # ── 5/7 cron (only if microcyber exists) ─────────────────────────────────────
 echo -e "${GREEN}[5/7]${NC} cron"
@@ -128,12 +173,21 @@ fi
 # ── 7/7 init firewall (interactive) ─────────────────────────────────────────
 if $SKIP_INIT; then
     echo -e "${YELLOW}[7/7]${NC} --skip-init: firewall NOT activated"
+    if $FIREWALLD_ACTIVE; then
+        echo -e "${CYAN}      run: sudo systemctl disable --now firewalld${NC}"
+    fi
     echo -e "${CYAN}      run: sudo firewall-init.sh && systemctl enable --now firewall-fm${NC}"
 else
     echo -e "${GREEN}[7/7]${NC} firewall init"
     echo -e "${YELLOW}      policy DROP will be applied. ensure console/serial access.${NC}"
+    if $FIREWALLD_ACTIVE; then
+        echo -e "${YELLOW}      firewalld will be disabled and replaced by firewall-fm.${NC}"
+    fi
     read -rp "      proceed? (yes/no): " confirm
     if [[ "$confirm" == "yes" ]]; then
+        if $FIREWALLD_ACTIVE; then
+            systemctl disable --now firewalld
+        fi
         /usr/local/sbin/firewall-init.sh
         systemctl enable --now firewall-fm
     else
@@ -146,5 +200,6 @@ echo -e "${GREEN}== done ==${NC}"
 echo "  base dir:       ${BASE_DIR}"
 echo "  CLI:            firewall-manager --help"
 echo "  firewall svc:   systemctl status firewall-fm"
+echo "  ulogd svc:      systemctl status ${ULOGD_SVC}"
 echo "  custom rules:   /etc/firewall/custom_rules.conf"
 echo "  pcap logs:      /var/log/ulogd/"
