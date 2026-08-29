@@ -46,7 +46,8 @@ SSH (chiave configurata in Settings → SSH Keys):
 5. verifica l'installazione e configura il cron.
 
 Requisiti sul target: Debian/Ubuntu, utente `microcyber` con la chiave
-pubblica del master autorizzata.
+pubblica del master autorizzata. Per i target openSUSE/SLES usa il
+Metodo B (il push dal master usa `apt` via SSH).
 
 ## Metodo B — Bootstrap da GitHub (curl | bash)
 
@@ -85,6 +86,13 @@ di attivazione firewall viene letta da `/dev/tty` oppure viene forzato
 cron, apparmor): né il server né il dog-agent, che ha il suo pacchetto
 dedicato (vedi sotto). È idempotente: si può rilanciare per aggiornare.
 
+Distro supportate da `install.sh`:
+
+| Famiglia | Pacchetti | Note |
+|---|---|---|
+| **Debian/Ubuntu** | `apt`: iptables, iptables-persistent, ulogd2, python3, tcpdump, logrotate, cron | unità ulogd: `ulogd2.service` |
+| **openSUSE/SLES** | `zypper`: iptables, ulogd2 (o ulogd), python3, tcpdump, logrotate, cronie | unità ulogd: `ulogd.service`; niente iptables-persistent (persistenza via `firewall-fm.service`); se **firewalld** è attivo viene disabilitato all'attivazione del firewall FireDog (con conferma) |
+
 > **Attenzione**: l'attivazione del firewall applica policy **DROP** su
 > INPUT/OUTPUT. Assicurati di avere accesso console/seriale prima di
 > confermare, o usa `--skip-init` e attiva dopo con
@@ -108,6 +116,17 @@ Il pacchetto installa `/usr/bin/dog-agent`, seeda
 `/etc/dog-agent/agent.conf.example` e registra l'unità systemd
 `dog-agent.service` (non abilitata finché la config non è pronta).
 `install.sh` degli strumenti firewall **non** tocca l'agent.
+
+Su **openSUSE/SLES** (niente `dpkg`) il binario è statico (musl) e si
+installa a mano dagli stessi artefatti del repo `dog_agent`:
+
+```bash
+sudo install -m 0755 dog-agent /usr/bin/dog-agent
+sudo install -d -m 0750 /etc/dog-agent
+sudo install -m 0640 config.example.toml /etc/dog-agent/agent.conf
+sudo install -m 0644 dog-agent.service /usr/lib/systemd/system/dog-agent.service
+sudo systemctl daemon-reload
+```
 
 ## Connessione e autenticazione agent ↔ master (pairing)
 
@@ -172,7 +191,7 @@ UI (Pairing sessions).
 ```bash
 firewall-manager --list            # CLI risponde
 systemctl status firewall-fm       # firewall persistente (dopo l'init)
-systemctl status ulogd2            # logging PCAP
+systemctl status ulogd2            # logging PCAP (su openSUSE: ulogd)
 systemctl status dog-agent         # agent connesso al master
 ls /opt/sentinelsuite/firedog      # layout base
 ```
