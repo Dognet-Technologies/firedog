@@ -34,6 +34,7 @@ from .serializers import (
 )
 from targets.models import Target
 from audit.models import AuditLog
+from .services import record_blocked_ip, unblock_ip as unblock_ip_service
 
 logger = logging.getLogger("firedog.targets")
 
@@ -298,64 +299,11 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
             return BlockedIPStatsSerializer
         return BlockedIPSerializer
 
-    # Mapping reason → (severity, threat_score) per il ThreatLog companion.
-    # Un blocco "manual" non genera ThreatLog: non c'è una minaccia rilevata,
-    # è solo una decisione dell'operatore. Le altre reason corrispondono a
-    # minacce reali che devono apparire in /api/threats/ per coerenza con la
-    # Dashboard (Recent Threats, Threat Distribution, Activity Timeline).
-    THREAT_FROM_REASON = {
-        "ddos":            ("critical", 95),
-        "syn_flood":       ("critical", 90),
-        "malware":         ("critical", 95),
-        "brute_force":     ("high",     80),
-        "port_scan":       ("high",     70),
-        "threat_detected": ("high",     75),
-        "other":           ("low",      30),
-    }
-
     def perform_create(self, serializer):
         """Crea blocco con logging audit e ThreatLog companion se non-manual."""
         block = serializer.save()
-
-        # Log audit
-        AuditLog.log_action(
-            action="create",
-            description=f"Blocked IP {block.ip_address} (reason: {block.block_reason})",
-            user=self.request.user,
-            content_object=block,
-            ip_address=self.request.META.get("REMOTE_ADDR"),
-            new_values={
-                "ip_address": block.ip_address,
-                "target": block.target.id,
-                "reason": block.block_reason,
-            },
-        )
-
-        # ThreatLog companion. Senza questo, /api/threats/ resterebbe vuoto
-        # per i blocchi e l'utente non vedrebbe il "brute_force" sul dettaglio
-        # del target né nei conteggi della Dashboard.
-        if block.block_reason != "manual":
-            from threats.models import ThreatLog
-            sev, score = self.THREAT_FROM_REASON.get(
-                block.block_reason, ("medium", 50)
-            )
-            reason_label = block.get_block_reason_display()
-            ThreatLog.objects.create(
-                target=block.target,
-                source_ip=block.ip_address,
-                threat_score=score,
-                severity=sev,
-                packet_count=block.packet_count or 1,
-                reasons=[block.block_reason],
-                description=(
-                    block.description or
-                    f"{reason_label} detected from {block.ip_address}"
-                ),
-                is_blocked=True,
-            )
-
-        logger.warning(
-            f"IP blocked: {block.ip_address} on target {block.target.id} - Reason: {block.block_reason}"
+        record_blocked_ip(
+            block, user=self.request.user, ip_address=self.request.META.get("REMOTE_ADDR")
         )
 
     def perform_destroy(self, instance):
@@ -384,23 +332,12 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
         """
         block = self.get_object()
 
-        if not block.is_active:
+        if not unblock_ip_service(
+            block, user=request.user, ip_address=request.META.get("REMOTE_ADDR")
+        ):
             return Response(
                 {"error": "IP is already unblocked"}, status=status.HTTP_400_BAD_REQUEST
             )
-
-        block.unblock(unblocked_by=request.user.username)
-
-        # Log audit
-        AuditLog.log_action(
-            action="update",
-            description=f"Unblocked IP {block.ip_address}",
-            user=request.user,
-            content_object=block,
-            ip_address=request.META.get("REMOTE_ADDR"),
-        )
-
-        logger.info(f"IP unblocked: {block.ip_address} on target {block.target.id}")
 
         serializer = self.get_serializer(block)
         return Response(serializer.data)

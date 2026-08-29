@@ -1,5 +1,5 @@
 """
-Catalogo tool MCP di FireDog — phase 1, solo lettura (contratto §4/§6).
+Catalogo tool MCP di FireDog — phase 1 (lettura) + phase 2 (scrittura, contratto §4/§6).
 
 Convenzioni (contratto MCP §5):
 - collezioni:   {"<plural>": [...], "total": n, "limit": l, "offset": o}
@@ -7,14 +7,26 @@ Convenzioni (contratto MCP §5):
 - non trovato:  {"<singular>": null, "found": false}  (non è un errore)
 - limit default 50, hard max 200; offset 0-based
 - filtri multi-valore come stringa separata da virgole (es. "severities": "critical,high")
+
+I tool di scrittura (create_rule, delete_rule, block_ip, unblock_ip) richiedono
+che l'utente proprietario della API key sia superuser o nel gruppo "Admin"
+(stesso RBAC di IsAdminUser sulle REST view equivalenti — la chiave MCP
+impersona l'utente, i permessi non vengono allargati).
 """
 
 import logging
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_ipv46_address
+from django.db import IntegrityError
 from django.db.models import Count, Max
 
+from audit.models import AuditLog
 from rules.models import FirewallRule
+from rules.services import dispatch_add_rule, dispatch_remove_rule
 from targets.models import Alert, BlockedIP, Target, WhitelistEntry
+from targets.services import record_blocked_ip
+from targets.services import unblock_ip as unblock_ip_service
 from threats.models import ThreatLog
 
 logger = logging.getLogger(__name__)
@@ -25,6 +37,26 @@ MAX_LIMIT = 200
 
 class ToolParamError(Exception):
     """Parametri del tool non validi → JSON-RPC -32602 (Invalid params)."""
+
+
+class ToolPermissionError(Exception):
+    """Ruolo insufficiente per il tool → risultato tools/call con isError: true."""
+
+
+def _require_admin(user):
+    """I tool di scrittura richiedono lo stesso RBAC di IsAdminUser (accounts.permissions)."""
+    if user.is_superuser or user.groups.filter(name="Admin").exists():
+        return
+    raise ToolPermissionError(
+        "Permesso negato: questo tool richiede il ruolo Admin."
+    )
+
+
+def _validate_ip(label, value):
+    try:
+        validate_ipv46_address(value)
+    except DjangoValidationError:
+        raise ToolParamError(f"{label} non è un IP valido: {value}.")
 
 
 def _parse_pagination(arguments):
@@ -349,6 +381,179 @@ def get_policy_summary(user, arguments):
 
 
 # ---------------------------------------------------------------------------
+# Handler dei tool di scrittura (phase 2)
+# ---------------------------------------------------------------------------
+
+
+def _get_target_or_raise(arguments):
+    try:
+        target_id = int(arguments["target_id"])
+    except (TypeError, ValueError):
+        raise ToolParamError("target_id deve essere un intero.")
+    target = Target.objects.filter(id=target_id).first()
+    if target is None:
+        raise ToolParamError(f"Target {target_id} non trovato.")
+    return target
+
+
+def create_rule(user, arguments):
+    _require_admin(user)
+    target = _get_target_or_raise(arguments)
+
+    chain = str(arguments["chain"]).upper()
+    if chain not in dict(FirewallRule.CHAIN_CHOICES):
+        raise ToolParamError(
+            f"chain non valida: {chain}. Valori ammessi: "
+            f"{', '.join(c for c, _ in FirewallRule.CHAIN_CHOICES)}."
+        )
+
+    protocol = str(arguments.get("protocol", "tcp")).lower()
+    if protocol not in dict(FirewallRule.PROTOCOL_CHOICES):
+        raise ToolParamError(
+            f"protocol non valido: {protocol}. Valori ammessi: "
+            f"{', '.join(c for c, _ in FirewallRule.PROTOCOL_CHOICES)}."
+        )
+
+    action = str(arguments.get("action", "ACCEPT")).upper()
+    if action not in dict(FirewallRule.ACTION_CHOICES):
+        raise ToolParamError(
+            f"action non valida: {action}. Valori ammessi: "
+            f"{', '.join(c for c, _ in FirewallRule.ACTION_CHOICES)}."
+        )
+
+    port = arguments.get("port")
+    if port is not None:
+        try:
+            port = int(port)
+        except (TypeError, ValueError):
+            raise ToolParamError("port deve essere un intero.")
+        if not (1 <= port <= 65535):
+            raise ToolParamError("port deve essere compreso tra 1 e 65535.")
+
+    source_ip = arguments.get("source_ip") or None
+    dest_ip = arguments.get("dest_ip") or None
+    if source_ip:
+        _validate_ip("source_ip", source_ip)
+    if dest_ip:
+        _validate_ip("dest_ip", dest_ip)
+
+    comment = str(arguments.get("comment", ""))[:256]
+
+    rule = FirewallRule.objects.create(
+        target=target,
+        chain=chain,
+        protocol=protocol,
+        port=port,
+        source_ip=source_ip,
+        dest_ip=dest_ip,
+        action=action,
+        comment=comment,
+        is_custom=True,
+        is_synced=False,
+    )
+    dispatched = dispatch_add_rule(rule)
+
+    AuditLog.log_action(
+        action="create",
+        description=f"MCP: creata regola {rule.rule_description} su {target}",
+        user=user,
+        content_object=rule,
+        new_values={
+            "chain": chain, "protocol": protocol, "port": port,
+            "source_ip": source_ip, "dest_ip": dest_ip, "action": action,
+        },
+    )
+    logger.info(
+        "MCP create_rule: rule %s creata da %s su target %s (dispatched=%s)",
+        rule.id, user, target.id, dispatched,
+    )
+    return {"rule": _rule_dict(rule), "dispatched_to_agent": dispatched}
+
+
+def delete_rule(user, arguments):
+    _require_admin(user)
+    try:
+        rule_id = int(arguments["id"])
+    except (TypeError, ValueError):
+        raise ToolParamError("id deve essere un intero.")
+
+    rule = FirewallRule.objects.select_related("target").filter(id=rule_id).first()
+    if rule is None:
+        return {"deleted": False, "found": False}
+
+    target = rule.target
+    rule_number = rule.rule_number
+    chain = rule.chain
+    rule_desc = rule.rule_description
+    rule.delete()
+    dispatched = dispatch_remove_rule(target, chain, rule_number)
+
+    AuditLog.log_action(
+        action="delete",
+        description=f"MCP: eliminata regola {rule_desc} su {target}",
+        user=user,
+        old_values={"id": rule_id, "chain": chain, "rule_number": rule_number},
+    )
+    logger.info(
+        "MCP delete_rule: rule %s eliminata da %s (dispatched=%s)",
+        rule_id, user, dispatched,
+    )
+    return {"deleted": True, "found": True, "dispatched_to_agent": dispatched}
+
+
+def block_ip(user, arguments):
+    _require_admin(user)
+    target = _get_target_or_raise(arguments)
+
+    ip_address = arguments.get("ip_address")
+    if not ip_address:
+        raise ToolParamError("ip_address è obbligatorio.")
+    _validate_ip("ip_address", ip_address)
+
+    block_reason = str(arguments.get("block_reason", "manual"))
+    if block_reason not in dict(BlockedIP.BLOCK_REASON_CHOICES):
+        raise ToolParamError(
+            f"block_reason non valido: {block_reason}. Valori ammessi: "
+            f"{', '.join(c for c, _ in BlockedIP.BLOCK_REASON_CHOICES)}."
+        )
+
+    try:
+        block = BlockedIP.objects.create(
+            target=target,
+            ip_address=ip_address,
+            block_reason=block_reason,
+            description=str(arguments.get("description", "")),
+            blocked_by=f"mcp:{user.username}",
+            threat_score=int(arguments.get("threat_score", 0) or 0),
+        )
+    except IntegrityError:
+        raise ToolParamError(
+            f"{ip_address} è già bloccato su questo target (record esistente)."
+        )
+
+    record_blocked_ip(block, user=user)
+    logger.info(
+        "MCP block_ip: %s bloccato su target %s da %s", ip_address, target.id, user
+    )
+    return {"blocked_ip": _blocked_ip_dict(block)}
+
+
+def unblock_ip(user, arguments):
+    _require_admin(user)
+    try:
+        block_id = int(arguments["id"])
+    except (TypeError, ValueError):
+        raise ToolParamError("id deve essere un intero.")
+
+    block = BlockedIP.objects.filter(id=block_id).first()
+    if block is None:
+        return {"unblocked": False, "found": False}
+
+    unblocked = unblock_ip_service(block, user=user)
+    return {"unblocked": unblocked, "found": True, "blocked_ip": _blocked_ip_dict(block)}
+
+
+# ---------------------------------------------------------------------------
 # Registro dei tool esposti da tools/list e tools/call
 # ---------------------------------------------------------------------------
 
@@ -528,6 +733,101 @@ TOOLS = [
             "additionalProperties": False,
         },
         "handler": get_policy_summary,
+    },
+    {
+        "name": "create_rule",
+        "description": (
+            "[Admin] Crea una regola firewall custom su un target e la invia "
+            "all'agent via WebSocket (se connesso, altrimenti resta is_synced=false "
+            "in attesa di riconciliazione). Richiede target_id e chain; protocol "
+            "default tcp, action default ACCEPT."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target_id": {"type": "integer", "description": "ID del target"},
+                "chain": {
+                    "type": "string",
+                    "description": "Chain iptables (INPUT/OUTPUT/FORWARD)",
+                },
+                "protocol": {
+                    "type": "string",
+                    "description": "Protocollo (tcp/udp/icmp/all), default tcp",
+                },
+                "port": {"type": "integer", "description": "Porta di destinazione (1-65535)"},
+                "source_ip": {"type": "string", "description": "IP sorgente"},
+                "dest_ip": {"type": "string", "description": "IP destinazione"},
+                "action": {
+                    "type": "string",
+                    "description": "Azione (ACCEPT/DROP/REJECT), default ACCEPT",
+                },
+                "comment": {"type": "string", "description": "Commento descrittivo"},
+            },
+            "required": ["target_id", "chain"],
+            "additionalProperties": False,
+        },
+        "handler": create_rule,
+    },
+    {
+        "name": "delete_rule",
+        "description": (
+            "[Admin] Elimina una regola firewall per id e chiede all'agent di "
+            "rimuoverla dal target (se connesso). found=false se l'id non esiste "
+            "(non è un errore)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "integer", "description": "ID della regola"}},
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+        "handler": delete_rule,
+    },
+    {
+        "name": "block_ip",
+        "description": (
+            "[Admin] Registra il blocco di un IP su un target: crea il record "
+            "BlockedIP e, se block_reason non è 'manual', un ThreatLog companion. "
+            "Nota: è un record di tracking/audit, non applica di per sé una regola "
+            "iptables sul target — abbinare a create_rule (action=DROP) per "
+            "l'enforcement effettivo."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target_id": {"type": "integer", "description": "ID del target"},
+                "ip_address": {"type": "string", "description": "IP da bloccare"},
+                "block_reason": {
+                    "type": "string",
+                    "description": (
+                        "Motivo (manual/threat_detected/port_scan/brute_force/"
+                        "syn_flood/ddos/malware/other), default manual"
+                    ),
+                },
+                "description": {"type": "string", "description": "Descrizione del blocco"},
+                "threat_score": {
+                    "type": "integer",
+                    "description": "Score minaccia 0-100, default 0",
+                },
+            },
+            "required": ["target_id", "ip_address"],
+            "additionalProperties": False,
+        },
+        "handler": block_ip,
+    },
+    {
+        "name": "unblock_ip",
+        "description": (
+            "[Admin] Sblocca un BlockedIP per id (is_active=false). "
+            "unblocked=false se era già sbloccato, found=false se l'id non esiste."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "integer", "description": "ID del BlockedIP"}},
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+        "handler": unblock_ip,
     },
 ]
 

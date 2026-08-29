@@ -6,13 +6,13 @@ tool phase-1 e semantica errori (contratto §2-§6).
 import json
 from datetime import timedelta
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from rules.models import FirewallRule
-from targets.models import Target
+from targets.models import BlockedIP, Target
 
 from .models import MCPAPIKey
 
@@ -267,6 +267,213 @@ class MCPToolTests(TestCase):
         self.assertEqual(payload["rules"]["total"], 2)
         self.assertEqual(payload["rules"]["unsynced"], 1)
         self.assertEqual(payload["exposed_ports"], [22])
+
+
+class MCPWriteToolTests(TestCase):
+    """Tool di scrittura (phase 2): permessi Admin, create/delete_rule, block/unblock_ip."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin_group, _ = Group.objects.get_or_create(name="Admin")
+
+        self.admin = User.objects.create_user("admin", password="x")
+        self.admin.groups.add(self.admin_group)
+        _, self.admin_key = MCPAPIKey.create_for_user(self.admin, "admin-key")
+
+        self.reporter = User.objects.create_user("reporter", password="x")
+        _, self.reporter_key = MCPAPIKey.create_for_user(self.reporter, "reporter-key")
+
+        self.target = Target.objects.create(
+            ip_address="192.168.178.200", hostname="app", status="online"
+        )
+        self.rule = FirewallRule.objects.create(
+            target=self.target,
+            chain="INPUT",
+            rule_number=1,
+            protocol="tcp",
+            port=22,
+            action="ACCEPT",
+            is_synced=True,
+        )
+        self.block = BlockedIP.objects.create(
+            target=self.target,
+            ip_address="203.0.113.9",
+            block_reason="manual",
+            blocked_by="test",
+        )
+
+    def _post(self, token, name, arguments=None):
+        return self.client.post(
+            MCP_URL,
+            data=json.dumps(
+                rpc("tools/call", {"name": name, "arguments": arguments or {}})
+            ),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+    def _call_ok(self, token, name, arguments=None):
+        response = self._post(token, name, arguments)
+        self.assertEqual(response.status_code, 200, response.content)
+        result = response.json()["result"]
+        self.assertFalse(result["isError"], result)
+        return json.loads(result["content"][0]["text"])
+
+    def _call_error(self, token, name, arguments=None, rpc_error=False):
+        response = self._post(token, name, arguments)
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        if rpc_error:
+            return payload["error"]
+        result = payload["result"]
+        self.assertTrue(result["isError"], result)
+        return result["content"][0]["text"]
+
+    # -- Permessi ------------------------------------------------------
+
+    def test_create_rule_requires_admin(self):
+        message = self._call_error(
+            self.reporter_key,
+            "create_rule",
+            {"target_id": self.target.id, "chain": "INPUT", "port": 8080},
+        )
+        self.assertIn("Admin", message)
+        self.assertEqual(FirewallRule.objects.filter(target=self.target).count(), 1)
+
+    def test_delete_rule_requires_admin(self):
+        self._call_error(self.reporter_key, "delete_rule", {"id": self.rule.id})
+        self.assertTrue(FirewallRule.objects.filter(id=self.rule.id).exists())
+
+    def test_block_ip_requires_admin(self):
+        self._call_error(
+            self.reporter_key,
+            "block_ip",
+            {"target_id": self.target.id, "ip_address": "203.0.113.50"},
+        )
+        self.assertFalse(
+            BlockedIP.objects.filter(ip_address="203.0.113.50").exists()
+        )
+
+    def test_unblock_ip_requires_admin(self):
+        self._call_error(self.reporter_key, "unblock_ip", {"id": self.block.id})
+        self.block.refresh_from_db()
+        self.assertTrue(self.block.is_active)
+
+    # -- create_rule -----------------------------------------------------
+
+    def test_create_rule_success(self):
+        payload = self._call_ok(
+            self.admin_key,
+            "create_rule",
+            {
+                "target_id": self.target.id,
+                "chain": "INPUT",
+                "port": 8080,
+                "protocol": "tcp",
+                "action": "DROP",
+                "comment": "test",
+            },
+        )
+        self.assertEqual(payload["rule"]["port"], 8080)
+        self.assertEqual(payload["rule"]["action"], "DROP")
+        self.assertFalse(payload["dispatched_to_agent"])  # nessun agent connesso nei test
+        rule = FirewallRule.objects.get(id=payload["rule"]["id"])
+        self.assertTrue(rule.is_custom)
+        self.assertFalse(rule.is_synced)
+
+    def test_create_rule_unknown_target(self):
+        error = self._call_error(
+            self.admin_key, "create_rule", {"target_id": 999999, "chain": "INPUT"},
+            rpc_error=True,
+        )
+        self.assertEqual(error["code"], -32602)
+
+    def test_create_rule_invalid_chain(self):
+        error = self._call_error(
+            self.admin_key,
+            "create_rule",
+            {"target_id": self.target.id, "chain": "BOGUS"},
+            rpc_error=True,
+        )
+        self.assertEqual(error["code"], -32602)
+
+    def test_create_rule_invalid_port_range(self):
+        error = self._call_error(
+            self.admin_key,
+            "create_rule",
+            {"target_id": self.target.id, "chain": "INPUT", "port": 70000},
+            rpc_error=True,
+        )
+        self.assertEqual(error["code"], -32602)
+
+    # -- delete_rule -------------------------------------------------------
+
+    def test_delete_rule_success(self):
+        payload = self._call_ok(self.admin_key, "delete_rule", {"id": self.rule.id})
+        self.assertTrue(payload["deleted"])
+        self.assertTrue(payload["found"])
+        self.assertFalse(FirewallRule.objects.filter(id=self.rule.id).exists())
+
+    def test_delete_rule_not_found_is_not_an_error(self):
+        payload = self._call_ok(self.admin_key, "delete_rule", {"id": 999999})
+        self.assertFalse(payload["deleted"])
+        self.assertFalse(payload["found"])
+
+    # -- block_ip / unblock_ip ----------------------------------------------
+
+    def test_block_ip_creates_threat_log_for_non_manual_reason(self):
+        payload = self._call_ok(
+            self.admin_key,
+            "block_ip",
+            {
+                "target_id": self.target.id,
+                "ip_address": "203.0.113.50",
+                "block_reason": "brute_force",
+            },
+        )
+        self.assertEqual(payload["blocked_ip"]["ip_address"], "203.0.113.50")
+        from threats.models import ThreatLog
+
+        self.assertTrue(
+            ThreatLog.objects.filter(source_ip="203.0.113.50", severity="high").exists()
+        )
+
+    def test_block_ip_manual_reason_has_no_threat_log(self):
+        self._call_ok(
+            self.admin_key,
+            "block_ip",
+            {"target_id": self.target.id, "ip_address": "203.0.113.51"},
+        )
+        from threats.models import ThreatLog
+
+        self.assertFalse(
+            ThreatLog.objects.filter(source_ip="203.0.113.51").exists()
+        )
+
+    def test_block_ip_duplicate_on_same_target_is_param_error(self):
+        error = self._call_error(
+            self.admin_key,
+            "block_ip",
+            {"target_id": self.target.id, "ip_address": self.block.ip_address},
+            rpc_error=True,
+        )
+        self.assertEqual(error["code"], -32602)
+
+    def test_unblock_ip_success(self):
+        payload = self._call_ok(self.admin_key, "unblock_ip", {"id": self.block.id})
+        self.assertTrue(payload["unblocked"])
+        self.block.refresh_from_db()
+        self.assertFalse(self.block.is_active)
+
+    def test_unblock_ip_already_unblocked(self):
+        self.block.unblock(unblocked_by="x")
+        payload = self._call_ok(self.admin_key, "unblock_ip", {"id": self.block.id})
+        self.assertFalse(payload["unblocked"])
+        self.assertTrue(payload["found"])
+
+    def test_unblock_ip_not_found(self):
+        payload = self._call_ok(self.admin_key, "unblock_ip", {"id": 999999})
+        self.assertFalse(payload["found"])
 
 
 class MCPAPIKeyEndpointTests(TestCase):
