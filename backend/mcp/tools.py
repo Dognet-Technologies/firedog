@@ -24,7 +24,7 @@ from django.db.models import Count, Max
 from audit.models import AuditLog
 from rules.models import FirewallRule
 from rules.services import dispatch_add_rule, dispatch_remove_rule
-from targets.models import Alert, BlockedIP, Target, WhitelistEntry
+from targets.models import Alert, BlockedIP, FirewallStats, NetworkFlow, Target, WhitelistEntry
 from targets.services import record_blocked_ip
 from targets.services import unblock_ip as unblock_ip_service
 from threats.models import ThreatLog
@@ -185,6 +185,17 @@ def _threat_dict(threat):
     }
 
 
+def _threat_detail_dict(threat):
+    data = _threat_dict(threat)
+    data.update(
+        {
+            "reasons": threat.reasons,
+            "resolved_at": _iso(threat.resolved_at),
+        }
+    )
+    return data
+
+
 def _blocked_ip_dict(entry):
     return {
         "id": entry.id,
@@ -197,6 +208,44 @@ def _blocked_ip_dict(entry):
         "packet_count": entry.packet_count,
         "blocked_at": _iso(entry.blocked_at),
         "expires_at": _iso(entry.expires_at),
+    }
+
+
+def _traffic_stats_dict(stats):
+    return {
+        "id": stats.id,
+        "target_id": stats.target_id,
+        "target_hostname": stats.target.hostname,
+        "hostname": stats.hostname,
+        "os_version": stats.os_version,
+        "kernel_version": stats.kernel_version,
+        "uptime_seconds": stats.uptime_seconds,
+        "input_packets": stats.input_packets,
+        "output_packets": stats.output_packets,
+        "forward_packets": stats.forward_packets,
+        "dropped_input_packets": stats.dropped_input_packets,
+        "dropped_output_packets": stats.dropped_output_packets,
+        "pcap_input_dropped_bytes": stats.pcap_input_dropped_bytes,
+        "pcap_output_dropped_bytes": stats.pcap_output_dropped_bytes,
+        "protocols": stats.protocols,
+        "conntrack_count": stats.conntrack_count,
+        "conntrack_max": stats.conntrack_max,
+        "status": stats.status,
+        "collected_at": _iso(stats.collected_at),
+    }
+
+
+def _network_flow_dict(flow):
+    return {
+        "id": flow.id,
+        "target_id": flow.target_id,
+        "remote_ip": flow.remote_ip,
+        "country_code": flow.country_code,
+        "country_name": flow.country_name,
+        "times_seen": flow.times_seen,
+        "last_ports": flow.last_ports,
+        "first_seen": _iso(flow.first_seen),
+        "last_seen": _iso(flow.last_seen),
     }
 
 
@@ -327,6 +376,47 @@ def list_threats(user, arguments):
     return {"threats": threats, "total": total, "limit": limit, "offset": offset}
 
 
+def get_threat(user, arguments):
+    try:
+        threat_id = int(arguments["id"])
+    except (TypeError, ValueError):
+        raise ToolParamError("id deve essere un intero.")
+
+    threat = ThreatLog.objects.filter(id=threat_id).first()
+    if threat is None:
+        return {"threat": None, "found": False}
+    return {"threat": _threat_detail_dict(threat)}
+
+
+def resolve_threat(user, arguments):
+    _require_admin(user)
+    try:
+        threat_id = int(arguments["id"])
+    except (TypeError, ValueError):
+        raise ToolParamError("id deve essere un intero.")
+
+    threat = ThreatLog.objects.filter(id=threat_id).first()
+    if threat is None:
+        return {"resolved": False, "found": False}
+
+    already_resolved = threat.is_resolved
+    if not already_resolved:
+        threat.mark_resolved()
+        AuditLog.log_action(
+            action="update",
+            description=f"MCP: risolta minaccia da {threat.source_ip} su {threat.target}",
+            user=user,
+            content_object=threat,
+        )
+        logger.info("MCP resolve_threat: threat %s risolta da %s", threat_id, user)
+
+    return {
+        "resolved": not already_resolved,
+        "found": True,
+        "threat": _threat_detail_dict(threat),
+    }
+
+
 def list_blocked_ips(user, arguments):
     limit, offset = _parse_pagination(arguments)
     qs = BlockedIP.objects.order_by("-blocked_at")
@@ -344,6 +434,47 @@ def list_blocked_ips(user, arguments):
     total = qs.count()
     blocked = [_blocked_ip_dict(b) for b in qs[offset : offset + limit]]
     return {"blocked_ips": blocked, "total": total, "limit": limit, "offset": offset}
+
+
+def list_traffic_stats(user, arguments):
+    limit, offset = _parse_pagination(arguments)
+    qs = FirewallStats.objects.select_related("target").order_by("-collected_at")
+
+    if arguments.get("target_id"):
+        try:
+            qs = qs.filter(target_id=int(arguments["target_id"]))
+        except (TypeError, ValueError):
+            raise ToolParamError("target_id deve essere un intero.")
+    if arguments.get("status"):
+        qs = qs.filter(status=arguments["status"])
+
+    total = qs.count()
+    stats = [_traffic_stats_dict(s) for s in qs[offset : offset + limit]]
+    return {"traffic_stats": stats, "total": total, "limit": limit, "offset": offset}
+
+
+def list_network_flows(user, arguments):
+    limit, offset = _parse_pagination(arguments)
+    qs = NetworkFlow.objects.order_by("-last_seen")
+
+    if arguments.get("target_id"):
+        try:
+            qs = qs.filter(target_id=int(arguments["target_id"]))
+        except (TypeError, ValueError):
+            raise ToolParamError("target_id deve essere un intero.")
+    if arguments.get("country_code"):
+        qs = qs.filter(country_code=str(arguments["country_code"]).upper())
+    if arguments.get("remote_ip"):
+        qs = qs.filter(remote_ip=arguments["remote_ip"])
+    if arguments.get("min_times_seen"):
+        try:
+            qs = qs.filter(times_seen__gte=int(arguments["min_times_seen"]))
+        except (TypeError, ValueError):
+            raise ToolParamError("min_times_seen deve essere un intero.")
+
+    total = qs.count()
+    flows = [_network_flow_dict(f) for f in qs[offset : offset + limit]]
+    return {"network_flows": flows, "total": total, "limit": limit, "offset": offset}
 
 
 def get_policy_summary(user, arguments):
@@ -716,6 +847,34 @@ TOOLS = [
         "handler": list_threats,
     },
     {
+        "name": "get_threat",
+        "description": (
+            "Dettaglio di una singola minaccia per id: tutti i campi di list_threats più "
+            "reasons (motivi dello score) e resolved_at."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "integer", "description": "ID della minaccia"}},
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+        "handler": get_threat,
+    },
+    {
+        "name": "resolve_threat",
+        "description": (
+            "[Admin] Marca una minaccia come risolta (is_resolved=true, resolved_at=now). "
+            "Idempotente: resolved=false se era già risolta. found=false se l'id non esiste."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"id": {"type": "integer", "description": "ID della minaccia"}},
+            "required": ["id"],
+            "additionalProperties": False,
+        },
+        "handler": resolve_threat,
+    },
+    {
         "name": "list_blocked_ips",
         "description": (
             "Elenca gli IP bloccati sui target, ordinati per blocked_at discendente. "
@@ -733,6 +892,61 @@ TOOLS = [
             "additionalProperties": False,
         },
         "handler": list_blocked_ips,
+    },
+    {
+        "name": "list_traffic_stats",
+        "description": (
+            "Elenca gli snapshot periodici di traffico/volumi per target (una entry ogni "
+            "~5 minuti, prodotta da firewall-manager --export-json), ordinati per "
+            "collected_at discendente. Espone: input/output/forward_packets (contatori "
+            "cumulativi del kernel — il delta tra due snapshot dà la velocità), "
+            "dropped_input/output_packets, pcap_input/output_dropped_bytes (dimensione dei "
+            "file pcap del traffico droppato catturato), protocols (breakdown tcp/udp/icmp "
+            "in/out), conntrack_count/max, uptime, versione/OS/kernel. Filtri: target_id, "
+            "status."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target_id": {"type": "integer", "description": "Limita a un target"},
+                "status": {
+                    "type": "string",
+                    "description": "Stato generale del firewall riportato dallo snapshot",
+                },
+                **_pagination_properties(),
+            },
+            "additionalProperties": False,
+        },
+        "handler": list_traffic_stats,
+    },
+    {
+        "name": "list_network_flows",
+        "description": (
+            "Elenca i peer remoti pubblici osservati nel traffico di un target (aggregato "
+            "cumulativo dall'analisi del traffico dell'agent, no IP privati/loopback), "
+            "ordinati per last_seen discendente. Espone: remote_ip, country_code/name, "
+            "times_seen (frequenza di osservazione), last_ports (ultime porte remote viste), "
+            "first_seen, last_seen. Utile per individuare i talker più attivi. Filtri: "
+            "target_id, country_code, remote_ip, min_times_seen."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target_id": {"type": "integer", "description": "Limita a un target"},
+                "country_code": {
+                    "type": "string",
+                    "description": "ISO 3166-1 alpha-2 (es. IT, US)",
+                },
+                "remote_ip": {"type": "string", "description": "IP remoto esatto"},
+                "min_times_seen": {
+                    "type": "integer",
+                    "description": "Solo peer osservati almeno N volte",
+                },
+                **_pagination_properties(),
+            },
+            "additionalProperties": False,
+        },
+        "handler": list_network_flows,
     },
     {
         "name": "get_policy_summary",

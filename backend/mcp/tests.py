@@ -12,7 +12,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from rules.models import FirewallRule
-from targets.models import BlockedIP, Target
+from targets.models import BlockedIP, FirewallStats, NetworkFlow, Target
 
 from .models import MCPAPIKey
 
@@ -195,6 +195,30 @@ class MCPToolTests(TestCase):
             action="DROP",
             is_synced=False,
         )
+        from threats.models import ThreatLog
+
+        self.threat = ThreatLog.objects.create(
+            target=self.target,
+            source_ip="203.0.113.10",
+            threat_score=90,
+            severity="critical",
+            reasons=["port_scan"],
+        )
+        self.stats = FirewallStats.objects.create(
+            target=self.target,
+            hostname="app",
+            firedog_version="1.0.0",
+            input_packets=1000,
+            output_packets=500,
+            protocols={"tcp": {"in_packets": 900, "out_packets": 400}},
+            collected_at=timezone.now(),
+        )
+        self.flow = NetworkFlow.objects.create(
+            target=self.target,
+            remote_ip="203.0.113.10",
+            country_code="US",
+            times_seen=5,
+        )
 
     def _call(self, name, arguments=None):
         response = self.client.post(
@@ -268,6 +292,32 @@ class MCPToolTests(TestCase):
         self.assertEqual(payload["rules"]["unsynced"], 1)
         self.assertEqual(payload["exposed_ports"], [22])
 
+    def test_get_threat_detail(self):
+        payload = self._call("get_threat", {"id": self.threat.id})
+        self.assertEqual(payload["threat"]["source_ip"], "203.0.113.10")
+        self.assertEqual(payload["threat"]["reasons"], ["port_scan"])
+
+    def test_get_threat_not_found(self):
+        payload = self._call("get_threat", {"id": 999999})
+        self.assertIsNone(payload["threat"])
+        self.assertFalse(payload["found"])
+
+    def test_list_traffic_stats(self):
+        payload = self._call("list_traffic_stats", {"target_id": self.target.id})
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["traffic_stats"][0]["input_packets"], 1000)
+        self.assertEqual(payload["traffic_stats"][0]["protocols"]["tcp"]["in_packets"], 900)
+
+    def test_list_network_flows(self):
+        payload = self._call("list_network_flows", {"target_id": self.target.id})
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["network_flows"][0]["remote_ip"], "203.0.113.10")
+        self.assertEqual(payload["network_flows"][0]["country_code"], "US")
+
+    def test_list_network_flows_min_times_seen_filter(self):
+        payload = self._call("list_network_flows", {"min_times_seen": 10})
+        self.assertEqual(payload["total"], 0)
+
 
 class MCPWriteToolTests(TestCase):
     """Tool di scrittura (phase 2): permessi Admin, create/delete_rule, block/unblock_ip."""
@@ -300,6 +350,11 @@ class MCPWriteToolTests(TestCase):
             ip_address="203.0.113.9",
             block_reason="manual",
             blocked_by="test",
+        )
+        from threats.models import ThreatLog
+
+        self.threat = ThreatLog.objects.create(
+            target=self.target, source_ip="203.0.113.10", threat_score=90, severity="critical"
         )
 
     def _post(self, token, name, arguments=None):
@@ -486,6 +541,30 @@ class MCPWriteToolTests(TestCase):
 
     def test_unblock_ip_not_found(self):
         payload = self._call_ok(self.admin_key, "unblock_ip", {"id": 999999})
+        self.assertFalse(payload["found"])
+
+    # -- resolve_threat ------------------------------------------------------
+
+    def test_resolve_threat_requires_admin(self):
+        self._call_error(self.reporter_key, "resolve_threat", {"id": self.threat.id})
+        self.threat.refresh_from_db()
+        self.assertFalse(self.threat.is_resolved)
+
+    def test_resolve_threat_success(self):
+        payload = self._call_ok(self.admin_key, "resolve_threat", {"id": self.threat.id})
+        self.assertTrue(payload["resolved"])
+        self.threat.refresh_from_db()
+        self.assertTrue(self.threat.is_resolved)
+        self.assertIsNotNone(self.threat.resolved_at)
+
+    def test_resolve_threat_already_resolved_is_idempotent(self):
+        self.threat.mark_resolved()
+        payload = self._call_ok(self.admin_key, "resolve_threat", {"id": self.threat.id})
+        self.assertFalse(payload["resolved"])
+        self.assertTrue(payload["found"])
+
+    def test_resolve_threat_not_found(self):
+        payload = self._call_ok(self.admin_key, "resolve_threat", {"id": 999999})
         self.assertFalse(payload["found"])
 
 
