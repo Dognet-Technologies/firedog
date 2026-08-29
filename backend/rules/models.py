@@ -93,6 +93,16 @@ class FirewallRule(models.Model):
         max_length=256, blank=True, help_text="Commento descrittivo della regola"
     )
 
+    interface = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text=(
+            "NIC specifica su cui applicare la regola (es. eth0). Vuoto = "
+            "tutto l'host (comportamento storico, invariato per le regole "
+            "esistenti). Applicata come -i per chain INPUT, -o per OUTPUT."
+        ),
+    )
+
     is_custom = models.BooleanField(
         default=True,
         db_index=True,
@@ -143,6 +153,9 @@ class FirewallRule(models.Model):
         """Descrizione leggibile della regola"""
         parts = [self.chain, self.protocol.upper()]
 
+        if self.interface:
+            parts.append(f"on {self.interface}")
+
         if self.port:
             parts.append(f"port {self.port}")
 
@@ -167,6 +180,13 @@ class FirewallRule(models.Model):
             cmd_parts.extend(["-I", self.chain, str(self.rule_number)])
         else:
             cmd_parts.extend(["-A", self.chain])
+
+        # Interfaccia (vuoto = tutto l'host, comportamento storico)
+        if self.interface:
+            if self.chain == "INPUT":
+                cmd_parts.extend(["-i", self.interface])
+            elif self.chain == "OUTPUT":
+                cmd_parts.extend(["-o", self.interface])
 
         # Protocollo
         if self.protocol != "all":

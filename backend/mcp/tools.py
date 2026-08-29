@@ -24,7 +24,15 @@ from django.db.models import Count, Max
 from audit.models import AuditLog
 from rules.models import FirewallRule
 from rules.services import dispatch_add_rule, dispatch_remove_rule
-from targets.models import Alert, BlockedIP, FirewallStats, NetworkFlow, Target, WhitelistEntry
+from targets.models import (
+    Alert,
+    BlockedIP,
+    FirewallStats,
+    NetworkFlow,
+    NetworkInterface,
+    Target,
+    WhitelistEntry,
+)
 from targets.services import record_blocked_ip
 from targets.services import unblock_ip as unblock_ip_service
 from threats.models import ThreatLog
@@ -141,6 +149,9 @@ def _target_detail(target):
             "blocked_ips_count": target.blocked_ips.count(),
             "whitelist_count": target.whitelist_entries.filter(is_active=True).count(),
             "groups": list(target.groups.values_list("name", flat=True)),
+            "interfaces": [
+                _network_interface_dict(i) for i in target.interfaces.all()
+            ],
         }
     )
     return data
@@ -153,6 +164,7 @@ def _rule_dict(rule):
         "target_ip": rule.target.ip_address,
         "target_hostname": rule.target.hostname,
         "chain": rule.chain,
+        "interface": rule.interface,
         "rule_number": rule.rule_number,
         "protocol": rule.protocol,
         "port": rule.port,
@@ -249,6 +261,20 @@ def _network_flow_dict(flow):
     }
 
 
+def _network_interface_dict(iface):
+    return {
+        "id": iface.id,
+        "target_id": iface.target_id,
+        "name": iface.name,
+        "ip_address": iface.ip_address,
+        "mac_address": iface.mac_address,
+        "is_primary": iface.is_primary,
+        "is_up": iface.is_up,
+        "first_seen": _iso(iface.first_seen),
+        "last_seen": _iso(iface.last_seen),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Handler dei tool
 # ---------------------------------------------------------------------------
@@ -309,6 +335,8 @@ def list_rules(user, arguments):
             raise ToolParamError("target_id deve essere un intero.")
     if arguments.get("chain"):
         qs = qs.filter(chain=str(arguments["chain"]).upper())
+    if arguments.get("interface"):
+        qs = qs.filter(interface=arguments["interface"])
     if arguments.get("action"):
         qs = qs.filter(action=str(arguments["action"]).upper())
     if arguments.get("actions"):
@@ -344,6 +372,25 @@ def get_rule(user, arguments):
     if rule is None:
         return {"rule": None, "found": False}
     return {"rule": _rule_dict(rule)}
+
+
+def list_interfaces(user, arguments):
+    limit, offset = _parse_pagination(arguments)
+    qs = NetworkInterface.objects.order_by("target_id", "-is_primary", "name")
+
+    if arguments.get("target_id"):
+        try:
+            qs = qs.filter(target_id=int(arguments["target_id"]))
+        except (TypeError, ValueError):
+            raise ToolParamError("target_id deve essere un intero.")
+    if "is_primary" in arguments:
+        qs = qs.filter(is_primary=bool(arguments["is_primary"]))
+    if "is_up" in arguments:
+        qs = qs.filter(is_up=bool(arguments["is_up"]))
+
+    total = qs.count()
+    interfaces = [_network_interface_dict(i) for i in qs[offset : offset + limit]]
+    return {"interfaces": interfaces, "total": total, "limit": limit, "offset": offset}
 
 
 def list_threats(user, arguments):
@@ -570,6 +617,13 @@ def create_rule(user, arguments):
 
     comment = str(arguments.get("comment", ""))[:256]
 
+    interface = str(arguments.get("interface", "")).strip()[:50]
+    if interface and chain == "FORWARD":
+        raise ToolParamError(
+            "interface non è supportata su chain FORWARD (richiede sia -i che -o, "
+            "ambiguo con un singolo parametro): usare INPUT o OUTPUT."
+        )
+
     rule = FirewallRule.objects.create(
         target=target,
         chain=chain,
@@ -579,6 +633,7 @@ def create_rule(user, arguments):
         dest_ip=dest_ip,
         action=action,
         comment=comment,
+        interface=interface,
         is_custom=True,
         is_synced=False,
     )
@@ -762,9 +817,10 @@ TOOLS = [
         "name": "list_rules",
         "description": (
             "Elenca le regole firewall iptables sui target. Espone: id, target, chain "
-            "(INPUT/OUTPUT/FORWARD), protocol, port, source_ip, dest_ip, action "
-            "(ACCEPT/DROP/REJECT), is_custom, is_synced. Filtri: target_id, chain, action, "
-            "actions (csv), protocol, port, source_ip, is_custom, is_synced."
+            "(INPUT/OUTPUT/FORWARD), interface (NIC specifica o vuoto = tutto l'host), "
+            "protocol, port, source_ip, dest_ip, action (ACCEPT/DROP/REJECT), is_custom, "
+            "is_synced. Filtri: target_id, chain, interface, action, actions (csv), "
+            "protocol, port, source_ip, is_custom, is_synced."
         ),
         "inputSchema": {
             "type": "object",
@@ -773,6 +829,10 @@ TOOLS = [
                 "chain": {
                     "type": "string",
                     "description": "Chain iptables (INPUT/OUTPUT/FORWARD)",
+                },
+                "interface": {
+                    "type": "string",
+                    "description": "Solo regole scoped a questa NIC (match esatto)",
                 },
                 "action": {
                     "type": "string",
@@ -812,6 +872,31 @@ TOOLS = [
             "additionalProperties": False,
         },
         "handler": get_rule,
+    },
+    {
+        "name": "list_interfaces",
+        "description": (
+            "Elenca le interfacce di rete (NIC) dei target — supporto multi-homed: un "
+            "host può avere più IP/NIC (LAN interna, IP pubblico, rete di management...). "
+            "Espone: name, ip_address, mac_address, is_primary (la NIC su cui gira l'agent "
+            "verso il master — quella resta l'identità del target), is_up. Il nome NIC va "
+            "usato come parametro 'interface' di create_rule per scopare una regola a una "
+            "sola interfaccia. Filtri: target_id, is_primary, is_up."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "target_id": {"type": "integer", "description": "Limita a un target"},
+                "is_primary": {
+                    "type": "boolean",
+                    "description": "Solo l'interfaccia primaria (di pairing) o solo le altre",
+                },
+                "is_up": {"type": "boolean", "description": "Solo interfacce attive/spente"},
+                **_pagination_properties(),
+            },
+            "additionalProperties": False,
+        },
+        "handler": list_interfaces,
     },
     {
         "name": "list_threats",
@@ -968,7 +1053,10 @@ TOOLS = [
             "[Admin] Crea una regola firewall custom su un target e la invia "
             "all'agent via WebSocket (se connesso, altrimenti resta is_synced=false "
             "in attesa di riconciliazione). Richiede target_id e chain; protocol "
-            "default tcp, action default ACCEPT."
+            "default tcp, action default ACCEPT. Il target può avere più interfacce "
+            "di rete (vedi list_interfaces): senza 'interface' la regola si applica a "
+            "tutto l'host (comportamento storico); con 'interface' si applica solo a "
+            "quella NIC (-i per INPUT, -o per OUTPUT — non supportata su FORWARD)."
         ),
         "inputSchema": {
             "type": "object",
@@ -990,6 +1078,13 @@ TOOLS = [
                     "description": "Azione (ACCEPT/DROP/REJECT), default ACCEPT",
                 },
                 "comment": {"type": "string", "description": "Commento descrittivo"},
+                "interface": {
+                    "type": "string",
+                    "description": (
+                        "NIC specifica (es. eth0), da list_interfaces. Vuoto/assente = "
+                        "tutto l'host. Non supportata su chain FORWARD."
+                    ),
+                },
             },
             "required": ["target_id", "chain"],
             "additionalProperties": False,

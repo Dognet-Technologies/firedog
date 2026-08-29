@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import apiService from '../services/api';
-import type { FirewallRule, FirewallRuleCreate } from '../types';
+import type { FirewallRule, FirewallRuleCreate, NetworkInterface } from '../types';
 import { useTarget } from '../contexts/TargetContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import PageHeader from '../components/shared/PageHeader';
@@ -61,7 +61,14 @@ interface NewRuleForm {
   dest_ip: string;
   action: 'ACCEPT' | 'DROP' | 'REJECT';
   comment: string;
+  // NIC specifica (nome, es. eth0) o '' = tutto l'host. Non supportata su FORWARD.
+  interface: string;
 }
+
+const EMPTY_NEW_RULE: NewRuleForm = {
+  chain: 'INPUT', protocol: 'tcp', port: '', source_ip: '', dest_ip: '',
+  action: 'ACCEPT', comment: '', interface: '',
+};
 
 interface NewBlockForm {
   ip_address: string;
@@ -102,21 +109,28 @@ const RulesTab: React.FC = () => {
   const { selectedTarget } = useTarget();
   const { showToast, showConfirm } = useNotifications();
   const [rules, setRules] = useState<FirewallRule[]>([]);
+  const [interfaces, setInterfaces] = useState<NetworkInterface[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newRule, setNewRule] = useState<NewRuleForm>({
-    chain: 'INPUT',
-    protocol: 'tcp',
-    port: '',
-    source_ip: '',
-    dest_ip: '',
-    action: 'ACCEPT',
-    comment: '',
-  });
+  const [newRule, setNewRule] = useState<NewRuleForm>(EMPTY_NEW_RULE);
 
   useEffect(() => {
-    if (selectedTarget) loadRules();
+    if (selectedTarget) {
+      loadRules();
+      loadInterfaces();
+    }
   }, [selectedTarget]);
+
+  const loadInterfaces = async () => {
+    if (!selectedTarget) return;
+    try {
+      const resp = await apiService.getNetworkInterfaces(selectedTarget.id);
+      setInterfaces(resp.results);
+    } catch (err) {
+      console.error('RulesTab loadInterfaces error:', err);
+      // Non bloccante: senza interfacce si può comunque creare regole host-wide
+    }
+  };
 
   const loadRules = async () => {
     if (!selectedTarget) return;
@@ -157,10 +171,11 @@ const RulesTab: React.FC = () => {
       if (newRule.port) data.port = parseInt(newRule.port, 10);
       if (newRule.source_ip) data.source_ip = newRule.source_ip;
       if (newRule.dest_ip) data.dest_ip = newRule.dest_ip;
+      if (newRule.interface) data.interface = newRule.interface;
       await apiService.createRule(data);
       showToast({ type: 'success', title: 'Rule added', message: 'Firewall rule created' });
       setShowAddModal(false);
-      setNewRule({ chain: 'INPUT', protocol: 'tcp', port: '', source_ip: '', dest_ip: '', action: 'ACCEPT', comment: '' });
+      setNewRule(EMPTY_NEW_RULE);
       loadRules();
     } catch (err) {
       console.error('RulesTab handleAddRule error:', err);
@@ -221,6 +236,7 @@ const RulesTab: React.FC = () => {
               <tr>
                 <th>#</th>
                 <th>Protocol</th>
+                <th>Interface</th>
                 <th>Port</th>
                 <th>Source IP</th>
                 <th>Dest IP</th>
@@ -234,6 +250,7 @@ const RulesTab: React.FC = () => {
                 <tr key={rule.id}>
                   <td className="fw-mono fw-muted">{rule.rule_number ?? idx + 1}</td>
                   <td>{rule.protocol.toUpperCase()}</td>
+                  <td className="fw-mono">{rule.interface || <span className="fw-muted">tutte</span>}</td>
                   <td className="fw-mono">{rule.port ?? '—'}</td>
                   <td className="fw-mono">{rule.source_ip || '—'}</td>
                   <td className="fw-mono">{rule.dest_ip || '—'}</td>
@@ -305,7 +322,15 @@ const RulesTab: React.FC = () => {
               <div className="fw-form-row">
                 <div className="fw-form-group">
                   <label className="fw-label">Chain</label>
-                  <select className="fw-input" value={newRule.chain} onChange={(e) => setNewRule({ ...newRule, chain: e.target.value as Chain })}>
+                  <select
+                    className="fw-input"
+                    value={newRule.chain}
+                    onChange={(e) => {
+                      const chain = e.target.value as Chain;
+                      // interface non è supportata su FORWARD (richiede sia -i che -o)
+                      setNewRule({ ...newRule, chain, interface: chain === 'FORWARD' ? '' : newRule.interface });
+                    }}
+                  >
                     <option value="INPUT">INPUT</option>
                     <option value="OUTPUT">OUTPUT</option>
                     <option value="FORWARD">FORWARD</option>
@@ -343,6 +368,26 @@ const RulesTab: React.FC = () => {
                   <input type="text" className="fw-input" value={newRule.dest_ip} onChange={(e) => setNewRule({ ...newRule, dest_ip: e.target.value })} placeholder="e.g. 10.0.0.0/8" />
                 </div>
               </div>
+              {interfaces.length > 1 && (
+                <div className="fw-form-group">
+                  <label className="fw-label">
+                    Interface <span className="fw-optional">(optional — {newRule.chain === 'FORWARD' ? 'non disponibile su FORWARD' : 'limita la regola a una NIC'})</span>
+                  </label>
+                  <select
+                    className="fw-input"
+                    value={newRule.interface}
+                    disabled={newRule.chain === 'FORWARD'}
+                    onChange={(e) => setNewRule({ ...newRule, interface: e.target.value })}
+                  >
+                    <option value="">Tutte le interfacce (host-wide)</option>
+                    {interfaces.map((iface) => (
+                      <option key={iface.id} value={iface.name}>
+                        {iface.name}{iface.ip_address ? ` — ${iface.ip_address}` : ''}{iface.is_primary ? ' (primaria)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="fw-form-group">
                 <label className="fw-label">Comment <span className="fw-optional">(optional)</span></label>
                 <input type="text" className="fw-input" value={newRule.comment} onChange={(e) => setNewRule({ ...newRule, comment: e.target.value })} placeholder="e.g. Allow HTTP" />

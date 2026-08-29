@@ -508,6 +508,8 @@ class AgentConsumer(AsyncWebsocketConsumer):
         Si attende la stessa shape prodotta da `firewall-manager --export-json`:
             {
               "hostname": str, "firedog_version": str,
+              "interfaces": [{"name": str, "ip_address": str|null,
+                               "mac_address": str, "is_up": bool}],
               "system": {"os": str, "kernel": str, "uptime_seconds": int},
               "stats": {
                 "total_packets": {"INPUT": int, "OUTPUT": int, "FORWARD": int},
@@ -583,6 +585,55 @@ class AgentConsumer(AsyncWebsocketConsumer):
         self._sync_blocked_ips(payload.get("rules") or {})
         self._sync_threat_log(payload.get("threats") or [])
         self._sync_network_flows(payload.get("network_flows") or [])
+        self._sync_network_interfaces(payload.get("interfaces") or [])
+
+    def _sync_network_interfaces(self, interfaces):
+        """Upsert delle NIC dell'host (supporto multi-interfaccia).
+
+        Schema input (ogni elemento, da firewall-manager --export-json):
+            {name, ip_address, mac_address, is_up}
+        `is_primary` è calcolato qui confrontando con Target.ip_address/
+        mac_address (l'interfaccia su cui gira l'agent verso il master:
+        quella resta l'identità di pairing, invariata). Le NIC sparite
+        dall'ultimo snapshot vengono rimosse (l'host può aver perso/rinominato
+        un'interfaccia, es. rinumerazione udev).
+        """
+        from targets.models import NetworkInterface
+
+        if not isinstance(interfaces, list) or not self.target:
+            return
+
+        seen_names = []
+        for iface in interfaces:
+            if not isinstance(iface, dict):
+                continue
+            name = iface.get("name")
+            if not name:
+                continue
+            seen_names.append(name)
+
+            ip_address = iface.get("ip_address") or None
+            mac_address = (iface.get("mac_address") or "").lower()
+            is_primary = bool(
+                (ip_address and ip_address == self.target.ip_address)
+                or (mac_address and mac_address == (self.target.mac_address or "").lower())
+            )
+
+            NetworkInterface.objects.update_or_create(
+                target=self.target,
+                name=name,
+                defaults={
+                    "ip_address": ip_address,
+                    "mac_address": iface.get("mac_address") or "",
+                    "is_primary": is_primary,
+                    "is_up": bool(iface.get("is_up", True)),
+                },
+            )
+
+        if seen_names:
+            NetworkInterface.objects.filter(target=self.target).exclude(
+                name__in=seen_names
+            ).delete()
 
     def _sync_network_flows(self, flows):
         """Upsert dei flussi network (peer IP pubblici) ingestiti dall'agent.

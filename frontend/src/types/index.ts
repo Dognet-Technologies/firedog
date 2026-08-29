@@ -40,6 +40,26 @@ export interface Target {
   gruppo_custom?: string | null;
   gruppo_display?: string;
   target_groups?: TargetGroupInfo[];
+  mac_address?: string;
+  // Presenti solo sul detail (TargetSerializer), non nella lista.
+  interfaces?: NetworkInterface[];
+  // Presente solo nella lista (TargetListSerializer), conteggio leggero.
+  interfaces_count?: number;
+}
+
+// Interfaccia di rete (NIC) di un target — supporto host multi-homed.
+// Popolata dallo snapshot dell'agent, sola lettura.
+export interface NetworkInterface {
+  id: number;
+  target: number;
+  target_hostname: string;
+  name: string;
+  ip_address: string | null;
+  mac_address: string;
+  is_primary: boolean;
+  is_up: boolean;
+  first_seen: string;
+  last_seen: string;
 }
 
 export interface TargetCreate {
@@ -80,6 +100,8 @@ export interface FirewallRule {
   dest_ip: string | null;
   action: 'ACCEPT' | 'DROP' | 'REJECT';
   comment: string;
+  // NIC specifica (es. eth0) o stringa vuota = tutto l'host.
+  interface: string;
   is_custom: boolean;
   is_synced: boolean;
   created_at: string;
@@ -96,6 +118,8 @@ export interface FirewallRuleCreate {
   dest_ip?: string;
   action: 'ACCEPT' | 'DROP' | 'REJECT';
   comment?: string;
+  // Solo INPUT/OUTPUT: NIC specifica su cui limitare la regola.
+  interface?: string;
 }
 
 // ========== Threat Types ==========

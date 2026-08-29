@@ -12,7 +12,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from rules.models import FirewallRule
-from targets.models import BlockedIP, FirewallStats, NetworkFlow, Target
+from targets.models import BlockedIP, FirewallStats, NetworkFlow, NetworkInterface, Target
 
 from .models import MCPAPIKey
 
@@ -219,6 +219,14 @@ class MCPToolTests(TestCase):
             country_code="US",
             times_seen=5,
         )
+        self.primary_iface = NetworkInterface.objects.create(
+            target=self.target, name="eth0", ip_address="192.168.178.200",
+            mac_address="aa:bb:cc:dd:ee:01", is_primary=True,
+        )
+        self.secondary_iface = NetworkInterface.objects.create(
+            target=self.target, name="eth1", ip_address="10.0.5.1",
+            mac_address="aa:bb:cc:dd:ee:02", is_primary=False,
+        )
 
     def _call(self, name, arguments=None):
         response = self.client.post(
@@ -254,6 +262,18 @@ class MCPToolTests(TestCase):
         payload = self._call("get_target", {"hostname": "app"})
         self.assertEqual(payload["target"]["ip_address"], "192.168.178.200")
         self.assertEqual(payload["target"]["rules_count"], 2)
+        self.assertEqual(len(payload["target"]["interfaces"]), 2)
+        primary = next(i for i in payload["target"]["interfaces"] if i["is_primary"])
+        self.assertEqual(primary["name"], "eth0")
+
+    def test_list_interfaces(self):
+        payload = self._call("list_interfaces", {"target_id": self.target.id})
+        self.assertEqual(payload["total"], 2)
+
+    def test_list_interfaces_filter_primary(self):
+        payload = self._call("list_interfaces", {"is_primary": True})
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["interfaces"][0]["name"], "eth0")
 
     def test_get_target_not_found(self):
         payload = self._call("get_target", {"hostname": "ghost"})
@@ -435,6 +455,25 @@ class MCPWriteToolTests(TestCase):
         rule = FirewallRule.objects.get(id=payload["rule"]["id"])
         self.assertTrue(rule.is_custom)
         self.assertFalse(rule.is_synced)
+
+    def test_create_rule_with_interface(self):
+        payload = self._call_ok(
+            self.admin_key,
+            "create_rule",
+            {"target_id": self.target.id, "chain": "INPUT", "port": 443, "interface": "eth1"},
+        )
+        self.assertEqual(payload["rule"]["interface"], "eth1")
+        rule = FirewallRule.objects.get(id=payload["rule"]["id"])
+        self.assertIn("-i eth1", rule.to_iptables_command())
+
+    def test_create_rule_interface_rejected_on_forward(self):
+        error = self._call_error(
+            self.admin_key,
+            "create_rule",
+            {"target_id": self.target.id, "chain": "FORWARD", "interface": "eth1"},
+            rpc_error=True,
+        )
+        self.assertEqual(error["code"], -32602)
 
     def test_create_rule_unknown_target(self):
         error = self._call_error(

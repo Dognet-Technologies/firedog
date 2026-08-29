@@ -7,6 +7,7 @@ import type {
   TargetCreate,
   TargetStatus,
   FirewallRule,
+  NetworkInterface,
   FirewallRuleCreate,
   ThreatLog,
   ThreatStats,
@@ -333,6 +334,11 @@ class ApiService {
 
   async getRule(id: number): Promise<FirewallRule> {
     const response = await this.api.get(`/rules/${id}/`);
+    return response.data;
+  }
+
+  async getNetworkInterfaces(targetId: number): Promise<PaginatedResponse<NetworkInterface>> {
+    const response = await this.api.get('/network-interfaces/', { params: { target_id: targetId } });
     return response.data;
   }
 

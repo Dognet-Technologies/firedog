@@ -14,7 +14,13 @@ from dashboards.views import DashboardViewSet, WidgetViewSet
 from integrity.views import FileIntegrityViewSet
 from discovery.views import DiscoveredHostViewSet
 from audit.views import AuditLogViewSet
-from targets.views import WhitelistEntryViewSet, BlockedIPViewSet, TargetViewSet, FirewallStatsViewSet
+from targets.views import (
+    WhitelistEntryViewSet,
+    BlockedIPViewSet,
+    TargetViewSet,
+    FirewallStatsViewSet,
+    NetworkInterfaceViewSet,
+)
 from settings.views import (
     SystemSettingsViewSet,
     SSHKeyViewSet,
@@ -44,6 +50,7 @@ router.register(r"audit", AuditLogViewSet, basename="auditlog")
 router.register(r"whitelist", WhitelistEntryViewSet, basename="whitelist")
 router.register(r"blocked-ips", BlockedIPViewSet, basename="blocked-ip")
 router.register(r"firewall-stats", FirewallStatsViewSet, basename="firewall-stats")
+router.register(r"network-interfaces", NetworkInterfaceViewSet, basename="network-interface")
 
 # Settings ViewSets  ← AGGIUNGI
 router.register(r"settings/settings", SystemSettingsViewSet, basename="systemsettings")

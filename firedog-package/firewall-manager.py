@@ -818,6 +818,50 @@ class FirewallManager:
 
         return '0.0.0.0'
 
+    def get_interfaces(self) -> List[Dict]:
+        """Elenca le interfacce di rete (NIC) dell'host, esclusa loopback.
+
+        Un host può avere più NIC (LAN interna, IP pubblico, rete di
+        management...); il server le usa per popolare NetworkInterface e
+        permettere regole firewall scoped a una NIC specifica. Usa
+        `ip -j addr show` (JSON, supportato da iproute2 da anni su ogni
+        distro target) invece di dipendenze pip aggiuntive sul target.
+        """
+
+        interfaces = []
+        try:
+            result = self.run_command(['ip', '-j', 'addr', 'show'], check=False)
+            if result.returncode != 0:
+                return interfaces
+
+            for link in json.loads(result.stdout):
+                name = link.get('ifname', '')
+                if not name or name == 'lo' or link.get('link_type') == 'loopback':
+                    continue
+
+                ip_address = None
+                for addr in link.get('addr_info', []):
+                    # Preferisci il primo IPv4 globale; fallback al primo indirizzo
+                    # qualsiasi se non ce n'è uno (interfaccia solo IPv6).
+                    if addr.get('family') == 'inet' and addr.get('scope') == 'global':
+                        ip_address = addr.get('local')
+                        break
+                if ip_address is None:
+                    addr_info = link.get('addr_info', [])
+                    if addr_info:
+                        ip_address = addr_info[0].get('local')
+
+                interfaces.append({
+                    'name': name,
+                    'ip_address': ip_address,
+                    'mac_address': link.get('address', ''),
+                    'is_up': 'UP' in link.get('flags', []),
+                })
+        except Exception:
+            pass
+
+        return interfaces
+
     def export_json(self, output_path: str = '/opt/sentinelsuite/firedog/export/status.json'):
         """Esporta stato completo firewall in JSON"""
 
@@ -830,6 +874,9 @@ class FirewallManager:
             data = {
                 'hostname': subprocess.run(['hostname'], capture_output=True, text=True).stdout.strip(),
                 'ip_address': self.get_primary_ip(),
+                # Tutte le NIC dell'host (esclusa loopback): alimenta
+                # NetworkInterface lato server per il supporto multi-NIC.
+                'interfaces': self.get_interfaces(),
                 # Timestamp ISO-8601 con TZ UTC esplicito. datetime.now() senza
                 # argomenti restituisce un naive datetime → il server lo
                 # interpreta come ora locale (Europe/Rome) e applica un doppio

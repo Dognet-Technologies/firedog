@@ -24,6 +24,8 @@ def dispatch_add_rule(rule) -> bool:
         "dst_ip": rule.dest_ip,
         "dst_port": rule.port,
         "comment": rule.comment or None,
+        # NIC specifica (-i per INPUT, -o per OUTPUT) o None = tutto l'host.
+        "interface": rule.interface or None,
     }
     payload = {k: v for k, v in payload.items() if v is not None}
 

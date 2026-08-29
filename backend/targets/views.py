@@ -23,7 +23,7 @@ from django.db.models import Count, Sum, Q
 from datetime import timedelta
 import logging
 
-from .models import WhitelistEntry, BlockedIP, FirewallStats
+from .models import WhitelistEntry, BlockedIP, FirewallStats, NetworkInterface
 from .serializers import (
     WhitelistEntrySerializer,
     WhitelistEntryCreateSerializer,
@@ -31,6 +31,7 @@ from .serializers import (
     BlockedIPCreateSerializer,
     BlockedIPStatsSerializer,
     FirewallStatsSerializer,
+    NetworkInterfaceSerializer,
 )
 from targets.models import Target
 from audit.models import AuditLog
@@ -496,3 +497,22 @@ class FirewallStatsViewSet(viewsets.ReadOnlyModelViewSet):
         except (TypeError, ValueError):
             limit = 100
         return queryset[:limit]
+
+
+class NetworkInterfaceViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet read-only per le interfacce di rete (NIC) dei target — supporto
+    multi-homed. Popolate dallo snapshot dell'agent, non gestibili via API
+    (l'host è la fonte di verità sulle proprie interfacce).
+    GET /api/network-interfaces/?target_id=X
+    """
+
+    serializer_class = NetworkInterfaceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = NetworkInterface.objects.select_related("target").all()
+        target_id = self.request.query_params.get("target_id")
+        if target_id:
+            queryset = queryset.filter(target_id=target_id)
+        return queryset

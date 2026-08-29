@@ -427,6 +427,7 @@ const Targets: React.FC = () => {
               <th onClick={() => handleSort('ip_address')} className="sortable">
                 IP Address {renderSortIcon('ip_address')}
               </th>
+              <th title="Numero di interfacce di rete rilevate sull'host">NICs</th>
               <th onClick={() => handleSort('hostname')} className="sortable">
                 Hostname {renderSortIcon('hostname')}
               </th>
@@ -462,6 +463,18 @@ const Targets: React.FC = () => {
                 <tr key={target.id} className={`target-row target-row--${target.status}`}>
                   <td className="ip-cell">
                     <code>{target.ip_address}</code>
+                  </td>
+                  <td className="nics-cell">
+                    {(target.interfaces_count ?? 0) > 1 ? (
+                      <span
+                        className="version-badge"
+                        title={`${target.interfaces_count} interfacce di rete rilevate`}
+                      >
+                        {target.interfaces_count} NIC
+                      </span>
+                    ) : (
+                      <span className="text-muted" title="Solo l'interfaccia primaria rilevata">1</span>
+                    )}
                   </td>
                   <td className="hostname-cell">
                     {target.hostname || <span className="text-muted">—</span>}

@@ -3,7 +3,30 @@ Serializers per l'app Targets
 """
 
 from rest_framework import serializers
-from .models import Target, FirewallStats
+from .models import Target, FirewallStats, NetworkInterface
+
+
+class NetworkInterfaceSerializer(serializers.ModelSerializer):
+    """Serializer per le interfacce di rete (NIC) di un target — read-only,
+    popolate dallo snapshot dell'agent (vedi agent_manager.consumers)."""
+
+    target_hostname = serializers.CharField(source="target.hostname", read_only=True)
+
+    class Meta:
+        model = NetworkInterface
+        fields = [
+            "id",
+            "target",
+            "target_hostname",
+            "name",
+            "ip_address",
+            "mac_address",
+            "is_primary",
+            "is_up",
+            "first_seen",
+            "last_seen",
+        ]
+        read_only_fields = fields
 
 """
 Serializers per Whitelist e BlockedIPs
@@ -20,6 +43,10 @@ class TargetSerializer(serializers.ModelSerializer):
     connection_string = serializers.ReadOnlyField()
     is_active = serializers.ReadOnlyField()
     target_groups = serializers.SerializerMethodField()
+    # Tutte le NIC dell'host (supporto multi-homed): l'interfaccia primaria
+    # (is_primary=True) è quella di ip_address/mac_address sopra, le altre
+    # sono in più.
+    interfaces = NetworkInterfaceSerializer(many=True, read_only=True)
 
     class Meta:
         model = Target
@@ -41,6 +68,7 @@ class TargetSerializer(serializers.ModelSerializer):
             "connection_string",
             "is_active",
             "target_groups",
+            "interfaces",
         ]
         read_only_fields = [
             "status",
@@ -70,6 +98,7 @@ class TargetListSerializer(serializers.ModelSerializer):
 
     is_active = serializers.ReadOnlyField()
     target_groups = serializers.SerializerMethodField()
+    interfaces_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Target
@@ -82,7 +111,11 @@ class TargetListSerializer(serializers.ModelSerializer):
             "last_seen",
             "is_active",
             "target_groups",
+            "interfaces_count",
         ]
+
+    def get_interfaces_count(self, obj):
+        return obj.interfaces.count()
 
     def get_target_groups(self, obj):
         """Ritorna i TargetGroup a cui appartiene questo target"""
@@ -436,3 +469,5 @@ class FirewallStatsSerializer(serializers.ModelSerializer):
             "imported_at",
         ]
         read_only_fields = ["id", "imported_at"]
+
+
