@@ -18,10 +18,13 @@
   /usr/bin/python3 ixr,
   /usr/bin/python3.[0-9]* ixr,
 
-  # Python libraries
+  # Python libraries (lib64 = openSUSE/SLES)
   /usr/lib/python3*/**.so mr,
   /usr/lib/python3*/**/*.py r,
   /usr/lib/python3*/**.pyc r,
+  /usr/lib64/python3*/**.so mr,
+  /usr/lib64/python3*/**/*.py r,
+  /usr/lib64/python3*/**.pyc r,
   /usr/local/lib/python3*/** r,
 
   # Firewall manager stesso
@@ -113,7 +116,10 @@
 
     /usr/sbin/iptables mr,
     /usr/sbin/xtables-legacy-multi mr,
-    /usr/lib/x86_64-linux-gnu/xtables/*.so mr,
+    /usr/sbin/xtables-nft-multi mr,
+    /usr/lib/x86_64-linux-gnu/xtables/*.so mr,   # Debian/Ubuntu multiarch
+    /usr/lib64/xtables/*.so mr,                  # openSUSE/SLES
+    /usr/lib/xtables/*.so mr,
 
     /proc/net/ip_tables_names r,
     /proc/net/ip_tables_matches r,

@@ -287,14 +287,19 @@ save_rules() {
     iptables-save > "${RULES_DIR}/iptables.rules"
     chmod 600 "${RULES_DIR}/iptables.rules"
 
-    # Installa script per ripristino all'avvio
-    cat > /etc/network/if-pre-up.d/iptables << 'EOF'
+    # Hook di ripristino per ifupdown (solo Debian/Ubuntu). Su openSUSE e sulle
+    # reti gestite da NetworkManager/wicked la persistenza al boot è garantita
+    # dall'unità systemd firewall-fm.service (iptables-restore).
+    if [[ -d /etc/network/if-pre-up.d ]]; then
+        cat > /etc/network/if-pre-up.d/iptables << 'EOF'
 #!/bin/bash
 /usr/sbin/iptables-restore < /etc/firewall/iptables.rules
 EOF
+        chmod +x /etc/network/if-pre-up.d/iptables
+    else
+        log "ifupdown assente: persistenza al boot affidata a firewall-fm.service"
+    fi
 
-    chmod +x /etc/network/if-pre-up.d/iptables
-    
     success "Regole salvate in ${RULES_DIR}/iptables.rules"
 }
 

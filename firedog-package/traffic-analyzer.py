@@ -361,7 +361,7 @@ class TrafficAnalyzer:
         print("\nðŸ’¡ BEST PRACTICES:")
         print("   - Eseguire analisi regolari: firewall-manager --analyze 24")
         print("   - Verificare log ulogd: tail -f /var/log/ulogd/ulogd.log")
-        print("   - Mantenere sistema aggiornato: apt update && apt upgrade")
+        print("   - Mantenere sistema aggiornato (apt upgrade / zypper update)")
 
 
 def main():
@@ -381,7 +381,7 @@ def main():
     
     # Verifica tcpdump
     if subprocess.run(['which', 'tcpdump'], capture_output=True).returncode != 0:
-        print("Errore: tcpdump non trovato. Installa con: apt install tcpdump")
+        print("Errore: tcpdump non trovato. Installa con: apt install tcpdump / zypper install tcpdump")
         sys.exit(1)
     
     analyzer = TrafficAnalyzer(pcap_file)

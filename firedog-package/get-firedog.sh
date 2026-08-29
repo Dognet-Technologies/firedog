@@ -28,7 +28,7 @@ warn() { echo -e "${YELLOW}[get-firedog]${NC} $*"; }
 die()  { echo -e "${RED}[get-firedog]${NC} $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "serve root: rilancia con sudo"
-command -v curl >/dev/null || die "curl mancante (apt install curl)"
+command -v curl >/dev/null || die "curl mancante (apt install curl / zypper install curl)"
 command -v tar  >/dev/null || die "tar mancante"
 
 WORKDIR="$(mktemp -d /tmp/firedog-install.XXXXXX)"

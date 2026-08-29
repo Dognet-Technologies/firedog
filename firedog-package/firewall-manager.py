@@ -307,7 +307,7 @@ class FirewallManager:
         analyzer = 'tshark' if self.check_command('tshark') else 'tcpdump'
         
         if not self.check_command(analyzer):
-            self.error("Richiesto tcpdump o tshark per analisi. Installa con: apt install tcpdump o apt install tshark")
+            self.error("Richiesto tcpdump o tshark per analisi. Installa con: apt install tcpdump (Debian/Ubuntu) o zypper install tcpdump (openSUSE)")
             return
         
         pcap_files = [
