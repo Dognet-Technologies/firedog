@@ -11,9 +11,18 @@ set -euo pipefail
 LOG_FILE="/var/log/firewall-init.log"
 RULES_DIR="/etc/firewall"
 CUSTOM_RULES="${RULES_DIR}/custom_rules.conf"
+FIREDOG_CONF="${RULES_DIR}/firedog.conf"
 
 # Porta SSH (override con env SSH_PORT, es: SSH_PORT=2222 ./firewall-init.sh)
 SSH_PORT="${SSH_PORT:-22}"
+
+# Default per le variabili di firedog.conf: valorizzate PRIMA del source,
+# così se il file manca o non le imposta lo script funziona lo stesso
+# (nessuna porta extra aperta, comportamento storico).
+ALWAYS_OPEN_PORTS=""
+MONITORED_INTERFACES=""
+# shellcheck source=/dev/null
+[[ -f "$FIREDOG_CONF" ]] && source "$FIREDOG_CONF"
 
 # Colori per output
 RED='\033[0;31m'
@@ -206,12 +215,51 @@ setup_input_rules() {
     
     # SSH con protezione brute force (porta configurabile via $SSH_PORT)
     iptables -A INPUT -p tcp --dport "${SSH_PORT}" -m conntrack --ctstate NEW -j SSH_PROTECT
-    
+
     # HTTP/HTTPS per servizi web (commentato di default - abilitare se necessario)
     # iptables -A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW -j ACCEPT
     # iptables -A INPUT -p tcp --dport 443 -m conntrack --ctstate NEW -j ACCEPT
-    
+
+    # Porte da /etc/firewall/firedog.conf (ALWAYS_OPEN_PORTS): servizi che
+    # devono restare raggiungibili appena la policy DROP entra in vigore,
+    # oltre a SSH. Formato per entry: "porta/protocollo" (es. 443/tcp) o
+    # solo "porta" (default tcp). Entry malformate vengono saltate con un
+    # warning invece di far fallire l'intero script.
+    setup_always_open_ports
+
     success "Regole INPUT configurate"
+}
+
+# Applica ALWAYS_OPEN_PORTS da firedog.conf (vedi setup_input_rules)
+setup_always_open_ports() {
+    [[ -z "${ALWAYS_OPEN_PORTS}" ]] && return 0
+
+    local entry port proto entries
+    IFS=',' read -ra entries <<< "${ALWAYS_OPEN_PORTS}"
+    for entry in "${entries[@]}"; do
+        entry="$(echo "$entry" | tr -d '[:space:]')"
+        [[ -z "$entry" ]] && continue
+
+        if [[ "$entry" == */* ]]; then
+            port="${entry%%/*}"
+            proto="${entry##*/}"
+        else
+            port="$entry"
+            proto="tcp"
+        fi
+
+        if ! [[ "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+            warning "ALWAYS_OPEN_PORTS: porta non valida '$entry', saltata"
+            continue
+        fi
+        if [[ "$proto" != "tcp" && "$proto" != "udp" ]]; then
+            warning "ALWAYS_OPEN_PORTS: protocollo non valido '$entry' (solo tcp/udp), saltata"
+            continue
+        fi
+
+        iptables -A INPUT -p "$proto" --dport "$port" -m conntrack --ctstate NEW -j ACCEPT
+        log "ALWAYS_OPEN_PORTS: aperta porta $port/$proto"
+    done
 }
 
 # Regole OUTPUT - traffico in uscita

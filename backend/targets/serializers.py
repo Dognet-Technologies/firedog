@@ -23,6 +23,10 @@ class NetworkInterfaceSerializer(serializers.ModelSerializer):
             "mac_address",
             "is_primary",
             "is_up",
+            "rx_bytes",
+            "tx_bytes",
+            "rx_packets",
+            "tx_packets",
             "first_seen",
             "last_seen",
         ]

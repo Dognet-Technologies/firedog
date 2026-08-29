@@ -270,6 +270,10 @@ def _network_interface_dict(iface):
         "mac_address": iface.mac_address,
         "is_primary": iface.is_primary,
         "is_up": iface.is_up,
+        "rx_bytes": iface.rx_bytes,
+        "tx_bytes": iface.tx_bytes,
+        "rx_packets": iface.rx_packets,
+        "tx_packets": iface.tx_packets,
         "first_seen": _iso(iface.first_seen),
         "last_seen": _iso(iface.last_seen),
     }
@@ -879,9 +883,12 @@ TOOLS = [
             "Elenca le interfacce di rete (NIC) dei target — supporto multi-homed: un "
             "host può avere più IP/NIC (LAN interna, IP pubblico, rete di management...). "
             "Espone: name, ip_address, mac_address, is_primary (la NIC su cui gira l'agent "
-            "verso il master — quella resta l'identità del target), is_up. Il nome NIC va "
-            "usato come parametro 'interface' di create_rule per scopare una regola a una "
-            "sola interfaccia. Filtri: target_id, is_primary, is_up."
+            "verso il master — quella resta l'identità del target), is_up, rx_bytes/tx_bytes/"
+            "rx_packets/tx_packets (contatori cumulativi del kernel, snapshot dell'ultimo "
+            "export — per una velocità istantanea calcolare il delta tra due chiamate). Solo "
+            "le interfacce elencate in MONITORED_INTERFACES sul target (se configurata) "
+            "vengono riportate. Il nome NIC va usato come parametro 'interface' di create_rule "
+            "per scopare una regola a una sola interfaccia. Filtri: target_id, is_primary, is_up."
         ),
         "inputSchema": {
             "type": "object",

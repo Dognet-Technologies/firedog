@@ -20,6 +20,7 @@ import ipaddress
 CONFIG = {
     'rules_file': '/etc/firewall/iptables.rules',
     'custom_rules': '/etc/firewall/custom_rules.conf',
+    'firedog_conf': '/etc/firewall/firedog.conf',
     'log_dir': '/var/log/ulogd',
     'state_file': '/var/lib/firewall/state.json',
     'min_uid': 1000  # UID minimo per sicurezza
@@ -55,6 +56,27 @@ class Colors:
     WHITE = '\033[1;37m'
     RESET = '\033[0m'
     BOLD = '\033[1m'
+
+
+def load_firedog_conf(path: str = None) -> Dict[str, str]:
+    """Legge /etc/firewall/firedog.conf (formato KEY="value", sourceable da
+    bash — vedi firewall-init.sh). Righe vuote/commenti ignorati. File
+    assente o illeggibile → dict vuoto (nessuna interfaccia esclusa, nessuna
+    porta extra: comportamento di default).
+    """
+    conf_path = path or CONFIG['firedog_conf']
+    values: Dict[str, str] = {}
+    try:
+        with open(conf_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, _, value = line.partition('=')
+                values[key.strip()] = value.strip().strip('"').strip("'")
+    except (FileNotFoundError, PermissionError, OSError):
+        pass
+    return values
 
 class FirewallManager:
     """Classe principale per gestione firewall"""
@@ -826,6 +848,11 @@ class FirewallManager:
         permettere regole firewall scoped a una NIC specifica. Usa
         `ip -j addr show` (JSON, supportato da iproute2 da anni su ogni
         distro target) invece di dipendenze pip aggiuntive sul target.
+
+        Filtrata da MONITORED_INTERFACES in /etc/firewall/firedog.conf se
+        valorizzata (vuoto/assente = tutte le interfacce rilevate).
+        Include i contatori rx/tx (snapshot cumulativo del kernel, non
+        delta) da `ip -s -j link show`.
         """
 
         interfaces = []
@@ -834,9 +861,18 @@ class FirewallManager:
             if result.returncode != 0:
                 return interfaces
 
+            stats_by_name = self._get_interface_stats()
+
+            conf = load_firedog_conf()
+            monitored = {
+                n.strip() for n in conf.get('MONITORED_INTERFACES', '').split(',') if n.strip()
+            }
+
             for link in json.loads(result.stdout):
                 name = link.get('ifname', '')
                 if not name or name == 'lo' or link.get('link_type') == 'loopback':
+                    continue
+                if monitored and name not in monitored:
                     continue
 
                 ip_address = None
@@ -851,16 +887,46 @@ class FirewallManager:
                     if addr_info:
                         ip_address = addr_info[0].get('local')
 
+                stats = stats_by_name.get(name, {})
                 interfaces.append({
                     'name': name,
                     'ip_address': ip_address,
                     'mac_address': link.get('address', ''),
                     'is_up': 'UP' in link.get('flags', []),
+                    'rx_bytes': stats.get('rx_bytes', 0),
+                    'tx_bytes': stats.get('tx_bytes', 0),
+                    'rx_packets': stats.get('rx_packets', 0),
+                    'tx_packets': stats.get('tx_packets', 0),
                 })
         except Exception:
             pass
 
         return interfaces
+
+    def _get_interface_stats(self) -> Dict[str, Dict]:
+        """Contatori rx/tx per NIC via `ip -s -j link show` (cumulativi del
+        kernel dal boot, come i counter iptables — il server ne fa il delta
+        tra due snapshot se serve una velocità istantanea).
+        """
+        stats = {}
+        try:
+            result = self.run_command(['ip', '-s', '-j', 'link', 'show'], check=False)
+            if result.returncode != 0:
+                return stats
+            for link in json.loads(result.stdout):
+                name = link.get('ifname', '')
+                s = link.get('stats64') or link.get('stats') or {}
+                rx = s.get('rx', {})
+                tx = s.get('tx', {})
+                stats[name] = {
+                    'rx_bytes': int(rx.get('bytes', 0) or 0),
+                    'tx_bytes': int(tx.get('bytes', 0) or 0),
+                    'rx_packets': int(rx.get('packets', 0) or 0),
+                    'tx_packets': int(tx.get('packets', 0) or 0),
+                }
+        except Exception:
+            pass
+        return stats
 
     def export_json(self, output_path: str = '/opt/sentinelsuite/firedog/export/status.json'):
         """Esporta stato completo firewall in JSON"""

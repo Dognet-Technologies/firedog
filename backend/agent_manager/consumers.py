@@ -591,7 +591,8 @@ class AgentConsumer(AsyncWebsocketConsumer):
         """Upsert delle NIC dell'host (supporto multi-interfaccia).
 
         Schema input (ogni elemento, da firewall-manager --export-json):
-            {name, ip_address, mac_address, is_up}
+            {name, ip_address, mac_address, is_up,
+             rx_bytes, tx_bytes, rx_packets, tx_packets}
         `is_primary` è calcolato qui confrontando con Target.ip_address/
         mac_address (l'interfaccia su cui gira l'agent verso il master:
         quella resta l'identità di pairing, invariata). Le NIC sparite
@@ -627,6 +628,10 @@ class AgentConsumer(AsyncWebsocketConsumer):
                     "mac_address": iface.get("mac_address") or "",
                     "is_primary": is_primary,
                     "is_up": bool(iface.get("is_up", True)),
+                    "rx_bytes": int(iface.get("rx_bytes", 0) or 0),
+                    "tx_bytes": int(iface.get("tx_bytes", 0) or 0),
+                    "rx_packets": int(iface.get("rx_packets", 0) or 0),
+                    "tx_packets": int(iface.get("tx_packets", 0) or 0),
                 },
             )
 

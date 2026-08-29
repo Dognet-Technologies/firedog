@@ -58,6 +58,11 @@ export interface NetworkInterface {
   mac_address: string;
   is_primary: boolean;
   is_up: boolean;
+  // Contatori cumulativi del kernel (snapshot dell'ultimo export, non un rate).
+  rx_bytes: number;
+  tx_bytes: number;
+  rx_packets: number;
+  tx_packets: number;
   first_seen: string;
   last_seen: string;
 }

@@ -222,6 +222,7 @@ class MCPToolTests(TestCase):
         self.primary_iface = NetworkInterface.objects.create(
             target=self.target, name="eth0", ip_address="192.168.178.200",
             mac_address="aa:bb:cc:dd:ee:01", is_primary=True,
+            rx_bytes=1000, tx_bytes=500, rx_packets=10, tx_packets=5,
         )
         self.secondary_iface = NetworkInterface.objects.create(
             target=self.target, name="eth1", ip_address="10.0.5.1",
@@ -269,6 +270,9 @@ class MCPToolTests(TestCase):
     def test_list_interfaces(self):
         payload = self._call("list_interfaces", {"target_id": self.target.id})
         self.assertEqual(payload["total"], 2)
+        primary = next(i for i in payload["interfaces"] if i["is_primary"])
+        self.assertEqual(primary["rx_bytes"], 1000)
+        self.assertEqual(primary["tx_packets"], 5)
 
     def test_list_interfaces_filter_primary(self):
         payload = self._call("list_interfaces", {"is_primary": True})

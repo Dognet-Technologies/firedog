@@ -808,6 +808,14 @@ class NetworkInterface(models.Model):
         default=True, help_text="Stato operativo riportato dall'ultimo snapshot"
     )
 
+    # Contatori cumulativi del kernel (da `ip -s link show`), snapshot
+    # dell'ultimo export — non delta. Per una velocità istantanea il
+    # chiamante deve calcolare il delta tra due snapshot successivi.
+    rx_bytes = models.BigIntegerField(default=0, help_text="Byte ricevuti (cumulativo)")
+    tx_bytes = models.BigIntegerField(default=0, help_text="Byte trasmessi (cumulativo)")
+    rx_packets = models.BigIntegerField(default=0, help_text="Pacchetti ricevuti (cumulativo)")
+    tx_packets = models.BigIntegerField(default=0, help_text="Pacchetti trasmessi (cumulativo)")
+
     first_seen = models.DateTimeField(auto_now_add=True)
     last_seen = models.DateTimeField(auto_now=True, db_index=True)
 

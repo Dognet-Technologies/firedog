@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line } from 'recharts';
 import apiService from '../services/api';
-import type { Target, FirewallRule, ThreatLog, FileIntegrity } from '../types';
+import type { Target, FirewallRule, ThreatLog, FileIntegrity, NetworkInterface } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTarget } from '../contexts/TargetContext';
 import StatusDot from '../components/shared/StatusDot';
@@ -52,6 +52,15 @@ const truncateHash = (hash: string): string => {
   return `${hash.slice(0, 8)}...${hash.slice(-8)}`;
 };
 
+// Contatore cumulativo del kernel (da NetworkInterface.rx/tx_bytes), non un
+// rate: formattiamo il totale dal boot dell'interfaccia, non una velocità.
+const formatBytes = (bytes: number): string => {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+};
+
 const CHART_TOOLTIP_STYLE = {
   contentStyle: {
     background: 'var(--bg-elevated)',
@@ -69,6 +78,9 @@ const TargetDetail: React.FC = () => {
 
   const [target, setTarget] = useState<Target | null>(null);
   const [rules, setRules] = useState<FirewallRule[]>([]);
+  const [interfaces, setInterfaces] = useState<NetworkInterface[]>([]);
+  // '' = tutte le interfacce (filtro NIC per il tab Rules)
+  const [selectedInterface, setSelectedInterface] = useState<string>('');
   const [threats, setThreats] = useState<ThreatLog[]>([]);
   const [integrity, setIntegrity] = useState<FileIntegrity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,8 +122,9 @@ const TargetDetail: React.FC = () => {
         apiService.getFileIntegrity(),
         apiService.getFirewallStats(tid, 48),
         apiService.getHeartbeats(tid, 48),
+        apiService.getNetworkInterfaces(tid),
       ]);
-      const [targetRes, rulesRes, threatsRes, integrityRes, statsRes, heartbeatRes] = results;
+      const [targetRes, rulesRes, threatsRes, integrityRes, statsRes, heartbeatRes, interfacesRes] = results;
 
       if (targetRes.status === 'rejected') {
         console.error('TargetDetail: getTarget failed', targetRes.reason);
@@ -129,6 +142,9 @@ const TargetDetail: React.FC = () => {
 
       if (rulesRes.status === 'fulfilled') setRules(rulesRes.value.results);
       else console.warn('TargetDetail: rules failed', rulesRes.reason);
+
+      if (interfacesRes.status === 'fulfilled') setInterfaces(interfacesRes.value.results);
+      else console.warn('TargetDetail: interfaces failed', interfacesRes.reason);
 
       if (threatsRes.status === 'fulfilled') setThreats(threatsRes.value.results);
       else console.warn('TargetDetail: threats failed', threatsRes.reason);
@@ -289,9 +305,12 @@ const TargetDetail: React.FC = () => {
     );
   }
 
-  const inputRules = rules.filter((r) => r.chain === 'INPUT');
-  const outputRules = rules.filter((r) => r.chain === 'OUTPUT');
-  const forwardRules = rules.filter((r) => r.chain === 'FORWARD');
+  const rulesByInterface = selectedInterface
+    ? rules.filter((r) => r.interface === selectedInterface)
+    : rules;
+  const inputRules = rulesByInterface.filter((r) => r.chain === 'INPUT');
+  const outputRules = rulesByInterface.filter((r) => r.chain === 'OUTPUT');
+  const forwardRules = rulesByInterface.filter((r) => r.chain === 'FORWARD');
 
   const criticalCount = threats.filter((t) => t.severity === 'critical').length;
   const unresolvedCount = threats.filter((t) => !t.is_resolved).length;
@@ -331,6 +350,7 @@ const TargetDetail: React.FC = () => {
               <tr>
                 <th>#</th>
                 <th>Protocol</th>
+                <th>Interface</th>
                 <th>Port</th>
                 <th>Source IP</th>
                 <th>Dest IP</th>
@@ -344,6 +364,7 @@ const TargetDetail: React.FC = () => {
                 <tr key={rule.id}>
                   <td className="td-cell-muted">{rule.rule_number ?? idx + 1}</td>
                   <td>{rule.protocol.toUpperCase()}</td>
+                  <td className="td-mono">{rule.interface || <span className="td-cell-muted">tutte</span>}</td>
                   <td className="td-mono">{rule.port ?? '—'}</td>
                   <td className="td-mono">{rule.source_ip || '—'}</td>
                   <td className="td-mono">{rule.dest_ip || '—'}</td>
@@ -654,6 +675,49 @@ const TargetDetail: React.FC = () => {
               </div>
               </DataTooltip>
             </div>
+
+            {interfaces.length > 0 && (
+              <DataTooltip title="Network Interfaces" type="last"
+                description="Interfacce di rete rilevate sull'host (supporto multi-NIC). L'interfaccia primaria è quella su cui gira l'agent verso il master — resta l'identità del target. rx/tx sono contatori cumulativi del kernel dall'ultimo export, non una velocità istantanea."
+                source="NetworkInterface · da firewall-manager --export-json">
+              <div className="td-chart-card">
+                <h3 className="td-card-title">Network Interfaces</h3>
+                <div className="td-table-wrapper">
+                  <table className="td-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>IP</th>
+                        <th>MAC</th>
+                        <th>Status</th>
+                        <th>RX</th>
+                        <th>TX</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {interfaces.map((iface) => (
+                        <tr key={iface.id}>
+                          <td className="td-mono">
+                            {iface.name}
+                            {iface.is_primary && <span className="td-cell-muted"> (primaria)</span>}
+                          </td>
+                          <td className="td-mono">{iface.ip_address || '—'}</td>
+                          <td className="td-mono">{iface.mac_address || '—'}</td>
+                          <td>
+                            <span className={`action-badge ${iface.is_up ? 'action-accept' : 'action-drop'}`}>
+                              {iface.is_up ? 'up' : 'down'}
+                            </span>
+                          </td>
+                          <td className="td-cell-muted">{formatBytes(iface.rx_bytes)}</td>
+                          <td className="td-cell-muted">{formatBytes(iface.tx_bytes)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              </DataTooltip>
+            )}
           </div>
         )}
 
@@ -662,7 +726,22 @@ const TargetDetail: React.FC = () => {
           <div className="td-rules">
             <div className="td-section-header">
               <h2>Firewall Rules</h2>
-              <span className="td-section-count">{rules.length} rules</span>
+              <span className="td-section-count">{rulesByInterface.length} rules</span>
+              {interfaces.length > 1 && (
+                <select
+                  className="td-input"
+                  value={selectedInterface}
+                  onChange={(e) => setSelectedInterface(e.target.value)}
+                  title="Filtra le regole per interfaccia di rete"
+                >
+                  <option value="">Tutte le interfacce</option>
+                  {interfaces.map((iface) => (
+                    <option key={iface.id} value={iface.name}>
+                      {iface.name}{iface.is_primary ? ' (primaria)' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
               {target && (
                 <button
                   className="mon-detail-link"

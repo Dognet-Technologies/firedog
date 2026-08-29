@@ -154,6 +154,7 @@ for plugin_dir in /usr/lib/x86_64-linux-gnu/ulogd /usr/lib64/ulogd /usr/lib/ulog
 done
 install -m 0644 "${SCRIPT_DIR}/file_config/firewall-pcap-logrotate"   "${BASE_DIR}/conf/firewall-pcap-logrotate"
 install -m 0644 "${SCRIPT_DIR}/file_config/custom_rules.conf.example" "${BASE_DIR}/conf/custom_rules.conf.example"
+install -m 0644 "${SCRIPT_DIR}/file_config/firedog.conf.example"      "${BASE_DIR}/conf/firedog.conf.example"
 install -m 0644 "${SCRIPT_DIR}/file_config/firedog-cron"              "${BASE_DIR}/conf/firedog-cron"
 install -m 0644 "${SCRIPT_DIR}/firewall.service"                      "${BASE_DIR}/conf/firewall-fm.service"
 install -m 0644 "${SCRIPT_DIR}/apparmor-firewall-manager"             "${BASE_DIR}/conf/apparmor-firewall-manager"
@@ -172,6 +173,13 @@ install -d -m 0750 -o root -g "$LOG_GRP" /var/log/ulogd
 # /etc/firewall/custom_rules.conf seed (only on first install)
 [[ -f /etc/firewall/custom_rules.conf ]] || \
     install -m 0644 "${BASE_DIR}/conf/custom_rules.conf.example" /etc/firewall/custom_rules.conf
+
+# /etc/firewall/firedog.conf seed (only on first install): MONITORED_INTERFACES
+# + ALWAYS_OPEN_PORTS. Va valorizzato PRIMA di firewall-init.sh se il target
+# espone servizi che altrimenti resterebbero irraggiungibili sotto la policy
+# DROP finale (oltre a SSH, già protetto a parte).
+[[ -f /etc/firewall/firedog.conf ]] || \
+    install -m 0644 "${BASE_DIR}/conf/firedog.conf.example" /etc/firewall/firedog.conf
 
 systemctl daemon-reload
 systemctl enable --now "$ULOGD_SVC"
@@ -233,4 +241,5 @@ echo "  CLI:            firewall-manager --help"
 echo "  firewall svc:   systemctl status firewall-fm"
 echo "  ulogd svc:      systemctl status ${ULOGD_SVC}"
 echo "  custom rules:   /etc/firewall/custom_rules.conf"
+echo "  firedog conf:   /etc/firewall/firedog.conf (NIC monitorate, porte sempre aperte)"
 echo "  pcap logs:      /var/log/ulogd/"
