@@ -139,7 +139,7 @@ create_custom_chains() {
     
     # Chain per ICMP flood protection
     iptables -N ICMP_FLOOD
-    iptables -A ICMP_FLOOD -m limit --limit 5/s --limit-burst 10 -j RETURN
+    iptables -A ICMP_FLOOD -m limit --limit 5/s --limit-burst 10 -j ACCEPT
     iptables -A ICMP_FLOOD -j LOG_INPUT_DROP
     
     success "Chain personalizzate create"
@@ -255,7 +255,12 @@ load_custom_rules() {
             
             # Esegui regola
             if eval "$line" 2>/dev/null; then
-                ((count++))
+                # NON usare ((count++)): con count=0 il post-incremento
+                # restituisce l'exit status del vecchio valore (0 = falso),
+                # e sotto `set -e` questo termina lo script alla prima
+                # regola caricata con successo, saltando salvataggio e
+                # persistenza (bug osservato: iptables.rules mai scritto).
+                count=$((count + 1))
             else
                 warning "Regola non valida: $line"
             fi

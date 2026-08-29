@@ -419,6 +419,19 @@ class MCPWriteToolTests(TestCase):
         self.assertFalse(payload["deleted"])
         self.assertFalse(payload["found"])
 
+    def test_delete_rule_without_rule_number_warns_stale_on_device(self):
+        # rule_number è null finché non arriva una riconciliazione sync_rules
+        # dall'agent: senza, la rimozione non può essere dispatchata e la
+        # regola può restare attiva sul device (vedi rules.services).
+        fresh_rule = FirewallRule.objects.create(
+            target=self.target, chain="INPUT", protocol="tcp", port=8888,
+            action="DROP", is_custom=True, is_synced=False,
+        )
+        payload = self._call_ok(self.admin_key, "delete_rule", {"id": fresh_rule.id})
+        self.assertTrue(payload["deleted"])
+        self.assertFalse(payload["dispatched_to_agent"])
+        self.assertIn("warning", payload)
+
     # -- block_ip / unblock_ip ----------------------------------------------
 
     def test_block_ip_creates_threat_log_for_non_manual_reason(self):

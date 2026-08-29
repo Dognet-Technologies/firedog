@@ -52,7 +52,12 @@ chmod +x "${PKG_DIR}/install.sh"
 # altrimenti forza --skip-init (mai policy DROP senza conferma esplicita).
 args=("$@")
 if [[ ! -t 0 ]]; then
-    if [[ -r /dev/tty ]]; then
+    # `[[ -r /dev/tty ]]` è vero anche senza un terminale di controllo (il
+    # nodo esiste sempre ed è nominalmente leggibile): il test reale è
+    # provare ad aprirlo. Senza controlling tty (es. comando SSH non
+    # interattivo) l'apertura fallisce con ENXIO e va gestita col fallback
+    # --skip-init, non con una redirezione che fa fallire tutto lo script.
+    if ( exec 3< /dev/tty ) 2>/dev/null; then
         info "eseguo install.sh ${args[*]:-} (input da /dev/tty)"
         bash "${PKG_DIR}/install.sh" "${args[@]}" < /dev/tty
         exit $?

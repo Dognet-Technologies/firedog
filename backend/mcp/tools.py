@@ -487,6 +487,12 @@ def delete_rule(user, arguments):
     rule_desc = rule.rule_description
     rule.delete()
     dispatched = dispatch_remove_rule(target, chain, rule_number)
+    # rule_number è noto solo dopo una riconciliazione sync_rules: senza,
+    # non è possibile costruire il comando di rimozione e la regola può
+    # restare attiva sul target anche se qui risulta cancellata (vedi
+    # rules.services.dispatch_remove_rule). Lo segnaliamo esplicitamente
+    # invece di far credere che la rimozione sul device sia garantita.
+    stale_on_device = rule_number is None
 
     AuditLog.log_action(
         action="delete",
@@ -495,10 +501,18 @@ def delete_rule(user, arguments):
         old_values={"id": rule_id, "chain": chain, "rule_number": rule_number},
     )
     logger.info(
-        "MCP delete_rule: rule %s eliminata da %s (dispatched=%s)",
-        rule_id, user, dispatched,
+        "MCP delete_rule: rule %s eliminata da %s (dispatched=%s, stale_on_device=%s)",
+        rule_id, user, dispatched, stale_on_device,
     )
-    return {"deleted": True, "found": True, "dispatched_to_agent": dispatched}
+    result = {"deleted": True, "found": True, "dispatched_to_agent": dispatched}
+    if stale_on_device:
+        result["warning"] = (
+            "rule_number sconosciuto (nessuna riconciliazione sync_rules ancora "
+            "avvenuta): la regola potrebbe essere ancora attiva su iptables sul "
+            "target. Richiesto un sync_rules per farla riemergere in list_rules "
+            "ed essere rimossa manualmente se necessario."
+        )
+    return result
 
 
 def block_ip(user, arguments):
@@ -773,7 +787,10 @@ TOOLS = [
         "description": (
             "[Admin] Elimina una regola firewall per id e chiede all'agent di "
             "rimuoverla dal target (se connesso). found=false se l'id non esiste "
-            "(non è un errore)."
+            "(non è un errore). Se la regola non ha ancora un rule_number noto "
+            "(nessun sync_rules avvenuto dalla creazione) la rimozione sul device "
+            "non può essere dispatchata: la risposta include un campo 'warning' e "
+            "viene comunque richiesto un sync_rules per farla riemergere."
         ),
         "inputSchema": {
             "type": "object",
