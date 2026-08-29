@@ -3,8 +3,6 @@ ASGI Routing Configuration per WebSocket
 """
 
 from django.urls import re_path
-from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.auth import AuthMiddlewareStack
 from targets.consumers import SSHTerminalConsumer
 from firedog.consumers import LogStreamConsumer, LogHistoryConsumer
 from agent_manager.consumers import AgentConsumer

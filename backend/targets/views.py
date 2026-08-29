@@ -7,7 +7,6 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db import transaction
 import logging
 
 from .models import Target
@@ -19,9 +18,7 @@ Views per Whitelist e BlockedIPs
 API endpoints completi con logging audit e validazioni
 """
 from django.utils import timezone
-from django.db.models import Count, Sum, Q
-from datetime import timedelta
-import logging
+from django.db.models import Count, Sum
 
 from .models import WhitelistEntry, BlockedIP, FirewallStats, NetworkInterface
 from .serializers import (
@@ -33,8 +30,6 @@ from .serializers import (
     FirewallStatsSerializer,
     NetworkInterfaceSerializer,
 )
-from targets.models import Target
-from audit.models import AuditLog
 from .services import record_blocked_ip, unblock_ip as unblock_ip_service
 
 logger = logging.getLogger("firedog.targets")

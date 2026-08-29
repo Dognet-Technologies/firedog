@@ -28,14 +28,6 @@ const TABS = [
   { id: 'config' as TabId, label: 'Config' },
 ];
 
-const formatDate = (ts: string | null): string => {
-  if (!ts) return '—';
-  return new Intl.DateTimeFormat('it-IT', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  }).format(new Date(ts));
-};
-
 const formatRelative = (ts: string | null): string => {
   if (!ts) return '—';
   const diff = Date.now() - new Date(ts).getTime();

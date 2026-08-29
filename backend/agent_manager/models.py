@@ -6,7 +6,6 @@ Gestione dell'agent Dog Agent per comunicazione con i target
 import hashlib
 from django.db import models
 from django.utils import timezone
-from django.core.exceptions import ValidationError
 from django.conf import settings
 from targets.models import Target
 from cryptography.fernet import Fernet

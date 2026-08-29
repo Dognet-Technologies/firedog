@@ -12,7 +12,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import requests
-import json
 
 logger = logging.getLogger("firedog.notifications")
 

@@ -2,7 +2,7 @@
 Views per l'app Audit
 """
 
-from rest_framework import viewsets, status
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -62,7 +62,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
         Statistiche audit logs
         """
-        from django.db.models import Count, Q
+        from django.db.models import Count
 
         hours = int(request.query_params.get("hours", 24))
         since = timezone.now() - timedelta(hours=hours)

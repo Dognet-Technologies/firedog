@@ -39,26 +39,6 @@ interface TargetGroup {
   updated_at: string;
 }
 
-// Gruppi disponibili per la selezione
-const GRUPPO_OPTIONS = [
-  { value: '', label: '-- Nessun Gruppo --' },
-  { value: 'web', label: 'Web Server' },
-  { value: 'db', label: 'Database' },
-  { value: 'dns', label: 'DNS Server' },
-  { value: 'storage', label: 'Storage' },
-  { value: 'mail', label: 'Mail Server' },
-  { value: 'backup', label: 'Backup Server' },
-  { value: 'monitoring', label: 'Monitoring' },
-  { value: 'proxy', label: 'Proxy/Load Balancer' },
-  { value: 'vpn', label: 'VPN Gateway' },
-  { value: 'firewall', label: 'Firewall' },
-  { value: 'application', label: 'Application Server' },
-  { value: 'cache', label: 'Cache Server' },
-  { value: 'queue', label: 'Message Queue' },
-  { value: 'other', label: 'Altro' },
-  { value: 'custom', label: 'Personalizzato' },
-];
-
 const Discovery: React.FC = () => {
   // ?tab=arp-scan|file|manual|groups & ?group=<id> consente di linkare
   // direttamente al tab Groups con un gruppo pre-selezionato (es. dalla
@@ -96,7 +76,6 @@ const Discovery: React.FC = () => {
   const [groups, setGroups] = useState<TargetGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<TargetGroup | null>(null);
   const [availableTargets, setAvailableTargets] = useState<Target[]>([]);
-  const [allTargets, setAllTargets] = useState<Target[]>([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupForm, setNewGroupForm] = useState({
     name: '',
@@ -115,7 +94,6 @@ const Discovery: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'groups') {
       loadGroups();
-      loadAllTargets();
     }
   }, [activeTab]);
 
@@ -445,16 +423,6 @@ const Discovery: React.FC = () => {
         title: 'Error',
         message: 'Failed to load groups'
       });
-    }
-  };
-
-  const loadAllTargets = async () => {
-    try {
-      const response = await apiService.getTargets();
-      const targets = Array.isArray(response) ? response : response.results || [];
-      setAllTargets(targets);
-    } catch (error) {
-      console.error('Error loading targets:', error);
     }
   };
 

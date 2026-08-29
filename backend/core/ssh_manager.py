@@ -4,12 +4,6 @@ Gestione connessioni SSH e trasferimento file via SCP
 Conforme a OWASP/NIST security standards
 """
 
-from core.firewall_output_parser import (
-    parse_firewall_stats,
-    parse_firewall_rules,
-    parse_firewall_threats,
-    parse_firewall_analyze,
-)
 import paramiko
 import socket
 import os
@@ -17,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 from django.conf import settings
 from contextlib import contextmanager
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
 import logging
 
 logger = logging.getLogger("firedog.ssh")

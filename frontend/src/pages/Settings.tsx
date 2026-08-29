@@ -7,7 +7,6 @@ import './Settings.css';
 import api from '../services/api';
 import MCPKeysTab from '../components/Settings/MCPKeysTab';
 import { useNotifications } from '../contexts/NotificationContext';
-import { useAuth } from '../contexts/AuthContext';
 import type { NotificationConfig, SmtpInfo } from '../types';
 
 interface SettingsData {
@@ -40,18 +39,6 @@ interface SettingsData {
   logRetention: number;
   enableAutoBlock: boolean;
   threatThreshold: number;
-}
-
-interface SSHKey {
-  id: number;
-  name: string;
-  key_type: string;
-  fingerprint: string;
-  public_key: string;
-  created_at: string;
-  associated_targets: number;
-  scope: 'global' | 'group' | 'target';
-  scope_value?: string;
 }
 
 interface AgentAPIKey {
@@ -232,8 +219,7 @@ const UpdateSection: React.FC = () => {
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const { showToast, showConfirm } = useNotifications();
-  const { user } = useAuth();
-  
+
   const [settings, setSettings] = useState<SettingsData>({
     systemName: 'FireDog Security',
     timezone: 'Europe/Rome',
@@ -257,12 +243,6 @@ const Settings: React.FC = () => {
     threatThreshold: 8,
   });
 
-  // SSH Keys State
-  const [sshKeys, setSSHKeys] = useState<SSHKey[]>([]);
-  const [loadingSSH, setLoadingSSH] = useState(false);
-  const [showSSHModal, setShowSSHModal] = useState(false);
-  const [sshKeyToDelete, setSSHKeyToDelete] = useState<number | null>(null);
-
   // Agent API Keys State
   const [agentAPIKeys, setAgentAPIKeys] = useState<AgentAPIKey[]>([]);
   const [loadingAgentKeys, setLoadingAgentKeys] = useState(false);
@@ -284,7 +264,6 @@ const Settings: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Notifications State
-  const [notificationConfig, setNotificationConfig] = useState<NotificationConfig | null>(null);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [savingNotifications, setSavingNotifications] = useState(false);
   const [testingNotification, setTestingNotification] = useState<string | null>(null);
@@ -462,90 +441,6 @@ const Settings: React.FC = () => {
       localStorage.removeItem('firedog_settings');
       window.location.reload();
     }
-  };
-
-  // ============================================================================
-  // SSH KEYS MANAGEMENT
-  // ============================================================================
-
-  const loadSSHKeys = async () => {
-    setLoadingSSH(true);
-    try {
-      // TODO: Replace with actual API call
-      // const response = await api.get('/settings/ssh-keys/');
-      // setSSHKeys(response.data);
-      
-      // Mock data for now
-      setSSHKeys([
-        {
-          id: 1,
-          name: 'Global Key',
-          key_type: 'ed25519',
-          fingerprint: 'SHA256:abc123...',
-          public_key: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5...',
-          created_at: '2024-01-15T10:30:00Z',
-          associated_targets: 12,
-          scope: 'global',
-        },
-        {
-          id: 2,
-          name: 'Production Group Key',
-          key_type: 'ed25519',
-          fingerprint: 'SHA256:def456...',
-          public_key: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5...',
-          created_at: '2024-02-20T14:20:00Z',
-          associated_targets: 5,
-          scope: 'group',
-          scope_value: 'production',
-        },
-      ]);
-    } catch (error) {
-      console.error('Error loading SSH keys:', error);
-      showToast({ type: 'error', title: 'Errore', message: 'Errore caricamento chiavi SSH' });
-    } finally {
-      setLoadingSSH(false);
-    }
-  };
-
-  const handleGenerateSSHKey = async (keyData: any) => {
-    try {
-      // TODO: Replace with actual API call
-      // await api.post('/settings/ssh-keys/generate/', keyData);
-      
-      showToast({ type: 'success', title: 'Successo', message: 'Chiave SSH generata con successo' });
-      loadSSHKeys();
-      setShowSSHModal(false);
-    } catch (error) {
-      console.error('Error generating SSH key:', error);
-      showToast({ type: 'error', title: 'Errore', message: 'Errore generazione chiave SSH' });
-    }
-  };
-
-  const handleDeleteSSHKey = async (keyId: number) => {
-    try {
-      // TODO: Replace with actual API call
-      // await api.delete(`/settings/ssh-keys/${keyId}/`);
-      
-      showToast({ type: 'success', title: 'Successo', message: 'Chiave SSH eliminata' });
-      loadSSHKeys();
-      setSSHKeyToDelete(null);
-    } catch (error) {
-      console.error('Error deleting SSH key:', error);
-      showToast({ type: 'error', title: 'Errore', message: 'Errore eliminazione chiave SSH' });
-    }
-  };
-
-  const handleDownloadPublicKey = (key: SSHKey) => {
-    const blob = new Blob([key.public_key], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${key.name.replace(/\s+/g, '_')}_public.pub`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast({ type: 'success', title: 'Successo', message: 'Chiave pubblica scaricata' });
   };
 
   // ============================================================================
@@ -764,7 +659,6 @@ const Settings: React.FC = () => {
     try {
       setLoadingNotifications(true);
       const data = await api.getNotificationConfig();
-      setNotificationConfig(data);
       setNotificationFormData(data);
     } catch (error: any) {
       console.error('Error loading notification config:', error);
@@ -822,7 +716,6 @@ const Settings: React.FC = () => {
       }
 
       const updated = await api.updateNotificationConfig(notificationFormData);
-      setNotificationConfig(updated);
       setNotificationFormData(updated);
 
       showToast({
@@ -2679,26 +2572,6 @@ const Settings: React.FC = () => {
         {activeTab === 'database' && renderDatabaseSettings()}
       </div>
 
-      {/* SSH Key Generation Modal */}
-      {showSSHModal && (
-        <SSHKeyModal
-          onClose={() => setShowSSHModal(false)}
-          onGenerate={handleGenerateSSHKey}
-        />
-      )}
-
-      {/* SSH Key Delete Confirmation */}
-      {sshKeyToDelete !== null && (
-        <ConfirmModal
-          title="Elimina Chiave SSH"
-          message="Sei sicuro di voler eliminare questa chiave SSH? I target che la utilizzano non saranno più accessibili."
-          confirmText="Elimina"
-          onConfirm={() => handleDeleteSSHKey(sshKeyToDelete)}
-          onCancel={() => setSSHKeyToDelete(null)}
-          variant="danger"
-        />
-      )}
-
       {/* Target Delete Confirmation */}
       {showDeleteModal && (
         <ConfirmModal
@@ -2720,134 +2593,6 @@ const Settings: React.FC = () => {
 // ============================================================================
 // MODALS COMPONENTS
 // ============================================================================
-
-interface SSHKeyModalProps {
-  onClose: () => void;
-  onGenerate: (data: any) => void;
-}
-
-const SSHKeyModal: React.FC<SSHKeyModalProps> = ({ onClose, onGenerate }) => {
-  const [formData, setFormData] = useState({
-    name: '',
-    key_type: 'ed25519',
-    key_size: '4096',
-    scope: 'global',
-    scope_value: '',
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onGenerate(formData);
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Genera Nuova Chiave SSH</h2>
-          <button className="modal-close" onClick={onClose}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            <div className="form-group">
-              <label htmlFor="keyName">Nome Chiave</label>
-              <input
-                id="keyName"
-                type="text"
-                className="input"
-                placeholder="es: Production Key"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="keyType">Tipo Chiave</label>
-              <select
-                id="keyType"
-                className="input"
-                value={formData.key_type}
-                onChange={(e) => setFormData({ ...formData, key_type: e.target.value })}
-              >
-                <option value="ed25519">Ed25519 (Consigliato)</option>
-                <option value="rsa">RSA</option>
-                <option value="ecdsa">ECDSA</option>
-              </select>
-              <span className="form-hint">Ed25519 è più sicuro e veloce</span>
-            </div>
-
-            {formData.key_type === 'rsa' && (
-              <div className="form-group">
-                <label htmlFor="keySize">Dimensione Chiave</label>
-                <select
-                  id="keySize"
-                  className="input"
-                  value={formData.key_size}
-                  onChange={(e) => setFormData({ ...formData, key_size: e.target.value })}
-                >
-                  <option value="2048">2048 bit</option>
-                  <option value="3072">3072 bit</option>
-                  <option value="4096">4096 bit (Consigliato)</option>
-                </select>
-              </div>
-            )}
-
-            <div className="form-group">
-              <label htmlFor="scope">Ambito</label>
-              <select
-                id="scope"
-                className="input"
-                value={formData.scope}
-                onChange={(e) => setFormData({ ...formData, scope: e.target.value, scope_value: '' })}
-              >
-                <option value="global">Globale (tutti i target)</option>
-                <option value="group">Gruppo specifico</option>
-                <option value="target">Target specifico</option>
-              </select>
-            </div>
-
-            {formData.scope !== 'global' && (
-              <div className="form-group">
-                <label htmlFor="scopeValue">
-                  {formData.scope === 'group' ? 'Nome Gruppo' : 'ID Target'}
-                </label>
-                <input
-                  id="scopeValue"
-                  type="text"
-                  className="input"
-                  placeholder={formData.scope === 'group' ? 'es: production' : 'es: 1'}
-                  value={formData.scope_value}
-                  onChange={(e) => setFormData({ ...formData, scope_value: e.target.value })}
-                  required
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="modal-footer">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>
-              Annulla
-            </button>
-            <button type="submit" className="btn btn-primary">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              Genera Chiave
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
 
 interface ConfirmModalProps {
   title: string;

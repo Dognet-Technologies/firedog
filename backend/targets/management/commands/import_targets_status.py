@@ -3,11 +3,9 @@ Django Management Command - Import Targets Status from JSON
 Importa i file JSON di stato nel database Django
 """
 
-import os
 import json
 import logging
 from pathlib import Path
-from datetime import datetime
 from dateutil import parser as date_parser
 from django.core.management.base import BaseCommand
 from django.conf import settings
@@ -186,7 +184,7 @@ class Command(BaseCommand):
                     return "skipped"
 
                 # Import statistiche
-                stats = self.import_stats(target, data, collected_at)
+                self.import_stats(target, data, collected_at)
 
                 # Import regole (se non skipped)
                 rules_count = 0

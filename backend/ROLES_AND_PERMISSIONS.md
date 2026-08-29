@@ -92,114 +92,69 @@ class MyViewSet(ModelViewSet):
 
 ## 🔧 API Gestione Regole Firewall
 
+Le regole sono un CRUD standard DRF su `/api/rules/` (`FirewallRuleViewSet`):
+lettura per tutti gli utenti autenticati, scrittura solo Admin
+(`IsAdminOrReadOnly`). Creazione/cancellazione dispatchano il comando
+all'agent del target via WebSocket (`rules.services.dispatch_add_rule` /
+`dispatch_remove_rule`) — se l'agent non è connesso la regola resta
+persistita in DB con `is_synced=False` in attesa della prossima
+riconciliazione. Non c'è più un percorso SSH diretto: `connection_type="ssh"`
+è legacy e non più supportato per la gestione regole.
+
 ### Aggiungere Regola (Solo Admin)
 
 ```http
-POST /api/rules/add_via_ssh/
+POST /api/rules/
 Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-    "target_id": 1,
+    "target": 1,
     "chain": "INPUT",
     "port": 80,
     "protocol": "tcp",
+    "action": "ACCEPT",
     "source_ip": "192.168.1.0/24",  // opzionale
-    "comment": "HTTP traffic"         // opzionale
+    "interface": "eth0",             // opzionale, NIC specifica (multi-homed)
+    "comment": "HTTP traffic"        // opzionale
 }
 ```
 
-**Response Success (201):**
-```json
-{
-    "success": true,
-    "message": "Regola aggiunta con successo",
-    "command": "sudo /usr/local/bin/firewall-manager --add-input 80 tcp --source 192.168.1.0/24 --comment \"HTTP traffic\"",
-    "output": "[✓] Regola INPUT aggiunta: TCP/80 da 192.168.1.0/24\n"
-}
-```
-
-**Response Error (500):**
-```json
-{
-    "success": false,
-    "message": "Errore aggiunta regola",
-    "command": "...",
-    "error": "Porta già in uso\n"
-}
-```
+**Response Success (201):** il record `FirewallRule` creato (vedi
+`FirewallRuleSerializer`), con `is_synced=false` finché l'agent non conferma.
 
 ### Rimuovere Regola (Solo Admin)
 
 ```http
-POST /api/rules/remove_via_ssh/
+DELETE /api/rules/{id}/
 Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-    "target_id": 1,
-    "chain": "INPUT",
-    "rule_number": 5
-}
 ```
 
-**Response Success (200):**
-```json
-{
-    "success": true,
-    "message": "Regola rimossa con successo",
-    "command": "sudo /usr/local/bin/firewall-manager --remove INPUT 5",
-    "output": "[✓] Regola #5 rimossa da chain INPUT\n"
-}
-```
+**Response Success (204):** nessun body.
 
 ### Validazioni Input
 
-**AddFirewallRuleViaSSHSerializer:**
-- `target_id`: required, target deve esistere e essere online
-- `chain`: required, choices: INPUT, OUTPUT
-- `port`: required, range: 1-65535
-- `protocol`: default: tcp, choices: tcp, udp
-- `source_ip`: opzionale, solo per INPUT, validato come IP
-- `dest_ip`: opzionale, solo per OUTPUT, validato come IP
-- `comment`: opzionale, max 256 char, sanitizzato (solo alfanumerici, spazi, -, _, .)
-
-**RemoveFirewallRuleViaSSHSerializer:**
-- `target_id`: required, target deve esistere e essere online
+`FirewallRuleSerializer` (ModelSerializer):
+- `target`: required, FK a un Target esistente
 - `chain`: required, choices: INPUT, OUTPUT, FORWARD
-- `rule_number`: required, min: 1
+- `interface`: opzionale, NIC specifica — applicata come `-i` su INPUT, `-o`
+  su OUTPUT, non supportata su FORWARD (vedi tool MCP `create_rule`)
+- `port`: opzionale, range: 1-65535
+- `protocol`: default: tcp, choices: tcp, udp, icmp, all
+- `source_ip` / `dest_ip`: opzionali, validati come IP
+- `comment`: opzionale, max 256 char
 
 ## 🔒 Sicurezza
 
 ### Input Sanitization
-Tutti gli input sono sanitizzati:
-- **Commenti**: rimossi caratteri shell pericolosi (solo `a-zA-Z0-9 -_.`)
 - **IP addresses**: validati con Django validators
 - **Porte**: validate range 1-65535
-- **Chain/Protocol**: scelte fisse (no input arbitrario)
-
-### Command Construction
-Comandi SSH costruiti in modo sicuro:
-```python
-cmd_parts = [
-    'sudo', '/usr/local/bin/firewall-manager',
-    f'--add-{chain_lower}',
-    str(port),  # Sempre int
-    protocol    # Sempre da choices
-]
-```
+- **Chain/Protocol/Action**: scelte fisse (no input arbitrario)
 
 ### Audit Logging
-Tutte le operazioni sono registrate in `AuditLog`:
-- Utente che ha eseguito l'operazione
-- Azione (add_firewall_rule_ssh, remove_firewall_rule_ssh)
-- Target coinvolto
-- Dettagli (comando, parametri, exit_code)
-- Timestamp
-- Successo/fallimento
-
-### SSH Timeout
-Timeout di 30 secondi per operazioni SSH (prevenzione hang).
+Le operazioni di scrittura via MCP sono registrate in `AuditLog` (utente,
+azione, target, valori). Le operazioni via REST ereditano il logging
+standard del ViewSet.
 
 ## 📝 Setup Iniziale
 
@@ -259,10 +214,10 @@ curl -X POST http://localhost:8000/api/token/ \
   -d '{"username": "microcyber", "password": "your_password"}'
 
 # Aggiungere regola (deve funzionare)
-curl -X POST http://localhost:8000/api/rules/add_via_ssh/ \
+curl -X POST http://localhost:8000/api/rules/ \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
-  -d '{"target_id": 1, "chain": "INPUT", "port": 8080, "protocol": "tcp", "comment": "Test"}'
+  -d '{"target": 1, "chain": "INPUT", "port": 8080, "protocol": "tcp", "action": "ACCEPT", "comment": "Test"}'
 ```
 
 ### Test Permessi Reporter
@@ -278,10 +233,10 @@ curl http://localhost:8000/api/rules/ \
   -H "Authorization: Bearer <access_token>"
 
 # Aggiungere regola (deve fallire con 403)
-curl -X POST http://localhost:8000/api/rules/add_via_ssh/ \
+curl -X POST http://localhost:8000/api/rules/ \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
-  -d '{"target_id": 1, "chain": "INPUT", "port": 8080, "protocol": "tcp"}'
+  -d '{"target": 1, "chain": "INPUT", "port": 8080, "protocol": "tcp", "action": "ACCEPT"}'
 
 # Expected response:
 # {

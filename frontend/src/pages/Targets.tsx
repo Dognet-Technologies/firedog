@@ -2,36 +2,13 @@
  * Targets Management Page - Table View with Gruppo
  */
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import apiService from '../services/api';
 import type { Target, TargetCreate } from '../types';
 import './Targets.css';
 import { useNotifications } from '../contexts/NotificationContext';
-import PageHeader from '../components/shared/PageHeader';
-import StatusDot from '../components/shared/StatusDot';
 
 type SortField = 'ip_address' | 'hostname' | 'firedog_version' | 'last_seen' | 'status' | 'gruppo';
 type SortDirection = 'asc' | 'desc';
-
-// Gruppi disponibili
-const GRUPPO_OPTIONS = [
-  { value: '', label: 'Tutti i gruppi' },
-  { value: 'web', label: 'Web Server' },
-  { value: 'db', label: 'Database' },
-  { value: 'dns', label: 'DNS Server' },
-  { value: 'storage', label: 'Storage' },
-  { value: 'mail', label: 'Mail Server' },
-  { value: 'backup', label: 'Backup Server' },
-  { value: 'monitoring', label: 'Monitoring' },
-  { value: 'proxy', label: 'Proxy/Load Balancer' },
-  { value: 'vpn', label: 'VPN Gateway' },
-  { value: 'firewall', label: 'Firewall' },
-  { value: 'application', label: 'Application Server' },
-  { value: 'cache', label: 'Cache Server' },
-  { value: 'queue', label: 'Message Queue' },
-  { value: 'other', label: 'Altro' },
-  { value: 'custom', label: 'Personalizzato' },
-];
 
 const Targets: React.FC = () => {
   const [targets, setTargets] = useState<Target[]>([]);

@@ -27,12 +27,6 @@ const validatePath = (path: string): boolean => {
   return true;
 };
 
-// Validazione hash SHA512 (128 caratteri esadecimali)
-const validateSHA512 = (hash: string): boolean => {
-  const sha512Regex = /^[a-f0-9]{128}$/i;
-  return sha512Regex.test(hash);
-};
-
 // Sanitizzazione note
 const sanitizeNotes = (notes: string): string => {
   return notes

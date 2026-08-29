@@ -81,7 +81,6 @@ class Command(BaseCommand):
 
             step_in = int(random.uniform(5_000, 20_000) * day_factor)
             step_out = int(random.uniform(3_000, 15_000) * day_factor)
-            step_fwd = int(random.uniform(1_000, 8_000) * day_factor)
             packets_in_cumul += step_in
             packets_out_cumul += step_out
 

@@ -6,8 +6,7 @@ firewall-manager in dizionari Python strutturati.
 """
 
 import re
-from typing import Dict, List, Optional, Tuple
-from datetime import datetime
+from typing import Dict, List, Optional
 import logging
 
 logger = logging.getLogger("firedog.parser")
@@ -185,7 +184,6 @@ class FirewallOutputParser:
 
             for chain_match in chain_sections:
                 current_chain = chain_match.group(1)
-                policy = chain_match.group(2)
 
                 # Trova la posizione della chain corrente
                 chain_start = chain_match.end()

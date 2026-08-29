@@ -5,7 +5,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
 import type { Layout } from 'react-grid-layout';
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Link } from 'react-router-dom';
 import apiService from '../services/api';
 import type { ThreatStats, Target, Dashboard as DashboardType, Widget as ApiWidget } from '../types';

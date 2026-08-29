@@ -9,7 +9,6 @@ import os
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.conf import settings
-from pathlib import Path
 
 
 class LogStreamConsumer(AsyncWebsocketConsumer):

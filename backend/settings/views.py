@@ -9,7 +9,6 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.db import connection, transaction
 from django.utils import timezone
-from django.contrib.auth.models import User
 from django.contrib.auth import update_session_auth_hash
 from datetime import timedelta
 import subprocess
@@ -698,8 +697,6 @@ class NotificationViewSet(viewsets.ViewSet):
         GET/PUT /api/settings/notifications/config/
         Ottieni o aggiorna configurazione notifiche
         """
-        from .models import NotificationConfig
-        from .serializers import NotificationConfigSerializer
 
         config = NotificationConfig.get_config()
 
@@ -734,7 +731,6 @@ class NotificationViewSet(viewsets.ViewSet):
         }
         """
         from .serializers import NotificationTestSerializer
-        from .tasks import send_test_notification
 
         serializer = NotificationTestSerializer(data=request.data)
 
@@ -783,8 +779,6 @@ class NotificationViewSet(viewsets.ViewSet):
         GET /api/settings/notifications/logs/?limit=50
         Ottieni ultimi log notifiche
         """
-        from .models import NotificationLog
-        from .serializers import NotificationLogSerializer
 
         limit = int(request.query_params.get("limit", 50))
 
@@ -891,7 +885,6 @@ class UserManagementViewSet(viewsets.ViewSet):
         GET /api/settings/user/profile/
         Ottieni informazioni profilo utente corrente
         """
-        from .serializers import UserProfileSerializer
 
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data)
@@ -907,7 +900,6 @@ class UserManagementViewSet(viewsets.ViewSet):
             "new_username": "nuovo_username"
         }
         """
-        from .serializers import ChangeUsernameSerializer
         from audit.models import AuditLog
 
         serializer = ChangeUsernameSerializer(
@@ -955,7 +947,6 @@ class UserManagementViewSet(viewsets.ViewSet):
             "confirm_password": "nuova_password"
         }
         """
-        from .serializers import ChangePasswordSerializer
         from audit.models import AuditLog
 
         serializer = ChangePasswordSerializer(
