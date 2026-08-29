@@ -566,6 +566,17 @@ class AgentConsumer(AsyncWebsocketConsumer):
             },
         )
 
+        # FirewallStats.firedog_version (sopra) non si riflette da solo su
+        # Target.firedog_version: sono due modelli distinti e nessun altro
+        # punto del codice li sincronizza per il percorso basato su agent
+        # (la UI Targets legge Target.firedog_version, non FirewallStats).
+        # Senza questo, un target online e perfettamente funzionante mostra
+        # sempre "Not installed" in tabella.
+        new_version = payload.get("firedog_version") or ""
+        if new_version and self.target.firedog_version != new_version:
+            self.target.firedog_version = new_version
+            self.target.save(update_fields=["firedog_version"])
+
         # Estensioni: stessa snapshot popola anche regole, IP bloccati e threat log.
         # Ogni helper è sincrono e gira dentro lo stesso wrapper async.
         self._sync_firewall_rules(payload.get("rules") or {})

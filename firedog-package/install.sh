@@ -176,14 +176,15 @@ install -d -m 0750 -o root -g "$LOG_GRP" /var/log/ulogd
 systemctl daemon-reload
 systemctl enable --now "$ULOGD_SVC"
 
-# ── 5/7 cron (only if microcyber exists) ─────────────────────────────────────
+# ── 5/7 cron ───────────────────────────────────────────────────────────────
+# I job in firedog-cron girano come root (non serve più microcyber): senza
+# questo, l'export status.json non viene mai generato e Target.firedog_version
+# resta vuoto anche su target agent-based perfettamente funzionanti (Method B
+# non crea l'utente microcyber, quindi prima di questo fix il link veniva
+# sempre skippato su quel percorso di installazione).
 echo -e "${GREEN}[5/7]${NC} cron"
-if id microcyber &>/dev/null; then
-    ln -sfn "${BASE_DIR}/conf/firedog-cron" /etc/cron.d/firedog
-    chmod 0644 "${BASE_DIR}/conf/firedog-cron"
-else
-    echo -e "${YELLOW}  [skip]${NC} microcyber missing, firedog-cron not linked"
-fi
+ln -sfn "${BASE_DIR}/conf/firedog-cron" /etc/cron.d/firedog
+chmod 0644 "${BASE_DIR}/conf/firedog-cron"
 
 # ── 6/7 AppArmor (best-effort) ──────────────────────────────────────────────
 # the parser alone is not enough: the kernel must have AppArmor active
