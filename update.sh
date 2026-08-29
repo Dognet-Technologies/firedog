@@ -21,7 +21,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BRANCH="${UPDATE_BRANCH:-develop-v0.0.6}"
+BRANCH="${UPDATE_BRANCH:-develop-v1.0.0}"
 BACKEND_DIR="$REPO_DIR/backend"
 FRONTEND_DIR="$REPO_DIR/frontend"
 VENV="$BACKEND_DIR/venv"
