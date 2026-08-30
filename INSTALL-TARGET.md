@@ -98,6 +98,37 @@ Distro supportate da `install.sh`:
 > confermare, o usa `--skip-init` e attiva dopo con
 > `sudo firewall-init.sh && sudo systemctl enable --now firewall-fm`.
 
+### Configurazione locale: `/etc/firewall/firedog.conf`
+
+`install.sh` seeda questo file al primo install (come `custom_rules.conf`:
+non viene mai sovrascritto agli aggiornamenti). Va valorizzato **prima** di
+lanciare `firewall-init.sh` la prima volta, altrimenti qualunque servizio
+sulle porte elencate diventa irraggiungibile appena la policy DROP entra in
+vigore.
+
+```bash
+# /etc/firewall/firedog.conf — formato KEY="value", sourceable da bash
+
+# Interfacce da monitorare/riportare al master (separate da virgola).
+# Vuoto = tutte le interfacce rilevate (default). Utile per escludere NIC
+# virtuali rumorose (docker0, veth*, tailscale0...) su host multi-NIC.
+MONITORED_INTERFACES="eth0,eth1"
+
+# Porte da tenere sempre aperte in INPUT, prima della policy DROP finale
+# (formato "porta/protocollo", separate da virgola). La porta SSH è già
+# protetta a parte (auto-rilevata / $SSH_PORT), non va elencata qui.
+ALWAYS_OPEN_PORTS="80/tcp,443/tcp"
+```
+
+Dopo aver modificato il file, applica con `sudo firewall-init.sh` (idempotente:
+sovrascrive il ruleset corrente, va rilanciato per raccogliere modifiche a
+`firedog.conf`). Verifica con `firewall-manager --list`.
+
+Se il target è già in produzione con policy DROP attiva, aggiungere una
+porta a `ALWAYS_OPEN_PORTS` **non** basta da sola: senza rilanciare
+`firewall-init.sh` la regola non viene creata — pianifica la finestra di
+manutenzione di conseguenza (il rilancio resetta e ricrea l'intero ruleset).
+
 ## Installazione del dog-agent
 
 Il dog-agent è un componente **della suite Dognet** (serve FireDog,
