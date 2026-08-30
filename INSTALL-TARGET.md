@@ -98,6 +98,55 @@ Distro supportate da `install.sh`:
 > confermare, o usa `--skip-init` e attiva dopo con
 > `sudo firewall-init.sh && sudo systemctl enable --now firewall-fm`.
 
+### Configurazione locale: `/etc/firewall/firedog.conf`
+
+`install.sh` seeda questo file al primo install (come `custom_rules.conf`:
+non viene mai sovrascritto agli aggiornamenti). Va valorizzato **prima** di
+lanciare `firewall-init.sh` la prima volta, altrimenti qualunque servizio
+sulle porte elencate diventa irraggiungibile appena la policy DROP entra in
+vigore.
+
+```bash
+# /etc/firewall/firedog.conf — formato KEY="value", sourceable da bash
+
+# Interfacce da monitorare/riportare al master (separate da virgola).
+# Vuoto = tutte le interfacce rilevate (default). Utile per escludere NIC
+# virtuali rumorose (docker0, veth*, tailscale0...) su host multi-NIC.
+MONITORED_INTERFACES="eth0,eth1"
+
+# Porte da tenere sempre aperte in INPUT, prima della policy DROP finale
+# (formato "porta/protocollo", separate da virgola). La porta SSH è già
+# protetta a parte (auto-rilevata / $SSH_PORT), non va elencata qui.
+ALWAYS_OPEN_PORTS="80/tcp,443/tcp"
+
+# Protezione SSH brute-force: soglia (tentativi/finestra in secondi) e cosa
+# succede al suo superamento. SSH_PROTECT_BAN_DURATION: "0" nessun ban (solo
+# drop nella finestra, storico) | "<N>m"/"<N>h"/"<N>d" ban temporaneo |
+# "permanent" ban permanente. Il ban richiede il pacchetto ipset (installato
+# di default) ed è persistente: sopravvive a un rilancio di firewall-init.sh
+# e, via salvataggio periodico da cron, anche al reboot.
+SSH_PROTECT_MAX_ATTEMPTS="4"
+SSH_PROTECT_WINDOW_SECONDS="60"
+SSH_PROTECT_BAN_DURATION="0"
+```
+
+Dopo aver modificato il file, applica con `sudo firewall-init.sh` (idempotente:
+sovrascrive il ruleset corrente, va rilanciato per raccogliere modifiche a
+`firedog.conf`). Verifica con `firewall-manager --list`.
+
+Se il target è già in produzione con policy DROP attiva, aggiungere una
+porta a `ALWAYS_OPEN_PORTS` **non** basta da sola: senza rilanciare
+`firewall-init.sh` la regola non viene creata — pianifica la finestra di
+manutenzione di conseguenza (il rilancio resetta e ricrea l'intero ruleset).
+
+Gestione dei ban SSH attivi (non serve rilanciare `firewall-init.sh`, agiscono
+subito sulla ipset già attiva):
+
+```bash
+firewall-manager --list-bans        # IP bannati e tempo alla scadenza (o "permanente")
+firewall-manager --unban 203.0.113.5  # rimuove un ban, incluso uno permanente
+```
+
 ## Installazione del dog-agent
 
 Il dog-agent è un componente **della suite Dognet** (serve FireDog,

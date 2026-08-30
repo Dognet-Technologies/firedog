@@ -5,7 +5,6 @@ CREA QUESTO FILE: backend/targets/serializers_groups.py
 
 from rest_framework import serializers
 from .models import Target, TargetGroup, GroupRuleTemplate
-from django.core.validators import RegexValidator
 import re
 
 

@@ -6,7 +6,6 @@ Gestione dell'agent Dog Agent per comunicazione con i target
 import hashlib
 from django.db import models
 from django.utils import timezone
-from django.core.exceptions import ValidationError
 from django.conf import settings
 from targets.models import Target
 from cryptography.fernet import Fernet
@@ -272,6 +271,14 @@ class AgentConnection(models.Model):
         if system_stats:
             self.system_info = system_stats
         self.save(update_fields=["last_heartbeat", "is_online", "system_info"])
+
+        # Riallinea il target: dopo un mark_offline() da health-check stale,
+        # un heartbeat che riprende deve riportare il target online, non
+        # lasciarlo bloccato su "offline" fino al prossimo pairing completo.
+        if self.target.status != "online":
+            self.target.status = "online"
+        self.target.last_seen = timezone.now()
+        self.target.save(update_fields=["status", "last_seen"])
 
     def mark_offline(self):
         """Marca connessione come offline"""

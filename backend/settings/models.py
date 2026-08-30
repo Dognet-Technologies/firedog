@@ -444,7 +444,7 @@ class NotificationConfig(models.Model):
             cipher = Fernet(fernet_key)
             decrypted = cipher.decrypt(self.smtp_password.encode())
             return decrypted.decode()
-        except Exception as e:
+        except Exception:
             return ""
 
 

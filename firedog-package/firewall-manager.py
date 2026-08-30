@@ -20,9 +20,15 @@ import ipaddress
 CONFIG = {
     'rules_file': '/etc/firewall/iptables.rules',
     'custom_rules': '/etc/firewall/custom_rules.conf',
+    'firedog_conf': '/etc/firewall/firedog.conf',
     'log_dir': '/var/log/ulogd',
     'state_file': '/var/lib/firewall/state.json',
-    'min_uid': 1000  # UID minimo per sicurezza
+    'min_uid': 1000,  # UID minimo per sicurezza
+    # ipset del ban SSH brute-force (vedi SSH_PROTECT_BAN_DURATION in
+    # firedog.conf e firewall-init.sh): nome set e file di persistenza
+    # devono restare in sync con SSH_BANSET/SSH_BANSET_SAVE là.
+    'ssh_banset': 'ssh_banned',
+    'ssh_banset_save': '/etc/firewall/ssh_banned.save',
 }
 
 # Porte comuni e servizi
@@ -55,6 +61,27 @@ class Colors:
     WHITE = '\033[1;37m'
     RESET = '\033[0m'
     BOLD = '\033[1m'
+
+
+def load_firedog_conf(path: str = None) -> Dict[str, str]:
+    """Legge /etc/firewall/firedog.conf (formato KEY="value", sourceable da
+    bash — vedi firewall-init.sh). Righe vuote/commenti ignorati. File
+    assente o illeggibile → dict vuoto (nessuna interfaccia esclusa, nessuna
+    porta extra: comportamento di default).
+    """
+    conf_path = path or CONFIG['firedog_conf']
+    values: Dict[str, str] = {}
+    try:
+        with open(conf_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, _, value = line.partition('=')
+                values[key.strip()] = value.strip().strip('"').strip("'")
+    except (FileNotFoundError, PermissionError, OSError):
+        pass
+    return values
 
 class FirewallManager:
     """Classe principale per gestione firewall"""
@@ -265,7 +292,96 @@ class FirewallManager:
             print("=" * 100)
             print(result.stdout)
             print()
-    
+
+    def _ssh_banset_exists(self) -> bool:
+        """Verifica se la ipset dei ban SSH esiste (SSH_PROTECT_BAN_DURATION
+        disabilitato o mai attivato -> nessun set creato da firewall-init.sh)."""
+        result = self.run_command(
+            ['ipset', 'list', '-n', CONFIG['ssh_banset']], check=False
+        )
+        return result.returncode == 0
+
+    def list_bans(self):
+        """Lista gli IP attualmente bannati da SSH_PROTECT (ipset ssh_banned).
+        Richiede SSH_PROTECT_BAN_DURATION configurato in firedog.conf."""
+        if not self._ssh_banset_exists():
+            self.info(
+                "Nessun ban attivo: SSH_PROTECT_BAN_DURATION non configurato "
+                "(o '0') in /etc/firewall/firedog.conf, oppure firewall-init.sh "
+                "non è ancora stato rilanciato dopo averlo impostato."
+            )
+            return
+
+        result = self.run_command(
+            ['ipset', 'list', CONFIG['ssh_banset']], check=False
+        )
+        if result.returncode != 0:
+            self.error(f"Errore lettura ipset {CONFIG['ssh_banset']}: {result.stderr.strip()}")
+            return
+
+        # Le entry stanno dopo la riga "Members:"; formato per entry con
+        # timeout: "1.2.3.4 timeout 1734" (secondi rimanenti, permanente se
+        # il set non ha timeout attivo per quella entry -> nessun suffisso).
+        lines = result.stdout.splitlines()
+        try:
+            start = lines.index('Members:') + 1
+        except ValueError:
+            start = len(lines)
+        members = [l for l in lines[start:] if l.strip()]
+
+        if not members:
+            self.info(f"Nessun IP attualmente bannato (ipset {CONFIG['ssh_banset']} vuota)")
+            return
+
+        print(f"\n{Colors.BOLD}=== SSH ban attivi ({CONFIG['ssh_banset']}) ==={Colors.RESET}\n")
+        for m in members:
+            parts = m.split()
+            ip = parts[0]
+            # ipset stampa sempre "timeout N" per entry quando il set ha il
+            # timeout abilitato (creato con 'timeout 0'): N=0 significa
+            # nessuna scadenza (ban permanente), non "scaduto adesso".
+            secs = int(parts[parts.index('timeout') + 1]) if 'timeout' in parts else 0
+            if secs > 0:
+                remaining = str(timedelta(seconds=secs))
+                print(f"  {ip:<20} scade tra {remaining}")
+            else:
+                print(f"  {ip:<20} {Colors.RED}permanente{Colors.RESET}")
+        print()
+
+    def unban(self, ip: str) -> bool:
+        """Rimuove un IP dal ban SSH_PROTECT (ipset ssh_banned), incluso un
+        ban permanente."""
+        if not self.validate_ip(ip):
+            self.error(f"IP non valido: {ip}")
+            return False
+
+        if not self._ssh_banset_exists():
+            self.error(
+                "Nessuna ipset di ban attiva (SSH_PROTECT_BAN_DURATION non "
+                "configurato): niente da rimuovere."
+            )
+            return False
+
+        result = self.run_command(
+            ['ipset', 'del', CONFIG['ssh_banset'], ip], check=False
+        )
+        if result.returncode != 0:
+            self.error(f"{ip} non risulta bannato, o errore: {result.stderr.strip()}")
+            return False
+
+        # Persisti subito la rimozione, altrimenti un reboot prima del
+        # prossimo salvataggio da cron farebbe tornare l'IP bannato
+        # ripristinandolo dal file salvato precedente.
+        save_result = self.run_command(
+            ['ipset', 'save', CONFIG['ssh_banset'], '-f', CONFIG['ssh_banset_save']],
+            check=False
+        )
+        if save_result.returncode != 0:
+            self.warning(f"Rimosso ma non persistito su disco: {save_result.stderr.strip()}")
+
+        self.success(f"{ip} rimosso dal ban SSH_PROTECT")
+        return True
+
     def save_rules(self):
         """Salva regole correnti"""
         try:
@@ -818,6 +934,94 @@ class FirewallManager:
 
         return '0.0.0.0'
 
+    def get_interfaces(self) -> List[Dict]:
+        """Elenca le interfacce di rete (NIC) dell'host, esclusa loopback.
+
+        Un host può avere più NIC (LAN interna, IP pubblico, rete di
+        management...); il server le usa per popolare NetworkInterface e
+        permettere regole firewall scoped a una NIC specifica. Usa
+        `ip -j addr show` (JSON, supportato da iproute2 da anni su ogni
+        distro target) invece di dipendenze pip aggiuntive sul target.
+
+        Filtrata da MONITORED_INTERFACES in /etc/firewall/firedog.conf se
+        valorizzata (vuoto/assente = tutte le interfacce rilevate).
+        Include i contatori rx/tx (snapshot cumulativo del kernel, non
+        delta) da `ip -s -j link show`.
+        """
+
+        interfaces = []
+        try:
+            result = self.run_command(['ip', '-j', 'addr', 'show'], check=False)
+            if result.returncode != 0:
+                return interfaces
+
+            stats_by_name = self._get_interface_stats()
+
+            conf = load_firedog_conf()
+            monitored = {
+                n.strip() for n in conf.get('MONITORED_INTERFACES', '').split(',') if n.strip()
+            }
+
+            for link in json.loads(result.stdout):
+                name = link.get('ifname', '')
+                if not name or name == 'lo' or link.get('link_type') == 'loopback':
+                    continue
+                if monitored and name not in monitored:
+                    continue
+
+                ip_address = None
+                for addr in link.get('addr_info', []):
+                    # Preferisci il primo IPv4 globale; fallback al primo indirizzo
+                    # qualsiasi se non ce n'è uno (interfaccia solo IPv6).
+                    if addr.get('family') == 'inet' and addr.get('scope') == 'global':
+                        ip_address = addr.get('local')
+                        break
+                if ip_address is None:
+                    addr_info = link.get('addr_info', [])
+                    if addr_info:
+                        ip_address = addr_info[0].get('local')
+
+                stats = stats_by_name.get(name, {})
+                interfaces.append({
+                    'name': name,
+                    'ip_address': ip_address,
+                    'mac_address': link.get('address', ''),
+                    'is_up': 'UP' in link.get('flags', []),
+                    'rx_bytes': stats.get('rx_bytes', 0),
+                    'tx_bytes': stats.get('tx_bytes', 0),
+                    'rx_packets': stats.get('rx_packets', 0),
+                    'tx_packets': stats.get('tx_packets', 0),
+                })
+        except Exception:
+            pass
+
+        return interfaces
+
+    def _get_interface_stats(self) -> Dict[str, Dict]:
+        """Contatori rx/tx per NIC via `ip -s -j link show` (cumulativi del
+        kernel dal boot, come i counter iptables — il server ne fa il delta
+        tra due snapshot se serve una velocità istantanea).
+        """
+        stats = {}
+        try:
+            result = self.run_command(['ip', '-s', '-j', 'link', 'show'], check=False)
+            if result.returncode != 0:
+                return stats
+            for link in json.loads(result.stdout):
+                name = link.get('ifname', '')
+                s = link.get('stats64') or link.get('stats') or {}
+                rx = s.get('rx', {})
+                tx = s.get('tx', {})
+                stats[name] = {
+                    'rx_bytes': int(rx.get('bytes', 0) or 0),
+                    'tx_bytes': int(tx.get('bytes', 0) or 0),
+                    'rx_packets': int(rx.get('packets', 0) or 0),
+                    'tx_packets': int(tx.get('packets', 0) or 0),
+                }
+        except Exception:
+            pass
+        return stats
+
     def export_json(self, output_path: str = '/opt/sentinelsuite/firedog/export/status.json'):
         """Esporta stato completo firewall in JSON"""
 
@@ -830,6 +1034,9 @@ class FirewallManager:
             data = {
                 'hostname': subprocess.run(['hostname'], capture_output=True, text=True).stdout.strip(),
                 'ip_address': self.get_primary_ip(),
+                # Tutte le NIC dell'host (esclusa loopback): alimenta
+                # NetworkInterface lato server per il supporto multi-NIC.
+                'interfaces': self.get_interfaces(),
                 # Timestamp ISO-8601 con TZ UTC esplicito. datetime.now() senza
                 # argomenti restituisce un naive datetime → il server lo
                 # interpreta come ora locale (Europe/Rome) e applica un doppio
@@ -950,6 +1157,8 @@ Esempi:
   %(prog)s --stats                         # Mostra statistiche
   %(prog)s --export-json                   # Esporta stato in JSON (default path)
   %(prog)s --export-json /tmp/fw.json      # Esporta in path custom
+  %(prog)s --list-bans                     # IP bannati da SSH_PROTECT (SSH_PROTECT_BAN_DURATION)
+  %(prog)s --unban 203.0.113.5             # Rimuovi un ban (anche permanente)
         """
     )
     
@@ -980,7 +1189,13 @@ Esempi:
     parser.add_argument('--remove', metavar=('CHAIN', 'NUM'),
                        nargs=2,
                        help='Rimuovi regola: CHAIN NUM')
-    
+
+    parser.add_argument('--list-bans', action='store_true',
+                       help='Lista IP bannati da SSH_PROTECT (richiede SSH_PROTECT_BAN_DURATION in firedog.conf)')
+
+    parser.add_argument('--unban', metavar='IP',
+                       help='Rimuove un IP dal ban SSH_PROTECT (anche permanente)')
+
     parser.add_argument('--analyze', metavar='HOURS',
                        type=int, nargs='?', const=1,
                        help='Analizza traffico bloccato (default: 1 ora)')
@@ -1029,7 +1244,13 @@ Esempi:
     
     elif args.remove:
         fw.remove_rule(args.remove[0], int(args.remove[1]))
-    
+
+    elif args.list_bans:
+        fw.list_bans()
+
+    elif args.unban:
+        fw.unban(args.unban)
+
     elif args.analyze:
         fw.analyze_dropped_traffic(args.analyze)
     

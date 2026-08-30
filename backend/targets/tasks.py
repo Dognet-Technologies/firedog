@@ -4,7 +4,6 @@ Celery Tasks per installazione e gestione Target
 
 from celery import shared_task
 from django.utils.timezone import now
-from datetime import timedelta
 import logging
 
 from targets.models import Target

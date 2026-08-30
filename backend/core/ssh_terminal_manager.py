@@ -7,7 +7,7 @@ import paramiko
 import socket
 import select
 import logging
-from typing import Callable, Optional
+from typing import Optional
 from django.conf import settings
 
 logger = logging.getLogger("firedog.ssh_terminal")

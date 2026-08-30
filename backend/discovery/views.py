@@ -11,7 +11,6 @@ from django.utils import timezone
 import logging
 from .models import DiscoveredHost
 from .serializers import DiscoveredHostSerializer, DiscoveredHostListSerializer
-from .tasks import discover_network_task
 from targets.models import Target
 from audit.models import AuditLog
 

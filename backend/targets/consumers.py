@@ -340,7 +340,6 @@ class SSHTerminalConsumer(AsyncWebsocketConsumer):
                 "\x1b[1;34m[4/8]\x1b[0m Upload pacchetto FireDog...\r\n"
             )
 
-            from django.conf import settings
             from core.ssh_manager import SSHManager
 
             package_local_path = "/opt/firedog/firedog-package"

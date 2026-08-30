@@ -764,3 +764,70 @@ class NetworkFlow(models.Model):
     def __str__(self):
         cc = f" ({self.country_code})" if self.country_code else ""
         return f"{self.target} → {self.remote_ip}{cc}"
+
+
+class NetworkInterface(models.Model):
+    """Interfaccia di rete (NIC) su un target, oltre a quella primaria.
+
+    Un host gestito può avere più NIC (LAN interna, IP pubblico, rete di
+    management, ecc.). L'identità/pairing del Target resta ancorata alla
+    sola interfaccia primaria (ip_address/mac_address su Target, invariati:
+    è la rete su cui l'agent comunica col master) — questo modello serve
+    solo a rendere visibili e gestibili le altre interfacce, così le regole
+    firewall possono essere scoped a una NIC specifica (FirewallRule.interface)
+    invece di applicarsi sempre a tutto l'host.
+
+    Popolato da agent_manager.consumers.save_firewall_stats a partire dalla
+    sezione "interfaces" dello snapshot prodotto da
+    `firewall-manager --export-json` (vedi firedog-package/firewall-manager.py).
+    """
+
+    target = models.ForeignKey(
+        Target,
+        on_delete=models.CASCADE,
+        related_name="interfaces",
+        help_text="Target a cui appartiene questa interfaccia",
+    )
+    name = models.CharField(
+        max_length=50, help_text="Nome del device (es. eth0, ens192)"
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        validators=[validate_ipv46_address],
+        help_text="IP assegnato a questa interfaccia (può essere assente se down)",
+    )
+    mac_address = models.CharField(
+        max_length=17, blank=True, help_text="MAC address dell'interfaccia"
+    )
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="True se corrisponde a Target.ip_address/mac_address (interfaccia di pairing)",
+    )
+    is_up = models.BooleanField(
+        default=True, help_text="Stato operativo riportato dall'ultimo snapshot"
+    )
+
+    # Contatori cumulativi del kernel (da `ip -s link show`), snapshot
+    # dell'ultimo export — non delta. Per una velocità istantanea il
+    # chiamante deve calcolare il delta tra due snapshot successivi.
+    rx_bytes = models.BigIntegerField(default=0, help_text="Byte ricevuti (cumulativo)")
+    tx_bytes = models.BigIntegerField(default=0, help_text="Byte trasmessi (cumulativo)")
+    rx_packets = models.BigIntegerField(default=0, help_text="Pacchetti ricevuti (cumulativo)")
+    tx_packets = models.BigIntegerField(default=0, help_text="Pacchetti trasmessi (cumulativo)")
+
+    first_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True, db_index=True)
+
+    class Meta:
+        ordering = ["target", "-is_primary", "name"]
+        indexes = [
+            models.Index(fields=["target", "-is_primary"]),
+        ]
+        unique_together = [["target", "name"]]
+        verbose_name = "Network Interface"
+        verbose_name_plural = "Network Interfaces"
+
+    def __str__(self):
+        primary = " (primaria)" if self.is_primary else ""
+        return f"{self.target} · {self.name}{primary}: {self.ip_address or '—'}"

@@ -10,7 +10,6 @@ from .models import (
     AgentCommand,
     AgentHeartbeat,
 )
-from targets.models import Target
 
 
 class AgentAPIKeySerializer(serializers.ModelSerializer):

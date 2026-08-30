@@ -5,7 +5,6 @@ Celery Configuration for FireDog
 import os
 from celery import Celery
 from celery.schedules import crontab
-from django.conf import settings
 
 # Set the default Django settings module
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "firedog.settings")

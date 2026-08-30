@@ -312,7 +312,6 @@ const PerformanceTab: React.FC<PerformanceTabProps> = ({ targetId }) => {
     ? Math.round(cpuData.reduce((s, d) => s + d.cpu, 0) / cpuData.length)
     : 0;
   const lastMem = memData[memData.length - 1];
-  const memPct = lastMem ? Math.round((lastMem.used / lastMem.total) * 100) : 0;
 
   if (!targetId) {
     return <div className="mon-empty">Seleziona un target per visualizzare le performance.</div>;

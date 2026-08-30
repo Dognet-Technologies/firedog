@@ -12,7 +12,7 @@ import json
 import logging
 
 from . import __version__
-from .tools import ToolParamError, call_tool, public_tool_list
+from .tools import ToolParamError, ToolPermissionError, call_tool, public_tool_list
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,13 @@ def _handle_tools_call(params, user):
         payload = call_tool(name, arguments, user)
     except ToolParamError as exc:
         raise JsonRpcError(INVALID_PARAMS, str(exc))
+    except ToolPermissionError as exc:
+        # Non è un errore di protocollo: il tool esiste, i parametri sono
+        # validi, ma il ruolo dell'utente non basta (contratto §5).
+        return {
+            "content": [{"type": "text", "text": str(exc)}],
+            "isError": True,
+        }
     except Exception:
         # Errore di esecuzione: dettaglio nei log, messaggio generico al client
         logger.exception("Errore di esecuzione del tool MCP '%s'", name)

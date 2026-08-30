@@ -16,6 +16,13 @@ RemainAfterExit=yes
 # Verifica esistenza file regole
 ExecStartPre=/bin/bash -c 'test -f /etc/firewall/iptables.rules || { echo "ERRORE: File regole non trovato. Eseguire firewall-init.sh prima."; exit 1; }'
 
+# Ripristina (o crea vuota) la ipset dei ban SSH_PROTECT PRIMA di caricare le
+# regole: se iptables.rules contiene una regola --match-set su ssh_banned
+# (SSH_PROTECT_BAN_DURATION configurato) e il set non esiste ancora al boot,
+# iptables-restore fallisce l'intero load. Non-fatale se ipset manca (ban
+# disabilitato): '|| true' lascia proseguire il boot senza quella feature.
+ExecStartPre=/bin/bash -c 'command -v ipset >/dev/null 2>&1 || exit 0; test -f /etc/firewall/ssh_banned.save && ipset restore -exist < /etc/firewall/ssh_banned.save 2>/dev/null; ipset create ssh_banned hash:ip timeout 0 -exist 2>/dev/null || true'
+
 # Carica regole salvate (preserva modifiche dinamiche)
 ExecStart=/usr/sbin/iptables-restore /etc/firewall/iptables.rules
 

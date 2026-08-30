@@ -2,36 +2,13 @@
  * Targets Management Page - Table View with Gruppo
  */
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import apiService from '../services/api';
 import type { Target, TargetCreate } from '../types';
 import './Targets.css';
 import { useNotifications } from '../contexts/NotificationContext';
-import PageHeader from '../components/shared/PageHeader';
-import StatusDot from '../components/shared/StatusDot';
 
 type SortField = 'ip_address' | 'hostname' | 'firedog_version' | 'last_seen' | 'status' | 'gruppo';
 type SortDirection = 'asc' | 'desc';
-
-// Gruppi disponibili
-const GRUPPO_OPTIONS = [
-  { value: '', label: 'Tutti i gruppi' },
-  { value: 'web', label: 'Web Server' },
-  { value: 'db', label: 'Database' },
-  { value: 'dns', label: 'DNS Server' },
-  { value: 'storage', label: 'Storage' },
-  { value: 'mail', label: 'Mail Server' },
-  { value: 'backup', label: 'Backup Server' },
-  { value: 'monitoring', label: 'Monitoring' },
-  { value: 'proxy', label: 'Proxy/Load Balancer' },
-  { value: 'vpn', label: 'VPN Gateway' },
-  { value: 'firewall', label: 'Firewall' },
-  { value: 'application', label: 'Application Server' },
-  { value: 'cache', label: 'Cache Server' },
-  { value: 'queue', label: 'Message Queue' },
-  { value: 'other', label: 'Altro' },
-  { value: 'custom', label: 'Personalizzato' },
-];
 
 const Targets: React.FC = () => {
   const [targets, setTargets] = useState<Target[]>([]);
@@ -427,6 +404,7 @@ const Targets: React.FC = () => {
               <th onClick={() => handleSort('ip_address')} className="sortable">
                 IP Address {renderSortIcon('ip_address')}
               </th>
+              <th title="Numero di interfacce di rete rilevate sull'host">NICs</th>
               <th onClick={() => handleSort('hostname')} className="sortable">
                 Hostname {renderSortIcon('hostname')}
               </th>
@@ -462,6 +440,18 @@ const Targets: React.FC = () => {
                 <tr key={target.id} className={`target-row target-row--${target.status}`}>
                   <td className="ip-cell">
                     <code>{target.ip_address}</code>
+                  </td>
+                  <td className="nics-cell">
+                    {(target.interfaces_count ?? 0) > 1 ? (
+                      <span
+                        className="version-badge"
+                        title={`${target.interfaces_count} interfacce di rete rilevate`}
+                      >
+                        {target.interfaces_count} NIC
+                      </span>
+                    ) : (
+                      <span className="text-muted" title="Solo l'interfaccia primaria rilevata">1</span>
+                    )}
                   </td>
                   <td className="hostname-cell">
                     {target.hostname || <span className="text-muted">—</span>}

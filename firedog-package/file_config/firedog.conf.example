@@ -1,0 +1,52 @@
+# FireDog — configurazione locale del target
+# Installato a /etc/firewall/firedog.conf (seed al primo install, come
+# custom_rules.conf — non viene mai sovrascritto agli aggiornamenti).
+#
+# Formato: KEY="value" — sourceable direttamente da bash (firewall-init.sh)
+# e parsato riga per riga da firewall-manager.py. Righe vuote o che
+# iniziano con # sono ignorate.
+
+# ── Interfacce da monitorare ─────────────────────────────────────────────
+# Lista separata da virgole dei nomi NIC (es. "eth0,eth1") che
+# firewall-manager --export-json deve riportare al server. Vuoto = tutte
+# le interfacce rilevate (comportamento di default). Utile per escludere
+# interfacce virtuali/interne rumorose (docker0, veth*, tailscale0...) che
+# non interessa gestire da FireDog.
+MONITORED_INTERFACES=""
+
+# ── Porte da tenere sempre aperte ────────────────────────────────────────
+# Lista separata da virgole di porta/protocollo (es. "80/tcp,443/tcp,53/udp")
+# accettate in INPUT su tutte le interfacce PRIMA che la policy DROP finale
+# di firewall-init.sh entri in vigore. La porta SSH è già protetta a parte
+# (rilevata automaticamente / SSH_PORT), non serve elencarla qui a meno di
+# usare porte SSH aggiuntive.
+#
+# Impostare PRIMA di lanciare firewall-init.sh la prima volta: senza,
+# qualunque servizio in ascolto su queste porte diventerebbe irraggiungibile
+# non appena la policy DROP viene applicata.
+ALWAYS_OPEN_PORTS=""
+
+# ── Protezione SSH brute-force ───────────────────────────────────────────
+# Soglia: quanti nuovi tentativi di connessione SSH in che finestra di
+# tempo (secondi) fanno scattare la protezione.
+SSH_PROTECT_MAX_ATTEMPTS="4"
+SSH_PROTECT_WINDOW_SECONDS="60"
+
+# Cosa succede quando la soglia viene superata:
+#   "0" (default)     nessun ban: la sorgente resta droppata solo finché
+#                      continua a generare nuovi tentativi nella finestra
+#                      sopra (comportamento storico, nessuna dipendenza extra)
+#   "<N>m" / "<N>h" / "<N>d"   ban temporaneo (N minuti / ore / giorni):
+#                      la sorgente viene aggiunta a una ipset persistente
+#                      (sopravvive a un rilancio di firewall-init.sh e,
+#                      tramite il salvataggio periodico da cron, anche al
+#                      reboot) e scade da sola dopo N
+#   "permanent"        ban permanente: resta finché non lo rimuovi a mano
+#
+# Richiede il pacchetto 'ipset' (installato di default da install.sh). Se
+# assente, il ban viene disabilitato con un warning e si torna al
+# comportamento storico.
+#
+# Gestione ban attivi: 'firewall-manager --list-bans' / '--unban <IP>'.
+# Esempi: SSH_PROTECT_BAN_DURATION="30m"   SSH_PROTECT_BAN_DURATION="1d"
+SSH_PROTECT_BAN_DURATION="0"

@@ -3,10 +3,8 @@ Django Management Command - Pull Targets Status
 Scarica periodicamente i file JSON di stato dai target via SCP
 """
 
-import os
 import logging
 from pathlib import Path
-from datetime import datetime
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from targets.models import Target

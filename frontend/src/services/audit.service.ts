@@ -7,14 +7,6 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
-// Sanitizzazione stringa
-const sanitizeString = (str: string): string => {
-  return str
-    .replace(/[<>'"]/g, '')
-    .trim()
-    .substring(0, 200);
-};
-
 // Validazione username (alfanumerico + underscore, max 100 char)
 const validateUsername = (username: string): boolean => {
   const usernameRegex = /^[a-zA-Z0-9_]{1,100}$/;

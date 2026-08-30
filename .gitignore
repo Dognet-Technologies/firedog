@@ -1,5 +1,6 @@
 .DS_Store
 venv/
+venv.broken.bak/
 __pycache__/
 *.log
 files/*

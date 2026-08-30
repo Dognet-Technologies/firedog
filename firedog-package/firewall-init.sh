@@ -11,9 +11,24 @@ set -euo pipefail
 LOG_FILE="/var/log/firewall-init.log"
 RULES_DIR="/etc/firewall"
 CUSTOM_RULES="${RULES_DIR}/custom_rules.conf"
+FIREDOG_CONF="${RULES_DIR}/firedog.conf"
 
 # Porta SSH (override con env SSH_PORT, es: SSH_PORT=2222 ./firewall-init.sh)
 SSH_PORT="${SSH_PORT:-22}"
+
+# Default per le variabili di firedog.conf: valorizzate PRIMA del source,
+# così se il file manca o non le imposta lo script funziona lo stesso
+# (nessuna porta extra aperta, comportamento storico).
+ALWAYS_OPEN_PORTS=""
+MONITORED_INTERFACES=""
+SSH_PROTECT_MAX_ATTEMPTS="4"
+SSH_PROTECT_WINDOW_SECONDS="60"
+SSH_PROTECT_BAN_DURATION="0"
+# shellcheck source=/dev/null
+[[ -f "$FIREDOG_CONF" ]] && source "$FIREDOG_CONF"
+
+SSH_BANSET="ssh_banned"
+SSH_BANSET_SAVE="${RULES_DIR}/ssh_banned.save"
 
 # Colori per output
 RED='\033[0;31m'
@@ -45,6 +60,73 @@ warning() {
 # Verifica privilegi root
 [[ $EUID -ne 0 ]] && error_exit "Questo script richiede privilegi root (usa sudo)"
 
+# Valida/parsa SSH_PROTECT_MAX_ATTEMPTS, SSH_PROTECT_WINDOW_SECONDS e
+# SSH_PROTECT_BAN_DURATION da firedog.conf. Popola SSH_BAN_ENABLED (0/1) e
+# SSH_BAN_TIMEOUT_SECONDS (0 = permanente, N = ban temporaneo in secondi).
+# Qualunque valore malformato ricade sul comportamento storico (nessun ban,
+# solo drop nella finestra) invece di far fallire l'intero script.
+parse_ssh_protect_config() {
+    if ! [[ "$SSH_PROTECT_MAX_ATTEMPTS" =~ ^[0-9]+$ ]] || (( SSH_PROTECT_MAX_ATTEMPTS < 1 )); then
+        warning "SSH_PROTECT_MAX_ATTEMPTS non valido: '$SSH_PROTECT_MAX_ATTEMPTS', uso default 4"
+        SSH_PROTECT_MAX_ATTEMPTS=4
+    fi
+    if ! [[ "$SSH_PROTECT_WINDOW_SECONDS" =~ ^[0-9]+$ ]] || (( SSH_PROTECT_WINDOW_SECONDS < 1 )); then
+        warning "SSH_PROTECT_WINDOW_SECONDS non valido: '$SSH_PROTECT_WINDOW_SECONDS', uso default 60"
+        SSH_PROTECT_WINDOW_SECONDS=60
+    fi
+
+    SSH_BAN_ENABLED=0
+    SSH_BAN_TIMEOUT_SECONDS=0
+
+    local val="${SSH_PROTECT_BAN_DURATION,,}"
+    case "$val" in
+        ""|"0"|"none"|"nessuno")
+            ;;
+        "permanent"|"permanente")
+            SSH_BAN_ENABLED=1
+            SSH_BAN_TIMEOUT_SECONDS=0
+            ;;
+        [0-9]*m|[0-9]*h|[0-9]*d)
+            local unit="${val: -1}" n="${val%?}"
+            if [[ "$n" =~ ^[0-9]+$ ]] && (( n > 0 )); then
+                SSH_BAN_ENABLED=1
+                case "$unit" in
+                    m) SSH_BAN_TIMEOUT_SECONDS=$(( n * 60 )) ;;
+                    h) SSH_BAN_TIMEOUT_SECONDS=$(( n * 3600 )) ;;
+                    d) SSH_BAN_TIMEOUT_SECONDS=$(( n * 86400 )) ;;
+                esac
+            else
+                warning "SSH_PROTECT_BAN_DURATION non valido: '$SSH_PROTECT_BAN_DURATION' (usa <N>m, <N>h, <N>d, permanent o 0), ban disabilitato"
+            fi
+            ;;
+        *)
+            warning "SSH_PROTECT_BAN_DURATION non valido: '$SSH_PROTECT_BAN_DURATION' (usa <N>m, <N>h, <N>d, permanent o 0), ban disabilitato"
+            ;;
+    esac
+
+    if (( SSH_BAN_ENABLED == 1 )) && ! command -v ipset &>/dev/null; then
+        warning "SSH_PROTECT_BAN_DURATION richiede il pacchetto 'ipset' (non trovato): ban disabilitato, uso comportamento storico"
+        SSH_BAN_ENABLED=0
+    fi
+}
+parse_ssh_protect_config
+
+# Se il ban è abilitato: ripristina la ipset da disco (bypassa entry ancora
+# valide dopo un reboot) e assicura che il set esista comunque (idempotente,
+# -exist non fallisce se già presente/ripristinata). flush_rules() più sotto
+# NON tocca ipset (iptables -F/-X non lo riguarda): le entry sopravvivono
+# anche a un rilancio di questo script, solo un reboot le perde senza
+# restore da $SSH_BANSET_SAVE.
+setup_ssh_ban_set() {
+    (( SSH_BAN_ENABLED == 1 )) || return 0
+
+    if [[ -f "$SSH_BANSET_SAVE" ]]; then
+        ipset restore -exist < "$SSH_BANSET_SAVE" 2>/dev/null || \
+            warning "Impossibile ripristinare $SSH_BANSET_SAVE (proseguo con set vuoto)"
+    fi
+    ipset create "$SSH_BANSET" hash:ip timeout 0 -exist
+}
+
 # Verifica dipendenze
 check_dependencies() {
     # log "Verifica dipendenze..."
@@ -58,6 +140,7 @@ check_dependencies() {
     
     # Verifica moduli kernel
     local modules=("nfnetlink_log" "xt_NFLOG" "xt_recent" "xt_conntrack" "xt_limit")
+    (( SSH_BAN_ENABLED == 1 )) && modules+=("ip_set" "xt_set")
     for mod in "${modules[@]}"; do
         if ! lsmod | grep -q "^$mod"; then
             modprobe "$mod" 2>/dev/null || warning "Impossibile caricare modulo: $mod"
@@ -131,15 +214,30 @@ create_custom_chains() {
     iptables -A SYN_FLOOD -m limit --limit 10/s --limit-burst 20 -j RETURN
     iptables -A SYN_FLOOD -j LOG_INPUT_DROP
     
-    # Chain per SSH brute force protection
+    # Chain per SSH brute force protection. Soglia/finestra configurabili via
+    # SSH_PROTECT_MAX_ATTEMPTS/SSH_PROTECT_WINDOW_SECONDS in firedog.conf.
+    # Se SSH_PROTECT_BAN_DURATION è impostato, il superamento della soglia
+    # aggiunge la sorgente a una ipset persistente (SSH_BAN) invece del solo
+    # drop nella finestra (comportamento storico quando non configurato).
+    setup_ssh_ban_set
     iptables -N SSH_PROTECT
+    if (( SSH_BAN_ENABLED == 1 )); then
+        iptables -A SSH_PROTECT -m set --match-set "$SSH_BANSET" src -j LOG_INPUT_DROP
+    fi
     iptables -A SSH_PROTECT -m recent --name ssh_attack --set
-    iptables -A SSH_PROTECT -m recent --name ssh_attack --update --seconds 60 --hitcount 4 -j LOG_INPUT_DROP
+    if (( SSH_BAN_ENABLED == 1 )); then
+        iptables -N SSH_BAN
+        iptables -A SSH_BAN -j SET --add-set "$SSH_BANSET" src --exist --timeout "$SSH_BAN_TIMEOUT_SECONDS"
+        iptables -A SSH_BAN -j LOG_INPUT_DROP
+        iptables -A SSH_PROTECT -m recent --name ssh_attack --update --seconds "$SSH_PROTECT_WINDOW_SECONDS" --hitcount "$SSH_PROTECT_MAX_ATTEMPTS" -j SSH_BAN
+    else
+        iptables -A SSH_PROTECT -m recent --name ssh_attack --update --seconds "$SSH_PROTECT_WINDOW_SECONDS" --hitcount "$SSH_PROTECT_MAX_ATTEMPTS" -j LOG_INPUT_DROP
+    fi
     iptables -A SSH_PROTECT -j ACCEPT
     
     # Chain per ICMP flood protection
     iptables -N ICMP_FLOOD
-    iptables -A ICMP_FLOOD -m limit --limit 5/s --limit-burst 10 -j RETURN
+    iptables -A ICMP_FLOOD -m limit --limit 5/s --limit-burst 10 -j ACCEPT
     iptables -A ICMP_FLOOD -j LOG_INPUT_DROP
     
     success "Chain personalizzate create"
@@ -206,12 +304,51 @@ setup_input_rules() {
     
     # SSH con protezione brute force (porta configurabile via $SSH_PORT)
     iptables -A INPUT -p tcp --dport "${SSH_PORT}" -m conntrack --ctstate NEW -j SSH_PROTECT
-    
+
     # HTTP/HTTPS per servizi web (commentato di default - abilitare se necessario)
     # iptables -A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW -j ACCEPT
     # iptables -A INPUT -p tcp --dport 443 -m conntrack --ctstate NEW -j ACCEPT
-    
+
+    # Porte da /etc/firewall/firedog.conf (ALWAYS_OPEN_PORTS): servizi che
+    # devono restare raggiungibili appena la policy DROP entra in vigore,
+    # oltre a SSH. Formato per entry: "porta/protocollo" (es. 443/tcp) o
+    # solo "porta" (default tcp). Entry malformate vengono saltate con un
+    # warning invece di far fallire l'intero script.
+    setup_always_open_ports
+
     success "Regole INPUT configurate"
+}
+
+# Applica ALWAYS_OPEN_PORTS da firedog.conf (vedi setup_input_rules)
+setup_always_open_ports() {
+    [[ -z "${ALWAYS_OPEN_PORTS}" ]] && return 0
+
+    local entry port proto entries
+    IFS=',' read -ra entries <<< "${ALWAYS_OPEN_PORTS}"
+    for entry in "${entries[@]}"; do
+        entry="$(echo "$entry" | tr -d '[:space:]')"
+        [[ -z "$entry" ]] && continue
+
+        if [[ "$entry" == */* ]]; then
+            port="${entry%%/*}"
+            proto="${entry##*/}"
+        else
+            port="$entry"
+            proto="tcp"
+        fi
+
+        if ! [[ "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+            warning "ALWAYS_OPEN_PORTS: porta non valida '$entry', saltata"
+            continue
+        fi
+        if [[ "$proto" != "tcp" && "$proto" != "udp" ]]; then
+            warning "ALWAYS_OPEN_PORTS: protocollo non valido '$entry' (solo tcp/udp), saltata"
+            continue
+        fi
+
+        iptables -A INPUT -p "$proto" --dport "$port" -m conntrack --ctstate NEW -j ACCEPT
+        log "ALWAYS_OPEN_PORTS: aperta porta $port/$proto"
+    done
 }
 
 # Regole OUTPUT - traffico in uscita
@@ -255,7 +392,12 @@ load_custom_rules() {
             
             # Esegui regola
             if eval "$line" 2>/dev/null; then
-                ((count++))
+                # NON usare ((count++)): con count=0 il post-incremento
+                # restituisce l'exit status del vecchio valore (0 = falso),
+                # e sotto `set -e` questo termina lo script alla prima
+                # regola caricata con successo, saltando salvataggio e
+                # persistenza (bug osservato: iptables.rules mai scritto).
+                count=$((count + 1))
             else
                 warning "Regola non valida: $line"
             fi
@@ -300,6 +442,15 @@ EOF
         log "ifupdown assente: persistenza al boot affidata a firewall-fm.service"
     fi
 
+    # Salva subito la ipset dei ban SSH (oltre al cron periodico in
+    # firedog-cron): la persistenza al reboot è garantita dall'ExecStartPre
+    # di firewall-fm.service, che la ripristina PRIMA di iptables-restore
+    # (una regola --match-set su un set inesistente farebbe fallire il load).
+    if (( SSH_BAN_ENABLED == 1 )); then
+        ipset save "$SSH_BANSET" -f "$SSH_BANSET_SAVE" 2>/dev/null && \
+            chmod 600 "$SSH_BANSET_SAVE"
+    fi
+
     success "Regole salvate in ${RULES_DIR}/iptables.rules"
 }
 
@@ -312,6 +463,14 @@ show_stats() {
     echo ""
     echo "Policy attive:"
     iptables -L -n -v --line-numbers | head -20
+    echo ""
+    if (( SSH_BAN_ENABLED == 1 )); then
+        local dur_desc="permanente"
+        (( SSH_BAN_TIMEOUT_SECONDS > 0 )) && dur_desc="${SSH_BAN_TIMEOUT_SECONDS}s"
+        echo "SSH brute-force ban: ${SSH_PROTECT_MAX_ATTEMPTS} tentativi/${SSH_PROTECT_WINDOW_SECONDS}s -> ban ${dur_desc} (ipset ${SSH_BANSET})"
+    else
+        echo "SSH brute-force ban: disabilitato (${SSH_PROTECT_MAX_ATTEMPTS} tentativi/${SSH_PROTECT_WINDOW_SECONDS}s -> drop nella finestra, nessun ban)"
+    fi
     echo ""
     echo "Usa 'firewall-manager --help' per gestire il firewall"
     echo ""

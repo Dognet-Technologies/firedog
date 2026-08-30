@@ -101,6 +101,20 @@ sudo nginx -t && sudo systemctl reload nginx
 nginx serve `frontend/build` come SPA e fa da proxy verso Daphne per
 `/api/`, `/admin/` e `/ws/` (WebSocket).
 
+> **Nota permessi home directory**: nginx gira come `www-data` (o utente
+> equivalente) e deve poter attraversare l'intero percorso fino a
+> `frontend/build/index.html` e `backend/staticfiles/`. Se il clone è sotto
+> `/home/<utente>` (come nei template `deploy/`) la home ha di norma
+> permessi `750`: `www-data` non riesce ad attraversarla e nginx risponde
+> `500 Internal Server Error` (log: `stat() ... failed (13: Permission
+> denied)`, poi `rewrite or internal redirection cycle`). Prima della
+> verifica finale:
+> ```bash
+> chmod o+x /home/<utente>
+> chmod -R o+rX /home/<utente>/firedog/frontend/build
+> chmod -R o+rX /home/<utente>/firedog/backend/staticfiles
+> ```
+
 ## 6. Verifica finale
 
 ```bash

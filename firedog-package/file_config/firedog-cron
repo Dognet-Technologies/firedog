@@ -1,24 +1,39 @@
 # FireDog Cron Jobs — installed at /etc/cron.d/firedog (symlink)
 #
-# Tutti i job girano come `microcyber` con NOPASSWD sudo dove serve.
+# Tutti i job girano come `root`: dog-agent stesso gira come root (necessario
+# per iptables e per leggere /proc e i log di sistema), quindi non serve uno
+# utente dedicato con sudoers per questi comandi — e questo li rende
+# indipendenti dal metodo di installazione (Method A push-SSH con utente
+# `microcyber`, o Method B bootstrap via get-firedog.sh, che non crea alcun
+# utente dedicato).
 # Output di firewall-manager / iptables vanno in /opt/sentinelsuite/firedog/{data,export,rules}.
 # Il dog-agent legge periodicamente export/status.json e lo invia al server.
 
 # ========== STATUS EXPORT (fonte principale per il server) ==========
 # Snapshot completo firewall+system in JSON ogni 5 minuti.
 # Sovrascrive lo stesso file: l'agent lo legge e lo invia via WS.
-*/5 * * * * microcyber sudo /usr/local/bin/firewall-manager --export-json /opt/sentinelsuite/firedog/export/status.json 2>&1 | logger -t firedog-export
+# Popola anche Target.firedog_version lato server (senza, la UI mostra
+# "Not installed" anche su target perfettamente funzionanti).
+*/5 * * * * root /usr/local/bin/firewall-manager --export-json /opt/sentinelsuite/firedog/export/status.json 2>&1 | logger -t firedog-export
+
+# ========== SSH BAN PERSISTENCE ==========
+# Salva la ipset dei ban SSH_PROTECT (se attiva, vedi SSH_PROTECT_BAN_DURATION
+# in firedog.conf) ogni 5 minuti, così un reboot non perde i ban ancora validi
+# (ripristinati al boot da firewall-fm.service prima di iptables-restore).
+# 'ipset save' su un set inesistente fallisce silenziosamente (2>/dev/null):
+# nessun costo quando il ban è disabilitato.
+*/5 * * * * root ipset save ssh_banned -f /etc/firewall/ssh_banned.save 2>/dev/null
 
 # ========== IPTABLES BACKUP ==========
 # Backup giornaliero alle 3:00.
-0 3 * * * microcyber sudo /usr/sbin/iptables-save > /opt/sentinelsuite/firedog/rules/iptables.backup-$(date +\%Y\%m\%d).rules 2>/dev/null
+0 3 * * * root /usr/sbin/iptables-save > /opt/sentinelsuite/firedog/rules/iptables.backup-$(date +\%Y\%m\%d).rules 2>/dev/null
 
 # ========== LOG ROTATION ==========
 # Pulizia file vecchi.
-0 2 * * * microcyber find /opt/sentinelsuite/firedog/data  -name "*.json"          -mtime +7  -delete 2>/dev/null
-0 2 * * * microcyber find /opt/sentinelsuite/firedog/logs  -name "*.log"           -mtime +7  -delete 2>/dev/null
-0 3 * * * microcyber find /opt/sentinelsuite/firedog/rules -name "iptables.backup-*.rules" -mtime +30 -delete 2>/dev/null
+0 2 * * * root find /opt/sentinelsuite/firedog/data  -name "*.json"          -mtime +7  -delete 2>/dev/null
+0 2 * * * root find /opt/sentinelsuite/firedog/logs  -name "*.log"           -mtime +7  -delete 2>/dev/null
+0 3 * * * root find /opt/sentinelsuite/firedog/rules -name "iptables.backup-*.rules" -mtime +30 -delete 2>/dev/null
 
 # ========== HEALTH CHECK ==========
 # Stato del firewall service ogni ora (al log file locale).
-0 * * * * microcyber sudo systemctl is-active firewall-fm > /opt/sentinelsuite/firedog/logs/health-check.log 2>&1
+0 * * * * root systemctl is-active firewall-fm > /opt/sentinelsuite/firedog/logs/health-check.log 2>&1

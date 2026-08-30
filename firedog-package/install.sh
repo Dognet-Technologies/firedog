@@ -77,14 +77,14 @@ if [[ "$OS_FAMILY" == "debian" ]]; then
     echo -e "${GREEN}[1/7]${NC} apt deps"
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq iptables iptables-persistent ulogd2 python3 tcpdump logrotate cron
+    apt-get install -y -qq iptables iptables-persistent ipset ulogd2 python3 tcpdump logrotate cron
 else
     echo -e "${GREEN}[1/7]${NC} zypper deps"
     zypper --non-interactive --quiet refresh
     # no iptables-persistent on SUSE: boot persistence is handled by firewall-fm.service
     # util-linux-systemd: provides `logger`, used by the firedog-cron jobs
     zypper --non-interactive install --no-recommends \
-        iptables python3 tcpdump logrotate cronie curl util-linux-systemd
+        iptables ipset python3 tcpdump logrotate cronie curl util-linux-systemd
     # ulogd lives in the security:netfilter OBS repo on Leap/SLES (not in the
     # main repos); there the pcap output plugin is a separate subpackage
     install_ulogd() {
@@ -154,6 +154,7 @@ for plugin_dir in /usr/lib/x86_64-linux-gnu/ulogd /usr/lib64/ulogd /usr/lib/ulog
 done
 install -m 0644 "${SCRIPT_DIR}/file_config/firewall-pcap-logrotate"   "${BASE_DIR}/conf/firewall-pcap-logrotate"
 install -m 0644 "${SCRIPT_DIR}/file_config/custom_rules.conf.example" "${BASE_DIR}/conf/custom_rules.conf.example"
+install -m 0644 "${SCRIPT_DIR}/file_config/firedog.conf.example"      "${BASE_DIR}/conf/firedog.conf.example"
 install -m 0644 "${SCRIPT_DIR}/file_config/firedog-cron"              "${BASE_DIR}/conf/firedog-cron"
 install -m 0644 "${SCRIPT_DIR}/firewall.service"                      "${BASE_DIR}/conf/firewall-fm.service"
 install -m 0644 "${SCRIPT_DIR}/apparmor-firewall-manager"             "${BASE_DIR}/conf/apparmor-firewall-manager"
@@ -173,17 +174,25 @@ install -d -m 0750 -o root -g "$LOG_GRP" /var/log/ulogd
 [[ -f /etc/firewall/custom_rules.conf ]] || \
     install -m 0644 "${BASE_DIR}/conf/custom_rules.conf.example" /etc/firewall/custom_rules.conf
 
+# /etc/firewall/firedog.conf seed (only on first install): MONITORED_INTERFACES
+# + ALWAYS_OPEN_PORTS. Va valorizzato PRIMA di firewall-init.sh se il target
+# espone servizi che altrimenti resterebbero irraggiungibili sotto la policy
+# DROP finale (oltre a SSH, già protetto a parte).
+[[ -f /etc/firewall/firedog.conf ]] || \
+    install -m 0644 "${BASE_DIR}/conf/firedog.conf.example" /etc/firewall/firedog.conf
+
 systemctl daemon-reload
 systemctl enable --now "$ULOGD_SVC"
 
-# ── 5/7 cron (only if microcyber exists) ─────────────────────────────────────
+# ── 5/7 cron ───────────────────────────────────────────────────────────────
+# I job in firedog-cron girano come root (non serve più microcyber): senza
+# questo, l'export status.json non viene mai generato e Target.firedog_version
+# resta vuoto anche su target agent-based perfettamente funzionanti (Method B
+# non crea l'utente microcyber, quindi prima di questo fix il link veniva
+# sempre skippato su quel percorso di installazione).
 echo -e "${GREEN}[5/7]${NC} cron"
-if id microcyber &>/dev/null; then
-    ln -sfn "${BASE_DIR}/conf/firedog-cron" /etc/cron.d/firedog
-    chmod 0644 "${BASE_DIR}/conf/firedog-cron"
-else
-    echo -e "${YELLOW}  [skip]${NC} microcyber missing, firedog-cron not linked"
-fi
+ln -sfn "${BASE_DIR}/conf/firedog-cron" /etc/cron.d/firedog
+chmod 0644 "${BASE_DIR}/conf/firedog-cron"
 
 # ── 6/7 AppArmor (best-effort) ──────────────────────────────────────────────
 # the parser alone is not enough: the kernel must have AppArmor active
@@ -232,4 +241,5 @@ echo "  CLI:            firewall-manager --help"
 echo "  firewall svc:   systemctl status firewall-fm"
 echo "  ulogd svc:      systemctl status ${ULOGD_SVC}"
 echo "  custom rules:   /etc/firewall/custom_rules.conf"
+echo "  firedog conf:   /etc/firewall/firedog.conf (NIC monitorate, porte sempre aperte, ban SSH brute-force)"
 echo "  pcap logs:      /var/log/ulogd/"
