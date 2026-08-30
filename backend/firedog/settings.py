@@ -182,19 +182,6 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 # FireDog Specific Settings
-FIREDOG_SSH_KEY_PATH = config("SSH_KEY_PATH", default="/opt/firedog/ssh/id_ed25519")
-FIREDOG_SSH_USER = config("SSH_USER", default="microcyber")
-FIREDOG_SSH_PORT = config("SSH_PORT", default=22, cast=int)
-FIREDOG_PACKAGE_PATH = config(
-    "FIREDOG_PACKAGE_PATH", default=str(BASE_DIR.parent / "firedog-package")
-)
-FIREDOG_FILE_CONFIG_PATH = config(
-    "FIREDOG_FILE_CONFIG_PATH", default="/opt/firedog/file_config"
-)
-FIREDOG_ANALYSIS_RESULTS_PATH = config(
-    "ANALYSIS_RESULTS_PATH", default="/tmp/firedog-analysis.json"
-)
-FIREDOG_FETCH_INTERVAL = config("FETCH_INTERVAL", default=10, cast=int)
 FIREDOG_DATA_DIR = config(
     "FIREDOG_DATA_DIR", default="/opt/firedog/data"
 )  # Directory per dati target (JSON export)

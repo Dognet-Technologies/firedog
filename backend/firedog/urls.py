@@ -23,7 +23,6 @@ from targets.views import (
 )
 from settings.views import (
     SystemSettingsViewSet,
-    SSHKeyViewSet,
     DatabaseManagementViewSet,
     NotificationViewSet,
     UserManagementViewSet,
@@ -54,7 +53,6 @@ router.register(r"network-interfaces", NetworkInterfaceViewSet, basename="networ
 
 # Settings ViewSets  ← AGGIUNGI
 router.register(r"settings/settings", SystemSettingsViewSet, basename="systemsettings")
-router.register(r"settings/ssh-keys", SSHKeyViewSet, basename="sshkey")
 router.register(r"settings/database", DatabaseManagementViewSet, basename="database")
 router.register(
     r"settings/notifications", NotificationViewSet, basename="notifications"

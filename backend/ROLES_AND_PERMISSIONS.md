@@ -11,7 +11,6 @@ Sistema di autorizzazione basato su ruoli per FireDog.
 - ✅ Aggiungere/rimuovere regole firewall
 - ✅ Bloccare/sbloccare IP
 - ✅ Modificare configurazioni
-- ✅ Eseguire operazioni SSH sui target
 - ✅ Accesso Django Admin
 
 ### 2. Reporter (user1)
@@ -23,7 +22,6 @@ Sistema di autorizzazione basato su ruoli per FireDog.
 - ✅ Visualizzare audit logs
 - ❌ **NON** può creare/modificare/eliminare risorse
 - ❌ **NON** può aggiungere/rimuovere regole
-- ❌ **NON** può eseguire operazioni SSH
 
 ## 🔐 Autenticazione
 

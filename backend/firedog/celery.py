@@ -20,10 +20,6 @@ app.autodiscover_tasks()
 
 # Celery Beat Schedule
 app.conf.beat_schedule = {
-    "fetch-all-targets-data": {
-        "task": "targets.tasks.fetch_all_targets_data",
-        "schedule": crontab(minute=f"*/10"),
-    },
     "check-file-integrity": {
         "task": "integrity.tasks.check_all_integrity",
         "schedule": crontab(minute="*/30"),  # Every 30 minutes

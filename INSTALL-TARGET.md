@@ -34,25 +34,13 @@ Layout sul target dopo l'installazione:
 /etc/dog-agent/agent.conf            configurazione agent (credenziali)
 ```
 
-## Metodo A — Push dal master (consigliato in LAN)
+## Installazione — Bootstrap da GitHub (curl | bash)
 
-Dalla UI del master: **Targets → aggiungi target → Install**. Il master via
-SSH (chiave configurata in Settings → SSH Keys):
-
-1. verifica l'utente `microcyber` e configura sudoers,
-2. hardening SSH (disabilita PasswordAuthentication),
-3. carica `firedog-package/` sul target,
-4. esegue `install.sh`,
-5. verifica l'installazione e configura il cron.
-
-Requisiti sul target: Debian/Ubuntu, utente `microcyber` con la chiave
-pubblica del master autorizzata. Per i target openSUSE/SLES usa il
-Metodo B (il push dal master usa `apt` via SSH).
-
-## Metodo B — Bootstrap da GitHub (curl | bash)
-
-Per installare **gli strumenti firewall** su un target senza passare dal
-master:
+Non esiste più un metodo di push via SSH dal master: l'installazione degli
+strumenti firewall sul target avviene sempre da qui, in autonomia sul
+target stesso (la connessione target ↔ master resta quella descritta più
+sotto, via WebSocket e pairing a 2 fasi — nessuna credenziale SSH è mai
+condivisa tra i due).
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
