@@ -37,40 +37,6 @@ import type {
      updated_by_username?: string;
    }
 
-    export interface SSHKey {
-      id: number;
-      name: string;
-      key_type: 'ed25519' | 'rsa' | 'ecdsa';
-      key_size?: number;
-      public_key: string;
-      fingerprint: string;
-      scope: 'global' | 'group' | 'target';
-      scope_value?: string;
-      created_at: string;
-      created_by?: number;
-      created_by_username?: string;
-      is_active: boolean;
-      last_used_at?: string;
-      associated_targets: number;
-    }
-
-    export interface SSHKeyCreateData {
-      name: string;
-      key_type: 'ed25519' | 'rsa' | 'ecdsa';
-      key_size?: number;
-      scope: 'global' | 'group' | 'target';
-      scope_value?: string;
-      passphrase?: string;
-    }
-
-    export interface SSHKeyImportData {
-      name: string;
-      public_key: string;
-      private_key: string;
-      scope: 'global' | 'group' | 'target';
-      scope_value?: string;
-    }
-
     export interface AgentAPIKey {
       id: number;
       key_hash: string;
@@ -731,40 +697,6 @@ class ApiService {
   async resetSettings(category?: string): Promise<any> {
     const response = await this.api.post('/settings/reset/', {
       category,
-    });
-    return response.data;
-  }
-
-    // ========== SSH Keys ==========
-
-  async getSSHKeys(scope?: string): Promise<SSHKey[]> {
-    const params = scope ? { scope } : {};
-    const response = await this.api.get('/settings/ssh-keys/', { params });
-    return response.data.results || response.data;
-  }
-
-  async getSSHKey(id: number): Promise<SSHKey> {
-    const response = await this.api.get(`/settings/ssh-keys/${id}/`);
-    return response.data;
-  }
-
-  async generateSSHKey(data: SSHKeyCreateData): Promise<SSHKey> {
-    const response = await this.api.post('/settings/ssh-keys/generate/', data);
-    return response.data;
-  }
-
-  async importSSHKey(data: SSHKeyImportData): Promise<SSHKey> {
-    const response = await this.api.post('/settings/ssh-keys/import_key/', data);
-    return response.data;
-  }
-
-  async deleteSSHKey(id: number): Promise<void> {
-    await this.api.delete(`/settings/ssh-keys/${id}/`);
-  }
-
-  async downloadSSHKeyPublic(id: number): Promise<Blob> {
-    const response = await this.api.get(`/settings/ssh-keys/${id}/download/`, {
-      responseType: 'blob',
     });
     return response.data;
   }

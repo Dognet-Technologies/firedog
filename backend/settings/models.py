@@ -1,13 +1,12 @@
 """
 Models per Settings App
-Gestione configurazioni sistema e chiavi SSH
+Gestione configurazioni sistema
 """
 
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
-import hashlib
 
 
 class SystemSettings(models.Model):
@@ -87,137 +86,6 @@ class SystemSettings(models.Model):
             },
         )
         return setting
-
-
-class SSHKey(models.Model):
-    """
-    Chiavi SSH per connessione ai target
-    Supporta scope globale, per gruppo o per target specifico
-    """
-
-    KEY_TYPE_CHOICES = [
-        ("ed25519", "Ed25519"),
-        ("rsa", "RSA"),
-        ("ecdsa", "ECDSA"),
-    ]
-
-    SCOPE_CHOICES = [
-        ("global", "Globale"),
-        ("group", "Gruppo"),
-        ("target", "Target"),
-    ]
-
-    name = models.CharField(max_length=255, help_text="Nome descrittivo della chiave")
-
-    key_type = models.CharField(
-        max_length=20,
-        choices=KEY_TYPE_CHOICES,
-        default="ed25519",
-        help_text="Tipo di chiave SSH",
-    )
-
-    key_size = models.IntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(2048), MaxValueValidator(8192)],
-        help_text="Dimensione chiave RSA (bit)",
-    )
-
-    public_key = models.TextField(help_text="Chiave pubblica SSH")
-
-    private_key = models.TextField(help_text="Chiave privata SSH (encrypted)")
-
-    fingerprint = models.CharField(
-        max_length=255, unique=True, help_text="Fingerprint SHA256 della chiave"
-    )
-
-    scope = models.CharField(
-        max_length=20,
-        choices=SCOPE_CHOICES,
-        default="global",
-        help_text="Ambito di utilizzo della chiave",
-    )
-
-    scope_value = models.CharField(
-        max_length=255,
-        blank=True,
-        null=True,
-        help_text="Valore dello scope (nome gruppo o ID target)",
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, related_name="ssh_keys_created"
-    )
-
-    is_active = models.BooleanField(
-        default=True, help_text="Se False, la chiave non viene utilizzata"
-    )
-
-    last_used_at = models.DateTimeField(
-        null=True, blank=True, help_text="Ultimo utilizzo della chiave"
-    )
-
-    class Meta:
-        db_table = "ssh_keys"
-        verbose_name = "SSH Key"
-        verbose_name_plural = "SSH Keys"
-        ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["scope", "scope_value"]),
-            models.Index(fields=["fingerprint"]),
-        ]
-
-    def __str__(self):
-        return f"{self.name} ({self.key_type})"
-
-    def generate_fingerprint(self):
-        """Genera fingerprint SHA256 della chiave pubblica"""
-        # Estrai la parte base64 della chiave pubblica
-        parts = self.public_key.strip().split()
-        if len(parts) >= 2:
-            key_data = parts[1]
-            fingerprint = hashlib.sha256(key_data.encode()).hexdigest()
-            return f"SHA256:{fingerprint[:32]}..."
-        return "Invalid key format"
-
-    def save(self, *args, **kwargs):
-        """Override save per generare fingerprint automaticamente"""
-        if not self.fingerprint:
-            self.fingerprint = self.generate_fingerprint()
-        super().save(*args, **kwargs)
-
-    @property
-    def associated_targets_count(self):
-        """Conta target associati a questa chiave"""
-        from targets.models import Target
-
-        if self.scope == "global":
-            return Target.objects.filter(is_active=True).count()
-        elif self.scope == "group":
-            return Target.objects.filter(
-                gruppo=self.scope_value, is_active=True
-            ).count()
-        elif self.scope == "target":
-            return Target.objects.filter(id=self.scope_value, is_active=True).count()
-
-        return 0
-
-    def get_private_key_path(self):
-        """Ritorna path dove salvare la chiave privata sul filesystem"""
-        from django.conf import settings
-        import os
-
-        keys_dir = os.path.join(settings.BASE_DIR, "ssh_keys")
-        os.makedirs(keys_dir, exist_ok=True)
-
-        filename = f"id_{self.key_type}_{self.id}"
-        return os.path.join(keys_dir, filename)
-
-    def mark_as_used(self):
-        """Aggiorna timestamp ultimo utilizzo"""
-        self.last_used_at = timezone.now()
-        self.save(update_fields=["last_used_at"])
 
 
 class DatabaseCleanupLog(models.Model):

@@ -1,6 +1,6 @@
 """
 Views per Settings App
-Gestione configurazioni, chiavi SSH e database
+Gestione configurazioni e database
 """
 
 from rest_framework import viewsets, status
@@ -11,14 +11,10 @@ from django.db import connection, transaction
 from django.utils import timezone
 from django.contrib.auth import update_session_auth_hash
 from datetime import timedelta
-import subprocess
-import tempfile
 import logging
-import os
 from .tasks import send_test_notification
 from .models import (
     SystemSettings,
-    SSHKey,
     DatabaseCleanupLog,
     NotificationConfig,
     NotificationLog,
@@ -26,9 +22,6 @@ from .models import (
 from .serializers import (
     SystemSettingsSerializer,
     SystemSettingsBulkSerializer,
-    SSHKeySerializer,
-    SSHKeyCreateSerializer,
-    SSHKeyImportSerializer,
     DatabaseStatsSerializer,
     DatabaseCleanupSerializer,
     DatabaseCleanupLogSerializer,
@@ -161,251 +154,6 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
                 "deleted_count": deleted_count,
             }
         )
-
-
-class SSHKeyViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet per gestione chiavi SSH
-
-    Endpoints:
-    - GET /api/settings/ssh-keys/ - Lista chiavi SSH
-    - GET /api/settings/ssh-keys/{id}/ - Dettaglio chiave
-    - POST /api/settings/ssh-keys/generate/ - Genera nuova chiave
-    - POST /api/settings/ssh-keys/import/ - Importa chiave esistente
-    - DELETE /api/settings/ssh-keys/{id}/ - Elimina chiave
-    - GET /api/settings/ssh-keys/{id}/download/ - Scarica chiave pubblica
-    """
-
-    queryset = SSHKey.objects.filter(is_active=True)
-    serializer_class = SSHKeySerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        """Filtra chiavi per scope"""
-        queryset = super().get_queryset()
-
-        scope = self.request.query_params.get("scope")
-        if scope:
-            queryset = queryset.filter(scope=scope)
-
-        return queryset.order_by("-created_at")
-
-    @action(detail=False, methods=["post"])
-    def generate(self, request):
-        """
-        Genera nuova coppia di chiavi SSH
-
-        POST /api/settings/ssh-keys/generate/
-        Body: {
-            "name": "Production Key",
-            "key_type": "ed25519",
-            "key_size": 4096,  // Solo per RSA
-            "scope": "global",
-            "scope_value": "",
-            "passphrase": "optional"
-        }
-        """
-        serializer = SSHKeyCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        data = serializer.validated_data
-
-        try:
-            # Genera chiavi SSH usando subprocess
-            public_key, private_key = self._generate_ssh_keypair(
-                key_type=data["key_type"],
-                key_size=data.get("key_size"),
-                passphrase=data.get("passphrase", ""),
-            )
-
-            # Crea record nel database
-            ssh_key = SSHKey.objects.create(
-                name=data["name"],
-                key_type=data["key_type"],
-                key_size=data.get("key_size"),
-                public_key=public_key,
-                private_key=private_key,
-                scope=data["scope"],
-                scope_value=data.get("scope_value"),
-                created_by=request.user,
-            )
-
-            # Salva chiave privata su filesystem
-            private_key_path = ssh_key.get_private_key_path()
-            with open(private_key_path, "w") as f:
-                f.write(private_key)
-
-            # Imposta permessi 600
-            os.chmod(private_key_path, 0o600)
-
-            logger.info(f"SSH key generated: {ssh_key.name} (ID: {ssh_key.id})")
-
-            # Log audit
-            from audit.models import AuditLog
-
-            AuditLog.log_action(
-                username=request.user.username,
-                action="ssh_key.generate",
-                details={
-                    "key_id": ssh_key.id,
-                    "key_name": ssh_key.name,
-                    "key_type": ssh_key.key_type,
-                    "scope": ssh_key.scope,
-                },
-                ip_address=request.META.get("REMOTE_ADDR"),
-            )
-
-            result_serializer = SSHKeySerializer(ssh_key)
-            return Response(result_serializer.data, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            logger.error(f"Failed to generate SSH key: {e}")
-            return Response(
-                {"error": f"Errore generazione chiave SSH: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-    def _generate_ssh_keypair(self, key_type, key_size=None, passphrase=""):
-        """
-        Genera coppia di chiavi SSH usando ssh-keygen
-
-        Returns:
-            tuple: (public_key, private_key)
-        """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            key_path = os.path.join(tmpdir, "id_key")
-
-            # Costruisci comando ssh-keygen
-            cmd = ["ssh-keygen", "-t", key_type]
-
-            if key_type == "rsa" and key_size:
-                cmd.extend(["-b", str(key_size)])
-
-            cmd.extend(
-                [
-                    "-f",
-                    key_path,
-                    "-N",
-                    passphrase,
-                    "-C",
-                    f"firedog-{key_type}",
-                ]
-            )
-
-            # Esegui ssh-keygen
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-
-            if result.returncode != 0:
-                raise Exception(f"ssh-keygen failed: {result.stderr}")
-
-            # Leggi chiavi generate
-            with open(key_path, "r") as f:
-                private_key = f.read()
-
-            with open(f"{key_path}.pub", "r") as f:
-                public_key = f.read().strip()
-
-            return public_key, private_key
-
-    @action(detail=False, methods=["post"])
-    def import_key(self, request):
-        """
-        Importa chiave SSH esistente
-
-        POST /api/settings/ssh-keys/import/
-        Body: {
-            "name": "Existing Key",
-            "public_key": "ssh-ed25519 AAAA...",
-            "private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
-            "scope": "global"
-        }
-        """
-        serializer = SSHKeyImportSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        data = serializer.validated_data
-
-        # Determina key_type dalla chiave pubblica
-        public_key_parts = data["public_key"].split()
-        key_type = public_key_parts[0].replace("ssh-", "").split("-")[0]
-
-        # Crea record
-        ssh_key = SSHKey.objects.create(
-            name=data["name"],
-            key_type=key_type,
-            public_key=data["public_key"],
-            private_key=data["private_key"],
-            scope=data["scope"],
-            scope_value=data.get("scope_value"),
-            created_by=request.user,
-        )
-
-        # Salva chiave privata su filesystem
-        private_key_path = ssh_key.get_private_key_path()
-        with open(private_key_path, "w") as f:
-            f.write(data["private_key"])
-        os.chmod(private_key_path, 0o600)
-
-        logger.info(f"SSH key imported: {ssh_key.name} (ID: {ssh_key.id})")
-
-        # Log audit
-        from audit.models import AuditLog
-
-        AuditLog.log_action(
-            username=request.user.username,
-            action="ssh_key.import",
-            details={
-                "key_id": ssh_key.id,
-                "key_name": ssh_key.name,
-                "key_type": ssh_key.key_type,
-            },
-            ip_address=request.META.get("REMOTE_ADDR"),
-        )
-
-        result_serializer = SSHKeySerializer(ssh_key)
-        return Response(result_serializer.data, status=status.HTTP_201_CREATED)
-
-    @action(detail=True, methods=["get"])
-    def download(self, request, pk=None):
-        """
-        Scarica chiave pubblica
-
-        GET /api/settings/ssh-keys/{id}/download/
-        """
-        ssh_key = self.get_object()
-
-        from django.http import HttpResponse
-
-        response = HttpResponse(ssh_key.public_key, content_type="text/plain")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{ssh_key.name.replace(" ", "_")}.pub"'
-        )
-
-        return response
-
-    def destroy(self, request, *args, **kwargs):
-        """Override destroy per eliminare anche file su filesystem"""
-        instance = self.get_object()
-
-        # Elimina file chiave privata
-        try:
-            private_key_path = instance.get_private_key_path()
-            if os.path.exists(private_key_path):
-                os.remove(private_key_path)
-        except Exception as e:
-            logger.warning(f"Failed to delete private key file: {e}")
-
-        # Log audit
-        from audit.models import AuditLog
-
-        AuditLog.log_action(
-            username=request.user.username,
-            action="ssh_key.delete",
-            details={"key_id": instance.id, "key_name": instance.name},
-            ip_address=request.META.get("REMOTE_ADDR"),
-        )
-
-        return super().destroy(request, *args, **kwargs)
 
 
 class DatabaseManagementViewSet(viewsets.ViewSet):

@@ -6,7 +6,6 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
     SystemSettings,
-    SSHKey,
     DatabaseCleanupLog,
     NotificationConfig,
     NotificationLog,
@@ -58,107 +57,6 @@ class SystemSettingsAdmin(admin.ModelAdmin):
         return value_str
 
     value_preview.short_description = "Valore"
-
-
-@admin.register(SSHKey)
-class SSHKeyAdmin(admin.ModelAdmin):
-    """Admin per SSHKey"""
-
-    list_display = [
-        "name",
-        "key_type_badge",
-        "scope_badge",
-        "fingerprint_preview",
-        "is_active",
-        "created_at",
-        "last_used_at",
-    ]
-
-    list_filter = [
-        "key_type",
-        "scope",
-        "is_active",
-        "created_at",
-    ]
-
-    search_fields = [
-        "name",
-        "fingerprint",
-    ]
-
-    readonly_fields = [
-        "fingerprint",
-        "created_at",
-        "last_used_at",
-        "associated_targets_count",
-    ]
-
-    fieldsets = (
-        ("Identificazione", {"fields": ("name", "key_type", "key_size")}),
-        (
-            "Chiavi",
-            {
-                "fields": ("public_key", "fingerprint"),
-                "description": "La chiave privata non è visualizzata per sicurezza",
-            },
-        ),
-        ("Ambito", {"fields": ("scope", "scope_value", "associated_targets_count")}),
-        (
-            "Stato",
-            {"fields": ("is_active", "created_at", "created_by", "last_used_at")},
-        ),
-    )
-
-    def key_type_badge(self, obj):
-        """Badge colorato per tipo chiave"""
-        colors = {
-            "ed25519": "#10b981",  # green
-            "rsa": "#3b82f6",  # blue
-            "ecdsa": "#f59e0b",  # amber
-        }
-        color = colors.get(obj.key_type, "#6b7280")
-        return format_html(
-            '<span style="background: {}; color: white; padding: 3px 8px; '
-            'border-radius: 4px; font-size: 11px; font-weight: 600;">{}</span>',
-            color,
-            obj.key_type.upper(),
-        )
-
-    key_type_badge.short_description = "Tipo"
-
-    def scope_badge(self, obj):
-        """Badge colorato per scope"""
-        colors = {
-            "global": "#8b5cf6",  # purple
-            "group": "#06b6d4",  # cyan
-            "target": "#ec4899",  # pink
-        }
-        color = colors.get(obj.scope, "#6b7280")
-
-        label = obj.get_scope_display()
-        if obj.scope_value:
-            label = f"{label}: {obj.scope_value}"
-
-        return format_html(
-            '<span style="background: {}; color: white; padding: 3px 8px; '
-            'border-radius: 4px; font-size: 11px; font-weight: 600;">{}</span>',
-            color,
-            label,
-        )
-
-    scope_badge.short_description = "Ambito"
-
-    def fingerprint_preview(self, obj):
-        """Anteprima fingerprint"""
-        if len(obj.fingerprint) > 30:
-            return f"{obj.fingerprint[:30]}..."
-        return obj.fingerprint
-
-    fingerprint_preview.short_description = "Fingerprint"
-
-    def has_add_permission(self, request):
-        """Disabilita aggiunta diretta (usa API)"""
-        return False
 
 
 @admin.register(DatabaseCleanupLog)
