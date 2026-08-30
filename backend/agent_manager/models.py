@@ -272,6 +272,14 @@ class AgentConnection(models.Model):
             self.system_info = system_stats
         self.save(update_fields=["last_heartbeat", "is_online", "system_info"])
 
+        # Riallinea il target: dopo un mark_offline() da health-check stale,
+        # un heartbeat che riprende deve riportare il target online, non
+        # lasciarlo bloccato su "offline" fino al prossimo pairing completo.
+        if self.target.status != "online":
+            self.target.status = "online"
+        self.target.last_seen = timezone.now()
+        self.target.save(update_fields=["status", "last_seen"])
+
     def mark_offline(self):
         """Marca connessione come offline"""
         self.is_online = False
