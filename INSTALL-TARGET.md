@@ -118,6 +118,16 @@ MONITORED_INTERFACES="eth0,eth1"
 # (formato "porta/protocollo", separate da virgola). La porta SSH è già
 # protetta a parte (auto-rilevata / $SSH_PORT), non va elencata qui.
 ALWAYS_OPEN_PORTS="80/tcp,443/tcp"
+
+# Protezione SSH brute-force: soglia (tentativi/finestra in secondi) e cosa
+# succede al suo superamento. SSH_PROTECT_BAN_DURATION: "0" nessun ban (solo
+# drop nella finestra, storico) | "<N>m"/"<N>h"/"<N>d" ban temporaneo |
+# "permanent" ban permanente. Il ban richiede il pacchetto ipset (installato
+# di default) ed è persistente: sopravvive a un rilancio di firewall-init.sh
+# e, via salvataggio periodico da cron, anche al reboot.
+SSH_PROTECT_MAX_ATTEMPTS="4"
+SSH_PROTECT_WINDOW_SECONDS="60"
+SSH_PROTECT_BAN_DURATION="0"
 ```
 
 Dopo aver modificato il file, applica con `sudo firewall-init.sh` (idempotente:
@@ -128,6 +138,14 @@ Se il target è già in produzione con policy DROP attiva, aggiungere una
 porta a `ALWAYS_OPEN_PORTS` **non** basta da sola: senza rilanciare
 `firewall-init.sh` la regola non viene creata — pianifica la finestra di
 manutenzione di conseguenza (il rilancio resetta e ricrea l'intero ruleset).
+
+Gestione dei ban SSH attivi (non serve rilanciare `firewall-init.sh`, agiscono
+subito sulla ipset già attiva):
+
+```bash
+firewall-manager --list-bans        # IP bannati e tempo alla scadenza (o "permanente")
+firewall-manager --unban 203.0.113.5  # rimuove un ban, incluso uno permanente
+```
 
 ## Installazione del dog-agent
 

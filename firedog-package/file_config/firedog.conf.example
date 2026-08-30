@@ -25,3 +25,28 @@ MONITORED_INTERFACES=""
 # qualunque servizio in ascolto su queste porte diventerebbe irraggiungibile
 # non appena la policy DROP viene applicata.
 ALWAYS_OPEN_PORTS=""
+
+# ── Protezione SSH brute-force ───────────────────────────────────────────
+# Soglia: quanti nuovi tentativi di connessione SSH in che finestra di
+# tempo (secondi) fanno scattare la protezione.
+SSH_PROTECT_MAX_ATTEMPTS="4"
+SSH_PROTECT_WINDOW_SECONDS="60"
+
+# Cosa succede quando la soglia viene superata:
+#   "0" (default)     nessun ban: la sorgente resta droppata solo finché
+#                      continua a generare nuovi tentativi nella finestra
+#                      sopra (comportamento storico, nessuna dipendenza extra)
+#   "<N>m" / "<N>h" / "<N>d"   ban temporaneo (N minuti / ore / giorni):
+#                      la sorgente viene aggiunta a una ipset persistente
+#                      (sopravvive a un rilancio di firewall-init.sh e,
+#                      tramite il salvataggio periodico da cron, anche al
+#                      reboot) e scade da sola dopo N
+#   "permanent"        ban permanente: resta finché non lo rimuovi a mano
+#
+# Richiede il pacchetto 'ipset' (installato di default da install.sh). Se
+# assente, il ban viene disabilitato con un warning e si torna al
+# comportamento storico.
+#
+# Gestione ban attivi: 'firewall-manager --list-bans' / '--unban <IP>'.
+# Esempi: SSH_PROTECT_BAN_DURATION="30m"   SSH_PROTECT_BAN_DURATION="1d"
+SSH_PROTECT_BAN_DURATION="0"

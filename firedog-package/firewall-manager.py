@@ -23,7 +23,12 @@ CONFIG = {
     'firedog_conf': '/etc/firewall/firedog.conf',
     'log_dir': '/var/log/ulogd',
     'state_file': '/var/lib/firewall/state.json',
-    'min_uid': 1000  # UID minimo per sicurezza
+    'min_uid': 1000,  # UID minimo per sicurezza
+    # ipset del ban SSH brute-force (vedi SSH_PROTECT_BAN_DURATION in
+    # firedog.conf e firewall-init.sh): nome set e file di persistenza
+    # devono restare in sync con SSH_BANSET/SSH_BANSET_SAVE là.
+    'ssh_banset': 'ssh_banned',
+    'ssh_banset_save': '/etc/firewall/ssh_banned.save',
 }
 
 # Porte comuni e servizi
@@ -287,7 +292,96 @@ class FirewallManager:
             print("=" * 100)
             print(result.stdout)
             print()
-    
+
+    def _ssh_banset_exists(self) -> bool:
+        """Verifica se la ipset dei ban SSH esiste (SSH_PROTECT_BAN_DURATION
+        disabilitato o mai attivato -> nessun set creato da firewall-init.sh)."""
+        result = self.run_command(
+            ['ipset', 'list', '-n', CONFIG['ssh_banset']], check=False
+        )
+        return result.returncode == 0
+
+    def list_bans(self):
+        """Lista gli IP attualmente bannati da SSH_PROTECT (ipset ssh_banned).
+        Richiede SSH_PROTECT_BAN_DURATION configurato in firedog.conf."""
+        if not self._ssh_banset_exists():
+            self.info(
+                "Nessun ban attivo: SSH_PROTECT_BAN_DURATION non configurato "
+                "(o '0') in /etc/firewall/firedog.conf, oppure firewall-init.sh "
+                "non è ancora stato rilanciato dopo averlo impostato."
+            )
+            return
+
+        result = self.run_command(
+            ['ipset', 'list', CONFIG['ssh_banset']], check=False
+        )
+        if result.returncode != 0:
+            self.error(f"Errore lettura ipset {CONFIG['ssh_banset']}: {result.stderr.strip()}")
+            return
+
+        # Le entry stanno dopo la riga "Members:"; formato per entry con
+        # timeout: "1.2.3.4 timeout 1734" (secondi rimanenti, permanente se
+        # il set non ha timeout attivo per quella entry -> nessun suffisso).
+        lines = result.stdout.splitlines()
+        try:
+            start = lines.index('Members:') + 1
+        except ValueError:
+            start = len(lines)
+        members = [l for l in lines[start:] if l.strip()]
+
+        if not members:
+            self.info(f"Nessun IP attualmente bannato (ipset {CONFIG['ssh_banset']} vuota)")
+            return
+
+        print(f"\n{Colors.BOLD}=== SSH ban attivi ({CONFIG['ssh_banset']}) ==={Colors.RESET}\n")
+        for m in members:
+            parts = m.split()
+            ip = parts[0]
+            # ipset stampa sempre "timeout N" per entry quando il set ha il
+            # timeout abilitato (creato con 'timeout 0'): N=0 significa
+            # nessuna scadenza (ban permanente), non "scaduto adesso".
+            secs = int(parts[parts.index('timeout') + 1]) if 'timeout' in parts else 0
+            if secs > 0:
+                remaining = str(timedelta(seconds=secs))
+                print(f"  {ip:<20} scade tra {remaining}")
+            else:
+                print(f"  {ip:<20} {Colors.RED}permanente{Colors.RESET}")
+        print()
+
+    def unban(self, ip: str) -> bool:
+        """Rimuove un IP dal ban SSH_PROTECT (ipset ssh_banned), incluso un
+        ban permanente."""
+        if not self.validate_ip(ip):
+            self.error(f"IP non valido: {ip}")
+            return False
+
+        if not self._ssh_banset_exists():
+            self.error(
+                "Nessuna ipset di ban attiva (SSH_PROTECT_BAN_DURATION non "
+                "configurato): niente da rimuovere."
+            )
+            return False
+
+        result = self.run_command(
+            ['ipset', 'del', CONFIG['ssh_banset'], ip], check=False
+        )
+        if result.returncode != 0:
+            self.error(f"{ip} non risulta bannato, o errore: {result.stderr.strip()}")
+            return False
+
+        # Persisti subito la rimozione, altrimenti un reboot prima del
+        # prossimo salvataggio da cron farebbe tornare l'IP bannato
+        # ripristinandolo dal file salvato precedente.
+        save_result = self.run_command(
+            ['ipset', 'save', CONFIG['ssh_banset'], '-f', CONFIG['ssh_banset_save']],
+            check=False
+        )
+        if save_result.returncode != 0:
+            self.warning(f"Rimosso ma non persistito su disco: {save_result.stderr.strip()}")
+
+        self.success(f"{ip} rimosso dal ban SSH_PROTECT")
+        return True
+
     def save_rules(self):
         """Salva regole correnti"""
         try:
@@ -1063,6 +1157,8 @@ Esempi:
   %(prog)s --stats                         # Mostra statistiche
   %(prog)s --export-json                   # Esporta stato in JSON (default path)
   %(prog)s --export-json /tmp/fw.json      # Esporta in path custom
+  %(prog)s --list-bans                     # IP bannati da SSH_PROTECT (SSH_PROTECT_BAN_DURATION)
+  %(prog)s --unban 203.0.113.5             # Rimuovi un ban (anche permanente)
         """
     )
     
@@ -1093,7 +1189,13 @@ Esempi:
     parser.add_argument('--remove', metavar=('CHAIN', 'NUM'),
                        nargs=2,
                        help='Rimuovi regola: CHAIN NUM')
-    
+
+    parser.add_argument('--list-bans', action='store_true',
+                       help='Lista IP bannati da SSH_PROTECT (richiede SSH_PROTECT_BAN_DURATION in firedog.conf)')
+
+    parser.add_argument('--unban', metavar='IP',
+                       help='Rimuove un IP dal ban SSH_PROTECT (anche permanente)')
+
     parser.add_argument('--analyze', metavar='HOURS',
                        type=int, nargs='?', const=1,
                        help='Analizza traffico bloccato (default: 1 ora)')
@@ -1142,7 +1244,13 @@ Esempi:
     
     elif args.remove:
         fw.remove_rule(args.remove[0], int(args.remove[1]))
-    
+
+    elif args.list_bans:
+        fw.list_bans()
+
+    elif args.unban:
+        fw.unban(args.unban)
+
     elif args.analyze:
         fw.analyze_dropped_traffic(args.analyze)
     

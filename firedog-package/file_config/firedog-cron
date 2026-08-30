@@ -16,6 +16,14 @@
 # "Not installed" anche su target perfettamente funzionanti).
 */5 * * * * root /usr/local/bin/firewall-manager --export-json /opt/sentinelsuite/firedog/export/status.json 2>&1 | logger -t firedog-export
 
+# ========== SSH BAN PERSISTENCE ==========
+# Salva la ipset dei ban SSH_PROTECT (se attiva, vedi SSH_PROTECT_BAN_DURATION
+# in firedog.conf) ogni 5 minuti, così un reboot non perde i ban ancora validi
+# (ripristinati al boot da firewall-fm.service prima di iptables-restore).
+# 'ipset save' su un set inesistente fallisce silenziosamente (2>/dev/null):
+# nessun costo quando il ban è disabilitato.
+*/5 * * * * root ipset save ssh_banned -f /etc/firewall/ssh_banned.save 2>/dev/null
+
 # ========== IPTABLES BACKUP ==========
 # Backup giornaliero alle 3:00.
 0 3 * * * root /usr/sbin/iptables-save > /opt/sentinelsuite/firedog/rules/iptables.backup-$(date +\%Y\%m\%d).rules 2>/dev/null

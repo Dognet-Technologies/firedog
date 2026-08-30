@@ -77,14 +77,14 @@ if [[ "$OS_FAMILY" == "debian" ]]; then
     echo -e "${GREEN}[1/7]${NC} apt deps"
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq iptables iptables-persistent ulogd2 python3 tcpdump logrotate cron
+    apt-get install -y -qq iptables iptables-persistent ipset ulogd2 python3 tcpdump logrotate cron
 else
     echo -e "${GREEN}[1/7]${NC} zypper deps"
     zypper --non-interactive --quiet refresh
     # no iptables-persistent on SUSE: boot persistence is handled by firewall-fm.service
     # util-linux-systemd: provides `logger`, used by the firedog-cron jobs
     zypper --non-interactive install --no-recommends \
-        iptables python3 tcpdump logrotate cronie curl util-linux-systemd
+        iptables ipset python3 tcpdump logrotate cronie curl util-linux-systemd
     # ulogd lives in the security:netfilter OBS repo on Leap/SLES (not in the
     # main repos); there the pcap output plugin is a separate subpackage
     install_ulogd() {
@@ -241,5 +241,5 @@ echo "  CLI:            firewall-manager --help"
 echo "  firewall svc:   systemctl status firewall-fm"
 echo "  ulogd svc:      systemctl status ${ULOGD_SVC}"
 echo "  custom rules:   /etc/firewall/custom_rules.conf"
-echo "  firedog conf:   /etc/firewall/firedog.conf (NIC monitorate, porte sempre aperte)"
+echo "  firedog conf:   /etc/firewall/firedog.conf (NIC monitorate, porte sempre aperte, ban SSH brute-force)"
 echo "  pcap logs:      /var/log/ulogd/"
