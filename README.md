@@ -1,533 +1,279 @@
-# 🛡️ Advanced Firewall System
+# 🛡️ FireDog
 
-Sistema di firewall avanzato per Debian/Ubuntu con policy DROP, logging PCAP separato, analisi intelligente del traffico e interfaccia CLI di gestione.
+Piattaforma di gestione centralizzata del firewall per flotte di host Linux — policy DROP di default, regole distribuite in tempo reale, analisi del traffico con threat scoring, e un **server MCP** che espone tutto ad agenti AI autorizzati.
+
+[![Release](https://img.shields.io/github/v/release/Dognet-Technologies/firedog)](https://github.com/Dognet-Technologies/firedog/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#-licenza)
 
 > **Guide di installazione:**
-> - Master FireDog (backend Django + frontend React + Celery + nginx): [INSTALL.md](INSTALL.md)
+> - Master (backend Django + frontend React + Celery + nginx): [INSTALL.md](INSTALL.md)
 > - Target (strumenti firewall + dog-agent + pairing col master): [INSTALL-TARGET.md](INSTALL-TARGET.md)
+> - Ruoli, permessi e API: [ROLES_AND_PERMISSIONS.md](backend/ROLES_AND_PERMISSIONS.md)
 >
 > Installazione rapida di un target:
 > ```bash
 > curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
 > ```
->
-> Questo README descrive gli strumenti firewall contenuti in `firedog-package/`.
+
+## 🆕 Novità in v1.0.0
+
+- **Server MCP ampliato** — tool di lettura *e scrittura* per regole, minacce, IP bloccati, traffico, network flow ([dettagli sotto](#-server-mcp)).
+- **Supporto host multi-NIC** — un target può avere più interfacce di rete; le regole possono essere scoped su un'interfaccia specifica (`-i`/`-o`), con contatori rx/tx e selettore NIC nella UI.
+- **Protezione SSH brute-force configurabile** — soglia/finestra personalizzabili, ban temporaneo o permanente via ipset persistente, gestibile con `firewall-manager --list-bans`/`--unban`.
+- **`/etc/firewall/firedog.conf`** — nuovo file di configurazione target-side per interfacce monitorate e porte sempre aperte.
+- **Supporto openSUSE/SLES** oltre a Debian/Ubuntu per l'installazione degli strumenti target.
+- **Pulizia**: rimosso il vecchio meccanismo di gestione regole/installazione via SSH diretto (push dal master, terminale SSH nella UI) — il provisioning di un target è sempre self-service via `get-firedog.sh`, il dispatch delle regole avviene via WebSocket tramite [dog-agent](https://github.com/Dognet-Technologies/dog_agent).
+
+Changelog completo: [release v1.0.0](https://github.com/Dognet-Technologies/firedog/releases/tag/v1.0.0).
+
+## 🏗️ Architettura
+
+FireDog è un sistema a **tre componenti**, ciascuno con un ruolo preciso:
+
+| Componente | Dove gira | Cosa fa |
+|---|---|---|
+| **Master** | un host/VM dedicato | Backend Django + frontend React: policy editor, dashboard di traffico in tempo reale, API REST, **server MCP** |
+| **Strumenti firewall** | ogni target, in `/opt/sentinelsuite/firedog` | `firewall-manager` (CLI regole), `traffic-analyzer` (threat scoring su PCAP), `firewall-init.sh` (policy DROP + protezioni) |
+| **dog-agent** | ogni target, `/usr/bin/dog-agent` | Binario Rust statico condiviso con CyberSheppard/SentinelCore: pairing a 2 fasi col master, poi push di heartbeat/statistiche/minacce via WebSocket ed esecuzione dei comandi regola |
+
+Le regole create sul master vengono **dispatchate all'agent via WebSocket** in tempo reale; se l'agent non è connesso restano persistite (`is_synced=false`) e si riconciliano alla riconnessione — nessun accesso SSH è mai coinvolto in questo percorso.
+
+## 🤖 Server MCP
+
+FireDog espone un server **[MCP](https://modelcontextprotocol.io) (Model Context Protocol)** che permette ad agenti AI autorizzati di consultare — e, con una chiave posseduta da un utente Admin, agire su — target, regole, minacce e traffico in modo programmatico.
+
+- **Endpoint**: `POST /api/mcp` — JSON-RPC 2.0
+- **Autenticazione**: header `Authorization: Bearer fd_<chiave>`, chiave generata da **Settings → API Keys MCP**. La chiave **eredita ruolo e permessi dell'utente che l'ha creata**: i tool marcati `[Admin]` nella tabella sotto funzionano solo con una chiave posseduta da un utente Admin, gli altri sono disponibili a qualunque chiave attiva.
+- **Audit**: ogni azione di scrittura via MCP viene registrata in `AuditLog` con prefisso `"MCP <tool>: ..."`, distinguibile dalle modifiche fatte da UI.
+
+<details>
+<summary><strong>Esempio di chiamata</strong></summary>
+
+```bash
+curl -sk -X POST https://<master>/api/mcp \
+  -H "Authorization: Bearer fd_xxxxxxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "list_threats",
+      "arguments": {"severities": "critical,high", "min_score": 70}
+    }
+  }'
+```
+</details>
+
+### Tool disponibili
+
+| Tool | Cosa fa |
+|---|---|
+| `list_targets` | Elenca i target gestiti (stato, connectivity, versione firedog installata). Filtri: status, connection_type, hostname, ip_address |
+| `get_target` | Dettaglio di un singolo target, incluso stato di connettività |
+| `list_interfaces` | Elenca le interfacce di rete (NIC) dei target — supporto multi-homed |
+| `list_rules` | Elenca le regole firewall iptables sui target |
+| `get_rule` | Dettaglio di una singola regola per id |
+| `create_rule` `[Admin]` | Crea una regola custom e la invia all'agent via WebSocket (se connesso) |
+| `delete_rule` `[Admin]` | Elimina una regola per id e chiede all'agent di rimuoverla dal target |
+| `list_threats` | Elenca le minacce rilevate, ordinate per data discendente. Filtri: severity, target_id, source_ip, is_blocked, is_resolved, min_score |
+| `get_threat` | Dettaglio di una minaccia, inclusi i motivi dello score |
+| `resolve_threat` `[Admin]` | Marca una minaccia come risolta (idempotente) |
+| `list_blocked_ips` | Elenca gli IP bloccati sui target |
+| `block_ip` `[Admin]` | Registra il blocco di un IP su un target |
+| `unblock_ip` `[Admin]` | Sblocca un IP per id |
+| `list_traffic_stats` | Snapshot periodici di traffico/volumi per target |
+| `list_network_flows` | Peer remoti pubblici osservati nel traffico di un target |
+| `get_policy_summary` | Rollup aggregato della postura firewall (target per stato, regole per tipo, ecc.) |
 
 ## 📋 Caratteristiche
 
 - ✅ Policy DROP di default su INPUT/OUTPUT
-- ✅ Protezioni avanzate: SYN flood, port scan, brute force SSH
+- ✅ Protezioni avanzate: SYN flood, port scan, brute force SSH (soglia/ban configurabili)
 - ✅ Logging separato INPUT/OUTPUT in formato PCAP con ulogd2
-- ✅ Retention automatica 30 giorni / 1GB con logrotate
-- ✅ CLI Python per gestione regole
+- ✅ Retention automatica con logrotate
+- ✅ CLI Python per gestione regole (`firewall-manager`) e API REST dal master
 - ✅ Analisi intelligente traffico con threat scoring
-- ✅ Avvio automatico con systemd
+- ✅ Supporto host multi-NIC, regole scoped per interfaccia
+- ✅ Server MCP per agenti AI (lettura e scrittura)
+- ✅ Avvio automatico con systemd, Debian/Ubuntu e openSUSE/SLES
 - ✅ Conforme OWASP/NIST security best practices
 
-## 🔧 Componenti
+## 🚀 Installazione rapida
 
-### 1. `firewall-init.sh`
-Script bash di inizializzazione firewall con regole di sicurezza.
-
-**Protezioni implementate:**
-- SYN flood protection (max 10 conn/sec)
-- Port scan detection (max 15 porte/min)
-- SSH brute force protection (max 4 tentativi/min)
-- ICMP flood protection (max 5 ping/sec)
-- Protezione contro NULL packets, XMAS packets, pacchetti frammentati
-- Anti-spoofing (martian packets)
-
-### 2. `firewall-manager.py`
-Interfaccia CLI Python per gestione firewall.
-
-**Funzionalità:**
-- Aggiunta/rimozione regole INPUT/OUTPUT
-- Listing regole con numerazione
-- Analisi traffico bloccato
-- Threat scoring e identificazione anomalie
-- Statistiche firewall
-- Persistenza regole
-
-### 3. `traffic-analyzer.py`
-Analizzatore avanzato traffico PCAP con machine learning-like scoring.
-
-**Analisi:**
-- Calcolo threat score (0-100) per ogni IP
-- Classificazione minacce: Critical/High/Medium/Low
-- Identificazione pattern attacco: Port Scan, SYN Flood, Service Attack
-- Raccomandazioni automatiche
-
-### 4. Configurazione ulogd2
-Logging separato INPUT/OUTPUT con stack PCAP ottimizzati.
-
-### 5. Systemd Service
-Avvio automatico firewall all'boot del sistema.
-
-## 📦 Installazione
-
-### Prerequisiti
-- Debian 10+ o Ubuntu 18.04+
-- Accesso root (sudo)
-- Connessione internet per installazione pacchetti
-
-### Installazione Rapida
-
+**Master (server web):**
 ```bash
-# 1. Scarica i file
-git clone <repository-url>
-cd firewall-system
-
-# 2. Rendi eseguibili gli script
-chmod +x install.sh firewall-init.sh firewall-manager.py traffic-analyzer.py
-
-# 3. Esegui installazione
-sudo ./install.sh
+git clone --branch v1.0.0 https://github.com/Dognet-Technologies/firedog.git
+cd firedog && cat INSTALL.md
 ```
 
-Lo script di installazione:
-1. Installa dipendenze (iptables, ulogd2, tcpdump, etc.)
-2. Configura ulogd2 per logging PCAP
-3. Installa gli script di gestione
-4. Configura logrotate per retention
-5. Crea e abilita systemd service
-6. Inizializza il firewall (dopo conferma)
-
-### Installazione Manuale
-
+**Target (strumenti firewall — Debian/Ubuntu o openSUSE/SLES):**
 ```bash
-# Installa dipendenze
-sudo apt update
-sudo apt install -y iptables iptables-persistent ulogd2 python3 tcpdump logrotate
+curl -fsSL https://github.com/Dognet-Technologies/firedog/releases/latest/download/get-firedog.sh -o get-firedog.sh
+less get-firedog.sh              # ispeziona prima di eseguire
+sudo bash get-firedog.sh         # oppure: sudo bash get-firedog.sh --skip-init
+```
+> **Attenzione**: l'attivazione del firewall applica policy **DROP** su INPUT/OUTPUT. Assicurati di avere accesso console/seriale prima di confermare, o usa `--skip-init` e attiva dopo con `sudo firewall-init.sh && sudo systemctl enable --now firewall-fm`.
 
-# Copia script
-sudo cp firewall-init.sh /usr/local/sbin/
-sudo cp firewall-manager.py /usr/local/bin/firewall-manager
-sudo cp traffic-analyzer.py /usr/local/bin/traffic-analyzer
-sudo chmod +x /usr/local/sbin/firewall-init.sh
-sudo chmod +x /usr/local/bin/firewall-manager
-sudo chmod +x /usr/local/bin/traffic-analyzer
-
-# Configura ulogd2
-sudo cp ulogd.conf /etc/ulogd.conf
-sudo mkdir -p /var/log/ulogd
-sudo systemctl restart ulogd2
-
-# Configura logrotate
-sudo cp firewall-pcap-logrotate /etc/logrotate.d/firewall-pcap
-
-# Installa systemd service
-sudo cp firewall.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable firewall.service
-
-# Inizializza firewall
-sudo /usr/local/sbin/firewall-init.sh
+**dog-agent** (pairing target ↔ master): pacchetto `.deb`/`.rpm` dal repo [dog_agent](https://github.com/Dognet-Technologies/dog_agent/releases/latest).
+```bash
+sudo dpkg -i dog-agent_<versione>-1_amd64.deb      # Debian/Ubuntu
+sudo zypper install ./dog-agent-<versione>-1.x86_64.rpm  # openSUSE/SLES
+sudo nano /etc/dog-agent/agent.conf                # url master, api_key, ip/hostname/mac
+sudo systemctl enable --now dog-agent
 ```
 
-## 🚀 Utilizzo
+Guide complete, incluso il pairing a 2 fasi: [INSTALL.md](INSTALL.md) · [INSTALL-TARGET.md](INSTALL-TARGET.md).
 
-### Comandi Base
+## ⚙️ Configurazione target: `/etc/firewall/firedog.conf`
+
+Seedato al primo install (mai sovrascritto agli aggiornamenti), formato `KEY="value"`:
 
 ```bash
-# Mostra aiuto completo
-firewall-manager --help
+# Interfacce da monitorare/riportare al master (separate da virgola).
+# Vuoto = tutte le interfacce rilevate (default).
+MONITORED_INTERFACES="eth0,eth1"
 
-# Lista tutte le regole
+# Porte da tenere sempre aperte in INPUT, prima della policy DROP finale.
+ALWAYS_OPEN_PORTS="80/tcp,443/tcp"
+
+# Protezione SSH brute-force: soglia/finestra e cosa succede al superamento.
+# BAN_DURATION: "0" nessun ban | "<N>m"/"<N>h"/"<N>d" temporaneo | "permanent"
+SSH_PROTECT_MAX_ATTEMPTS="4"
+SSH_PROTECT_WINDOW_SECONDS="60"
+SSH_PROTECT_BAN_DURATION="0"
+```
+
+> **Importante**: `ALWAYS_OPEN_PORTS` va valorizzato **prima** di lanciare `firewall-init.sh` la prima volta — senza, qualunque servizio su quelle porte diventa irraggiungibile appena la policy DROP entra in vigore. Dopo una modifica, riapplica con `sudo firewall-init.sh`.
+
+Gestione ban SSH attivi:
+```bash
+firewall-manager --list-bans          # IP bannati e tempo alla scadenza (o "permanente")
+firewall-manager --unban 203.0.113.5  # rimuove un ban, incluso uno permanente
+```
+
+## 🔧 `firewall-manager` — CLI di gestione
+
+```bash
+# Lista regole
 firewall-manager --list
-
-# Lista regole di una chain specifica
 firewall-manager --list INPUT
-firewall-manager --list OUTPUT
 
-# Mostra statistiche firewall
+# Statistiche e minacce
 firewall-manager --stats
-```
+firewall-manager --threats 50            # score >= 50
+firewall-manager --analyze 24            # traffico bloccato ultime 24h
 
-### Gestione Regole INPUT
-
-```bash
-# Apri porta 8080 TCP
-sudo firewall-manager --add-input 8080
-
-# Apri porta 53 UDP (DNS)
-sudo firewall-manager --add-input 53 --protocol udp
-
-# Apri porta 22 solo da IP specifico
+# Regole INPUT/OUTPUT
+sudo firewall-manager --add-input 8080 --comment "Node.js app"
 sudo firewall-manager --add-input 22 --source 192.168.1.10 --comment "SSH da admin"
-
-# Apri porta 3000 con commento
-sudo firewall-manager --add-input 3000 --comment "Node.js app"
-```
-
-### Gestione Regole OUTPUT
-
-```bash
-# Consenti connessioni verso porta 3306 (MySQL remoto)
-sudo firewall-manager --add-output 3306
-
-# Consenti connessioni SMTP verso IP specifico
-sudo firewall-manager --add-output 587 --dest 203.0.113.10 --comment "SMTP server"
-
-# Consenti Redis su localhost
-sudo firewall-manager --add-output 6379 --dest 127.0.0.1
-```
-
-### Rimozione Regole
-
-```bash
-# Lista regole con numerazione
-firewall-manager --list INPUT
-
-# Rimuovi regola numero 5 da INPUT
+sudo firewall-manager --add-output 3306 --dest 10.0.1.50 --comment "MySQL prod"
 sudo firewall-manager --remove INPUT 5
 
-# Rimuovi regola numero 3 da OUTPUT
-sudo firewall-manager --remove OUTPUT 3
+# Ban SSH
+firewall-manager --list-bans
+sudo firewall-manager --unban 203.0.113.5
 ```
 
-### Analisi Traffico
-
-```bash
-# Analizza traffico ultima ora
-sudo firewall-manager --analyze
-
-# Analizza traffico ultime 24 ore
-sudo firewall-manager --analyze 24
-
-# Mostra minacce con score >= 30 (default)
-sudo firewall-manager --threats
-
-# Mostra solo minacce critiche (score >= 70)
-sudo firewall-manager --threats 70
-
-# Analisi dettagliata con script dedicato
-sudo traffic-analyzer /var/log/ulogd/input_dropped.pcap
-
-# Genera report JSON
-sudo traffic-analyzer /var/log/ulogd/input_dropped.pcap --json
-```
-
-### Gestione Servizio
-
-```bash
-# Stato firewall
-sudo systemctl status firewall
-
-# Riavvia firewall
-sudo systemctl restart firewall
-
-# Stop firewall (regole rimangono attive per sicurezza)
-sudo systemctl stop firewall
-
-# Ricarica regole salvate
-sudo systemctl reload firewall
-
-# Disabilita avvio automatico
-sudo systemctl disable firewall
-```
-
-## 📊 Esempi Pratici
-
-### Scenario 1: Setup Server Web
-
-```bash
-# Apri porte web
-sudo firewall-manager --add-input 80 --comment "HTTP"
-sudo firewall-manager --add-input 443 --comment "HTTPS"
-
-# Verifica regole
-firewall-manager --list INPUT
-```
-
-### Scenario 2: Database Server Remoto
-
-```bash
-# Consenti connessioni MySQL verso server specifico
-sudo firewall-manager --add-output 3306 --dest 10.0.1.50 --comment "MySQL prod"
-
-# Verifica
-firewall-manager --list OUTPUT
-```
-
-### Scenario 3: Analisi Attacco in Corso
-
-```bash
-# Mostra minacce in tempo reale
-sudo firewall-manager --threats 50
-
-# Analisi dettagliata
-sudo traffic-analyzer
-
-# Blocca IP attaccante (se necessario)
-# Nota: il traffico è già bloccato, questa è una protezione aggiuntiva
-sudo iptables -I INPUT 1 -s 203.0.113.100 -j DROP
-sudo firewall-manager --save
-```
-
-### Scenario 4: Whitelisting Servizio Specifico
-
-```bash
-# Esempio: Jenkins su porta 8080 solo da rete aziendale
-sudo firewall-manager --add-input 8080 --source 192.168.1.0/24 --comment "Jenkins rete interna"
-```
+Sul master, le stesse operazioni si fanno da UI o via API REST (`/api/rules/`, `/api/settings/...`) — vedi [ROLES_AND_PERMISSIONS.md](backend/ROLES_AND_PERMISSIONS.md).
 
 ## 🔍 Interpretazione Threat Score
 
-Il sistema assegna uno score 0-100 a ogni IP basandosi su:
+Il traffic-analyzer assegna uno score 0-100 a ogni IP basandosi su volume pacchetti, scanning multiplo porte, targeting di porte comunemente attaccate, pattern SYN flood e protocolli multipli:
 
-| Score | Livello | Significato | Azione |
-|-------|---------|-------------|--------|
-| 80-100 | 🔴 CRITICO | Attacco attivo confermato | Blocco immediato |
-| 60-79 | 🟠 ALTO | Comportamento molto sospetto | Monitoraggio stretto |
-| 40-59 | 🟡 MEDIO | Attività anomala | Verifica legittimità |
-| 20-39 | 🟢 BASSO | Leggera anomalia | Osservazione |
-| 0-19 | ⚪ MINIMO | Traffico normale | Nessuna azione |
+| Score | Livello | Significato |
+|-------|---------|-------------|
+| 80-100 | 🔴 CRITICO | Attacco attivo confermato |
+| 60-79 | 🟠 ALTO | Comportamento molto sospetto |
+| 40-59 | 🟡 MEDIO | Attività anomala |
+| 20-39 | 🟢 BASSO | Leggera anomalia |
+| 0-19 | ⚪ MINIMO | Traffico normale |
 
-**Fattori che aumentano lo score:**
-- Volume pacchetti elevato
-- Scanning multiplo porte
-- Targeting porte comunemente attaccate (RDP, Telnet, SQL)
-- Pattern SYN flood
-- Protocolli multipli (potenziale reconnaissance)
+## 👥 Ruoli e permessi
 
-## 📁 File e Directory
+| Ruolo | Permessi |
+|---|---|
+| **Admin** | Completi: creare/modificare/eliminare target e regole, bloccare/sbloccare IP, configurazione, Django Admin, tool MCP di scrittura |
+| **Reporter** | Sola lettura: target, regole, minacce, statistiche, audit log |
 
-```
-/etc/firewall/
-├── iptables.rules           # Regole firewall salvate
-└── custom_rules.conf        # Regole personalizzate persistenti
-
-/var/log/ulogd/
-├── input_dropped.pcap       # Traffico INPUT bloccato
-├── output_dropped.pcap      # Traffico OUTPUT bloccato
-└── ulogd.log               # Log daemon ulogd2
-
-/usr/local/sbin/
-└── firewall-init.sh        # Script inizializzazione
-
-/usr/local/bin/
-├── firewall-manager        # CLI gestione
-└── traffic-analyzer        # Analizzatore traffico
-
-/etc/systemd/system/
-└── firewall.service        # Systemd unit
-
-/etc/logrotate.d/
-└── firewall-pcap           # Configurazione rotazione log
-```
+Dettagli e esempi API: [ROLES_AND_PERMISSIONS.md](backend/ROLES_AND_PERMISSIONS.md).
 
 ## 🔐 Sicurezza
 
-### Principi Implementati (OWASP/NIST)
+**Principi implementati (OWASP/NIST):**
+1. Defense in Depth — protezioni a più livelli
+2. Fail Secure — policy DROP di default
+3. Least Privilege — solo traffico necessario consentito
+4. Audit & Logging — traffico bloccato loggato, ogni scrittura API/MCP in `AuditLog`
+5. Rate Limiting — protezione da flood attack e brute-force SSH configurabile
+6. Input Validation — validazione rigorosa di IP/porte/protocolli
 
-1. **Defense in Depth**: Protezioni multiple livelli
-2. **Fail Secure**: Policy DROP di default
-3. **Least Privilege**: Solo traffico necessario consentito
-4. **Audit & Logging**: Logging completo traffico bloccato
-5. **Rate Limiting**: Protezione flood attacks
-6. **Input Validation**: Validazione rigorosa IP/porte/protocolli
+**Protezioni attive lato target:** SYN Flood, Port Scan Detection, SSH Brute Force (con ban persistente opzionale), ICMP Flood, NULL/XMAS packet filtering, anti-spoofing (martian packets), fragment attack protection.
 
-### Protezioni Attive
+## 📁 Struttura del repository
 
-- ✅ SYN Flood Protection
-- ✅ Port Scan Detection
-- ✅ SSH Brute Force Protection
-- ✅ ICMP Flood Protection
-- ✅ Invalid Packet Dropping
-- ✅ NULL/XMAS Packet Filtering
-- ✅ Anti-Spoofing (Martian Packets)
-- ✅ Fragment Attack Protection
-
-### Permessi File
-
-```bash
-# Verifica permessi corretti
-ls -la /etc/firewall/
-# Dovrebbe mostrare: drwx------ (700)
-
-ls -la /etc/firewall/iptables.rules
-# Dovrebbe mostrare: -rw------- (600)
+```
+firedog/
+├── backend/                # Django REST Framework (master)
+│   ├── targets/             # Target, NetworkInterface (multi-NIC)
+│   ├── rules/                # Regole firewall + dispatch WebSocket
+│   ├── agent_manager/       # Pairing dog-agent, API key
+│   ├── mcp/                  # Server MCP (POST /api/mcp)
+│   ├── threats/ discovery/ integrity/ audit/ dashboards/ accounts/ settings/
+│   └── requirements.txt
+├── frontend/                # React + TypeScript SPA
+├── firedog-package/         # Strumenti target (bash + Python)
+│   ├── install.sh            # apt (Debian/Ubuntu) o zypper (openSUSE/SLES)
+│   ├── get-firedog.sh        # bootstrap curl | bash
+│   ├── firewall-init.sh      # policy DROP + protezioni
+│   ├── firewall-manager.py   # CLI regole/ban
+│   └── file_config/          # firedog.conf.example, unit systemd, cron
+├── INSTALL.md                # guida master
+├── INSTALL-TARGET.md         # guida target + pairing agent
+└── backend/ROLES_AND_PERMISSIONS.md
 ```
 
 ## 🛠️ Troubleshooting
 
-### Problema: Non riesco più a connettermi via SSH
-
-**Causa**: Policy DROP senza regola SSH o SSH bloccato per brute force
-
-**Soluzione**:
+**Non riesco più a connettermi via SSH dopo l'attivazione del firewall**
 ```bash
-# Da console fisica o IPMI
+# da console fisica/IPMI/seriale
 sudo iptables -I INPUT 1 -p tcp --dport 22 -j ACCEPT
 sudo firewall-manager --save
-
-# Oppure ripristina regole precedenti
-sudo iptables-restore < /etc/firewall/iptables.rules.backup
 ```
+Se hai configurato un ban SSH (capitolo Configurazione), controlla anche `firewall-manager --list-bans` — potresti aver bannato te stesso durante un test.
 
-### Problema: Servizio non funziona dopo attivazione firewall
-
-**Causa**: Porta non aperta
-
-**Soluzione**:
+**Un servizio non è raggiungibile dopo l'attivazione della policy DROP**
 ```bash
-# Identifica porta necessaria
 sudo netstat -tulpn | grep <servizio>
-
-# Apri porta
 sudo firewall-manager --add-input <PORTA> --comment "Nome servizio"
+# oppure aggiungi la porta a ALWAYS_OPEN_PORTS in firedog.conf e rilancia firewall-init.sh
 ```
 
-### Problema: File PCAP molto grandi
-
-**Causa**: Traffico elevato o attacco in corso
-
-**Soluzione**:
+**Il target non risulta online sul master**
 ```bash
-# Forza rotazione immediata
-sudo logrotate -f /etc/logrotate.d/firewall-pcap
-
-# Analizza traffico per identificare fonte
-sudo traffic-analyzer
-
-# Riduci retention se necessario
-sudo nano /etc/logrotate.d/firewall-pcap
-# Modifica: rotate 30 -> rotate 7
+systemctl status dog-agent
+journalctl -u dog-agent -f    # cerca "pairing" ed eventuali errori di autenticazione
 ```
 
-### Problema: ulogd2 non scrive PCAP
-
-**Verifica**:
+**Accesso di emergenza** (il firewall blocca tutto e perdi accesso, da console fisica/IPMI):
 ```bash
-# Status service
-sudo systemctl status ulogd2
-
-# Verifica configurazione
-sudo ulogd -d -c /etc/ulogd.conf
-
-# Controlla permessi
-ls -la /var/log/ulogd/
-
-# Riavvia service
-sudo systemctl restart ulogd2
-```
-
-### Problema: Performance degradate
-
-**Causa**: Regole troppo numerose o logging eccessivo
-
-**Soluzione**:
-```bash
-# Conta regole attive
-sudo iptables -L INPUT | wc -l
-sudo iptables -L OUTPUT | wc -l
-
-# Ottimizza: metti regole più frequenti in cima
-# Considera ridurre --nflog-threshold in firewall-init.sh
-```
-
-## 📈 Monitoring e Manutenzione
-
-### Controlli Giornalieri
-
-```bash
-# Statistiche rapide
-sudo firewall-manager --stats
-
-# Verifica minacce
-sudo firewall-manager --threats
-
-# Spazio disco log
-du -sh /var/log/ulogd/
-```
-
-### Controlli Settimanali
-
-```bash
-# Analisi traffico settimanale
-sudo firewall-manager --analyze 168
-
-# Report dettagliato
-sudo traffic-analyzer --json
-
-# Verifica servizi attivi
-sudo ss -tulpn
-
-# Review regole custom
-cat /etc/firewall/custom_rules.conf
-```
-
-### Controlli Mensili
-
-```bash
-# Audit completo regole
-sudo iptables-save > /tmp/firewall-audit-$(date +%Y%m).txt
-
-# Cleanup log vecchi
-sudo find /var/log/ulogd -name "*.pcap.*.gz" -mtime +60 -delete
-
-# Update sistema
-sudo apt update && sudo apt upgrade -y
-```
-
-## 🔄 Backup e Restore
-
-### Backup Regole
-
-```bash
-# Backup manuale
-sudo iptables-save > ~/firewall-backup-$(date +%Y%m%d).txt
-
-# Backup automatico (crontab)
-0 2 * * * /usr/sbin/iptables-save > /backup/firewall-$(date +\%Y\%m\%d).txt
-```
-
-### Restore Regole
-
-```bash
-# Restore da backup
-sudo iptables-restore < ~/firewall-backup-20250115.txt
-
-# Oppure usa il manager
-sudo firewall-manager --restore
-```
-
-## 🆘 Accesso Emergenza
-
-Se il firewall blocca tutto e perdi accesso:
-
-1. **Da console fisica/IPMI**:
-```bash
-# Flush tutte le regole (TEMPORANEO)
 sudo iptables -F
 sudo iptables -P INPUT ACCEPT
 sudo iptables -P OUTPUT ACCEPT
 sudo iptables -P FORWARD ACCEPT
 ```
 
-2. **Ripristina stato precedente**:
-```bash
-sudo iptables-restore < /etc/firewall/iptables.rules.backup
-```
+## 📚 Documentazione
 
-3. **Riavvia servizio firewall**:
-```bash
-sudo systemctl restart firewall
-```
-
-## 📚 Risorse Aggiuntive
-
-- [iptables Documentation](https://netfilter.org/documentation/)
-- [ulogd2 Manual](https://www.netfilter.org/projects/ulogd/index.html)
-- [OWASP Firewall Best Practices](https://owasp.org/)
-- [NIST Cybersecurity Framework](https://www.nist.gov/cyberframework)
+- [INSTALL.md](INSTALL.md) — installazione del master
+- [INSTALL-TARGET.md](INSTALL-TARGET.md) — installazione target e pairing dog-agent
+- [backend/ROLES_AND_PERMISSIONS.md](backend/ROLES_AND_PERMISSIONS.md) — ruoli, permessi, esempi API
+- [dog_agent](https://github.com/Dognet-Technologies/dog_agent) — repo dell'agent condiviso dalla suite Dognet
 
 ## 🐛 Bug Report e Contributi
 
-Per segnalare bug o contribuire al progetto, apri una issue su GitHub con:
-- Descrizione problema
-- Output comandi: `iptables -L -n -v`, `systemctl status firewall`, `dmesg | tail`
-- Versione sistema: `lsb_release -a`
+Apri una [issue](https://github.com/Dognet-Technologies/firedog/issues) con: descrizione del problema, output di `firewall-manager --list -v`, `systemctl status firewall-fm dog-agent`, versione target (`lsb_release -a` o `cat /etc/os-release`).
 
 ## 📄 Licenza
 
@@ -535,10 +281,4 @@ Questo progetto è rilasciato sotto licenza MIT.
 
 ## ⚠️ Disclaimer
 
-Questo sistema di firewall è fornito "as is" senza garanzie. È responsabilità dell'utente testare in ambienti non-produzione prima del deploy. Assicurati sempre di avere accesso fisico o out-of-band al server prima di attivare policy DROP.
-
----
-
-**Versione**: 1.0  
-**Ultimo aggiornamento**: Ottobre 2025  
-**Compatibilità**: Debian 10+, Ubuntu 18.04+
+Fornito "as is" senza garanzie. Testa sempre in ambienti non-produzione prima del deploy, e assicurati di avere accesso fisico o out-of-band a un target prima di attivare la policy DROP.
