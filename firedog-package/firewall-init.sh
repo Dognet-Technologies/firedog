@@ -21,9 +21,11 @@ SSH_PORT="${SSH_PORT:-22}"
 # (nessuna porta extra aperta, comportamento storico).
 ALWAYS_OPEN_PORTS=""
 MONITORED_INTERFACES=""
-SSH_PROTECT_MAX_ATTEMPTS="4"
+SSH_PROTECT_MAX_ATTEMPTS="20"
 SSH_PROTECT_WINDOW_SECONDS="60"
 SSH_PROTECT_BAN_DURATION="0"
+SYN_FLOOD_LIMIT_PER_SEC="50"
+SYN_FLOOD_BURST="100"
 # shellcheck source=/dev/null
 [[ -f "$FIREDOG_CONF" ]] && source "$FIREDOG_CONF"
 
@@ -73,6 +75,14 @@ parse_ssh_protect_config() {
     if ! [[ "$SSH_PROTECT_WINDOW_SECONDS" =~ ^[0-9]+$ ]] || (( SSH_PROTECT_WINDOW_SECONDS < 1 )); then
         warning "SSH_PROTECT_WINDOW_SECONDS non valido: '$SSH_PROTECT_WINDOW_SECONDS', uso default 60"
         SSH_PROTECT_WINDOW_SECONDS=60
+    fi
+    if ! [[ "$SYN_FLOOD_LIMIT_PER_SEC" =~ ^[0-9]+$ ]] || (( SYN_FLOOD_LIMIT_PER_SEC < 1 )); then
+        warning "SYN_FLOOD_LIMIT_PER_SEC non valido: '$SYN_FLOOD_LIMIT_PER_SEC', uso default 50"
+        SYN_FLOOD_LIMIT_PER_SEC=50
+    fi
+    if ! [[ "$SYN_FLOOD_BURST" =~ ^[0-9]+$ ]] || (( SYN_FLOOD_BURST < 1 )); then
+        warning "SYN_FLOOD_BURST non valido: '$SYN_FLOOD_BURST', uso default 100"
+        SYN_FLOOD_BURST=100
     fi
 
     SSH_BAN_ENABLED=0
@@ -209,9 +219,10 @@ create_custom_chains() {
     iptables -A PORT_SCAN -m recent --name portscan --update --seconds 60 --hitcount 15 -j LOG_INPUT_DROP
     iptables -A PORT_SCAN -j DROP
     
-    # Chain per SYN flood protection
+    # Chain per SYN flood protection. Soglia configurabile via
+    # SYN_FLOOD_LIMIT_PER_SEC/SYN_FLOOD_BURST in firedog.conf.
     iptables -N SYN_FLOOD
-    iptables -A SYN_FLOOD -m limit --limit 10/s --limit-burst 20 -j RETURN
+    iptables -A SYN_FLOOD -m limit --limit "${SYN_FLOOD_LIMIT_PER_SEC}/s" --limit-burst "$SYN_FLOOD_BURST" -j RETURN
     iptables -A SYN_FLOOD -j LOG_INPUT_DROP
     
     # Chain per SSH brute force protection. Soglia/finestra configurabili via

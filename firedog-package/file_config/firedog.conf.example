@@ -28,8 +28,10 @@ ALWAYS_OPEN_PORTS=""
 
 # ── Protezione SSH brute-force ───────────────────────────────────────────
 # Soglia: quanti nuovi tentativi di connessione SSH in che finestra di
-# tempo (secondi) fanno scattare la protezione.
-SSH_PROTECT_MAX_ATTEMPTS="4"
+# tempo (secondi) fanno scattare la protezione. Default alzati (era 4/60s)
+# perché una soglia troppo bassa droppa anche sessioni SSH legittime
+# ravvicinate (es. tool di amministrazione/debug che riconnettono spesso).
+SSH_PROTECT_MAX_ATTEMPTS="20"
 SSH_PROTECT_WINDOW_SECONDS="60"
 
 # Cosa succede quando la soglia viene superata:
@@ -50,3 +52,11 @@ SSH_PROTECT_WINDOW_SECONDS="60"
 # Gestione ban attivi: 'firewall-manager --list-bans' / '--unban <IP>'.
 # Esempi: SSH_PROTECT_BAN_DURATION="30m"   SSH_PROTECT_BAN_DURATION="1d"
 SSH_PROTECT_BAN_DURATION="0"
+
+# ── Protezione SYN flood ─────────────────────────────────────────────────
+# Rate limit sui nuovi pacchetti SYN in INPUT (qualunque porta): oltre la
+# soglia i pacchetti in eccesso vengono droppati. Default alzati (era
+# 10/s, burst 20) perché troppo aggressivi per un uso normale con più
+# connessioni ravvicinate (SSH, HTTP, tool di test).
+SYN_FLOOD_LIMIT_PER_SEC="50"
+SYN_FLOOD_BURST="100"
