@@ -265,8 +265,8 @@ Per aggiornare il sistema:
 
 ---
 
-**Package Version**: 1.0  
-**Last Update**: Ottobre 2025  
+**Package Version**: 1.0.1  
+**Last Update**: Settembre 2026  
 **Compatibility**: Debian 10+, Ubuntu 18.04+  
 **License**: MIT  
 

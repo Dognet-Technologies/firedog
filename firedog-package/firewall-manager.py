@@ -1042,7 +1042,7 @@ class FirewallManager:
                 # interpreta come ora locale (Europe/Rome) e applica un doppio
                 # offset, sfasando di 2h tutto il chart.
                 'timestamp': datetime.now(timezone.utc).isoformat(),
-                'firedog_version': '1.0.0',
+                'firedog_version': '1.0.1',
                 'system': self.get_system_info(),
                 # Counters per protocollo da /proc/net/snmp (cumulativi del kernel).
                 # Il server scala in delta per il Protocol Distribution chart.

@@ -15,6 +15,10 @@ Piattaforma di gestione centralizzata del firewall per flotte di host Linux — 
 > curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
 > ```
 
+## 🆕 Novità in v1.0.1
+
+- **Fix**: soglie di rate-limit del firewall (`SSH_PROTECT`, `SYN_FLOOD`) troppo aggressive — bastavano pochi tentativi ravvicinati di connessione legittima (SSH, tool di amministrazione/debug) per restare bloccati con "Connection reset by peer" o timeout. Default alzati: `SSH_PROTECT_MAX_ATTEMPTS` 4→20, `SYN_FLOOD` 10/s→50/s (burst 20→100, ora configurabile via `firedog.conf` come già era per SSH_PROTECT).
+
 ## 🆕 Novità in v1.0.0
 
 - **Server MCP ampliato** — tool di lettura *e scrittura* per regole, minacce, IP bloccati, traffico, network flow ([dettagli sotto](#-server-mcp)).
@@ -103,7 +107,7 @@ curl -sk -X POST https://<master>/api/mcp \
 
 **Master (server web):**
 ```bash
-git clone --branch v1.0.0 https://github.com/Dognet-Technologies/firedog.git
+git clone --branch stabile https://github.com/Dognet-Technologies/firedog.git
 cd firedog && cat INSTALL.md
 ```
 
