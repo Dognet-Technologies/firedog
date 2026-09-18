@@ -54,12 +54,11 @@ curl -fsSL .../get-firedog.sh | sudo bash -s -- --skip-init
 
 ### Download dello script (senza `curl | bash`)
 
-Lo script è pubblicato anche come asset della [release GitHub](https://github.com/Dognet-Technologies/firedog/releases/latest):
-scaricalo, ispezionalo e poi eseguilo — consigliato se non vuoi eseguire
-codice remoto in pipe:
+Lo stesso script si può anche scaricare su file, ispezionare e poi
+eseguire — consigliato se non vuoi eseguire codice remoto in pipe:
 
 ```bash
-curl -fsSL https://github.com/Dognet-Technologies/firedog/releases/latest/download/get-firedog.sh -o get-firedog.sh
+curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh -o get-firedog.sh
 less get-firedog.sh                      # ispeziona prima di eseguire
 sudo bash get-firedog.sh                 # o: sudo bash get-firedog.sh --skip-init
 ```

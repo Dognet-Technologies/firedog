@@ -113,7 +113,7 @@ cd firedog && cat INSTALL.md
 
 **Target (strumenti firewall — Debian/Ubuntu o openSUSE/SLES):**
 ```bash
-curl -fsSL https://github.com/Dognet-Technologies/firedog/releases/latest/download/get-firedog.sh -o get-firedog.sh
+curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh -o get-firedog.sh
 less get-firedog.sh              # ispeziona prima di eseguire
 sudo bash get-firedog.sh         # oppure: sudo bash get-firedog.sh --skip-init
 ```
