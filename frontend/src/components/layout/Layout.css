@@ -207,6 +207,7 @@
   border-bottom: 1px solid var(--border-primary);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 var(--space-xl);
   gap: var(--space-lg);
   flex-shrink: 0;
@@ -226,12 +227,6 @@
   letter-spacing: -0.3px;
 }
 
-.header-center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-}
-
 .header-right {
   flex: 0 0 auto;
   display: flex;
@@ -239,212 +234,6 @@
   gap: var(--space-sm);
   min-width: 120px;
   justify-content: flex-end;
-}
-
-/* Target Selector */
-
-.target-selector {
-  position: relative;
-}
-
-.target-selector-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-xs) var(--space-md);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-lg);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: var(--font-sm);
-  transition: all var(--transition-base);
-  min-width: 200px;
-  max-width: 300px;
-}
-
-.target-selector-btn:hover {
-  border-color: var(--border-accent);
-  background: var(--bg-hover);
-}
-
-.target-selector-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.target-selector-text {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.target-selector-empty {
-  flex: 1;
-  color: var(--text-tertiary);
-  font-style: italic;
-}
-
-.target-selector-arrow {
-  display: flex;
-  align-items: center;
-  width: 16px;
-  height: 16px;
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.target-selector-arrow svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* Target Dropdown */
-
-.dropdown-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: calc(var(--z-dropdown) - 1);
-}
-
-.target-dropdown {
-  position: absolute;
-  top: calc(100% + var(--space-xs));
-  left: 0;
-  right: 0;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
-  max-height: 300px;
-  overflow-y: auto;
-  z-index: var(--z-dropdown);
-  animation: dropdownSlide var(--transition-base) ease;
-}
-
-@keyframes dropdownSlide {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.dropdown-empty {
-  padding: var(--space-xl) var(--space-md);
-  text-align: center;
-  color: var(--text-tertiary);
-}
-
-.dropdown-empty p {
-  margin-bottom: var(--space-sm);
-  font-size: var(--font-sm);
-}
-
-.dropdown-link {
-  color: var(--accent-primary);
-  text-decoration: none;
-  font-size: var(--font-sm);
-  font-weight: 500;
-}
-
-.dropdown-link:hover {
-  text-decoration: underline;
-}
-
-.target-dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border-primary);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-  width: 100%;
-  text-align: left;
-}
-
-.target-dropdown-item:last-child {
-  border-bottom: none;
-}
-
-.target-dropdown-item:hover {
-  background: var(--bg-hover);
-}
-
-.target-dropdown-item.selected {
-  background: var(--bg-hover);
-  border-left: 2px solid var(--accent-primary);
-}
-
-.target-dropdown-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow: hidden;
-}
-
-.target-dropdown-name {
-  font-size: var(--font-sm);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.target-dropdown-ip {
-  font-size: var(--font-xs);
-  color: var(--text-tertiary);
-  font-family: monospace;
-}
-
-.check-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--status-success);
-  flex-shrink: 0;
-}
-
-/* Status dots */
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: inline-block;
-}
-
-/* Regole status-* qui sotto sono SCOPED alla sidebar tramite .sidebar.
- * Prima erano globali (.status-online {}) → si applicavano a qualsiasi
- * elemento con quella class (inclusi i <tr> nella pagina Targets, che
- * ricevevano background verde + pulse infinito → "verde neon che riempie
- * la riga"). Scope-ate qui le regole restano valide per i dot della
- * sidebar e non infestano altri layer. Niente animation infinita: il
- * pulse "appena associato" è gestito nella pagina Targets via classe
- * opt-in. */
-.sidebar .status-online {
-  background: var(--status-success);
-  box-shadow: 0 0 6px var(--status-success);
-}
-
-.sidebar .status-offline {
-  background: var(--status-danger);
-}
-
-.sidebar .status-error {
-  background: var(--status-warning);
-}
-
-.sidebar .status-installing {
-  background: var(--status-info);
-}
-
-.sidebar .status-pending {
-  background: var(--text-tertiary);
 }
 
 /* Header icon button */
@@ -632,10 +421,6 @@
 /* ===== RESPONSIVE ===== */
 
 @media (max-width: 1024px) {
-  .header-center {
-    flex: 0 0 auto;
-  }
-
   .breadcrumb-title {
     font-size: var(--font-base);
   }

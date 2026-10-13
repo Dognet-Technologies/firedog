@@ -73,6 +73,7 @@ class TargetSerializer(serializers.ModelSerializer):
             "is_active",
             "target_groups",
             "interfaces",
+            "config_overrides",
         ]
         read_only_fields = [
             "status",
@@ -82,6 +83,10 @@ class TargetSerializer(serializers.ModelSerializer):
             "error_message",
             "created_at",
             "updated_at",
+            # Scritto solo da agent_manager consumers.py sull'ack di
+            # update_config, mai via PATCH diretto (vedi
+            # TargetViewSet.update_threat_config).
+            "config_overrides",
         ]
 
     def get_target_groups(self, obj):

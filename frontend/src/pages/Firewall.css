@@ -8,6 +8,19 @@
 
 .fw-tabs { margin-bottom: var(--space-xl); }
 
+/* Selettore target — prima era globale in header, spostato qui perché
+   solo questa pagina (Rules/Blocked/Whitelist) lo usa davvero: altrove
+   nell'app era presente ma non filtrava nulla, solo fuorviante. */
+.fw-target-selector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm, 0.5rem);
+}
+
+.fw-target-selector select {
+  min-width: 220px;
+}
+
 /* ===== TAB CONTENT ===== */
 
 .fw-tab-content {

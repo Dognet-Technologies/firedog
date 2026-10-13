@@ -83,6 +83,31 @@ const TargetDetail: React.FC = () => {
   const [savingConfig, setSavingConfig] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Threat-config override (push a dog_agent via WebSocket) — inizializzato
+  // dai default globali di Settings, poi sovrascritto da target.config_overrides
+  // se il target ha già ricevuto un push in passato (vedi effect più sotto).
+  const [threatConfigForm, setThreatConfigForm] = useState({
+    auto_block_threshold: 75,
+    auto_block_enabled: true,
+    bruteforce_min_attempts: 10,
+    bruteforce_score_per_attempt: 7,
+    synflood_min_connections: 35,
+    synflood_score_per_conn: 2,
+  });
+  const [pushingThreatConfig, setPushingThreatConfig] = useState(false);
+
+  // parseInt(str) senza radix interpreta '0x..'/'0..' in modo ambiguo tra
+  // browser, e su un input number transitoriamente vuoto (utente che
+  // seleziona-tutto e cancella per riscrivere) restituisce NaN, che
+  // finirebbe serializzato come null nel payload — l'agent lo accetta come
+  // "campo non impostato" invece di segnalare un valore non valido. Qui
+  // teniamo il valore precedente finché l'utente non digita qualcosa di
+  // valido, niente stato intermedio confuso.
+  const parseIntKeepPrevious = (raw: string, previous: number): number => {
+    const parsed = parseInt(raw, 10);
+    return Number.isNaN(parsed) ? previous : parsed;
+  };
+
   const [trafficData, setTrafficData] = useState<any[]>([]);
   // Protocol Distribution: % di TCP/UDP/ICMP sull'ultimo snapshot. Niente
   // più valori hardcoded — i counter cumulativi vengono dall'agent in
@@ -131,6 +156,11 @@ const TargetDetail: React.FC = () => {
         description: targetData.description || '',
         ip_address: targetData.ip_address || '',
       });
+      // Precompila con l'ultimo override confermato per questo target (ack
+      // già ricevuto); i campi mancanti restano ai default del form.
+      if (targetData.config_overrides) {
+        setThreatConfigForm(prev => ({ ...prev, ...targetData.config_overrides }));
+      }
 
       if (rulesRes.status === 'fulfilled') setRules(rulesRes.value.results);
       else console.warn('TargetDetail: rules failed', rulesRes.reason);
@@ -258,6 +288,27 @@ const TargetDetail: React.FC = () => {
       showToast({ type: 'error', title: 'Error', message: 'Failed to save configuration' });
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  const handlePushThreatConfig = async () => {
+    if (!target) return;
+    try {
+      setPushingThreatConfig(true);
+      await apiService.updateTargetThreatConfig(target.id, threatConfigForm);
+      showToast({
+        type: 'success',
+        title: 'Config inviata',
+        message: 'L\'agent riscriverà agent.conf e si riavvierà tra pochi secondi',
+      });
+    } catch (err: any) {
+      console.error('updateTargetThreatConfig error:', err);
+      const message = err?.response?.status === 409
+        ? 'Agent non connesso al momento'
+        : 'Invio configurazione fallito';
+      showToast({ type: 'error', title: 'Errore', message });
+    } finally {
+      setPushingThreatConfig(false);
     }
   };
 
@@ -392,11 +443,11 @@ const TargetDetail: React.FC = () => {
       {/* ===== HERO HEADER ===== */}
       <div className="td-hero">
         <div className="td-hero-top">
-          <Link to="/targets" className="td-back-btn">
+          <Link to="/monitoring" className="td-back-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6" />
             </svg>
-            Targets
+            Target Monitoring
           </Link>
         </div>
         <div className="td-hero-body">
@@ -1104,6 +1155,81 @@ const TargetDetail: React.FC = () => {
                   disabled={savingConfig}
                 >
                   {savingConfig ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+
+            <div className="td-config-form" style={{ marginTop: '2rem' }}>
+              <div className="td-section-header">
+                <h2>Threat-score (override per questo target)</h2>
+              </div>
+              <p style={{ opacity: 0.7, fontSize: '0.85rem', marginTop: '-0.5rem' }}>
+                Sovrascrive i default globali (Settings → Monitoraggio) solo per questo target. Al salvataggio, l'agent riscrive agent.conf e si riavvia — qualche secondo senza scanning/blocco su questo target.
+              </p>
+
+              <div className="td-form-group">
+                <label className="td-label">
+                  <input
+                    type="checkbox"
+                    checked={threatConfigForm.auto_block_enabled}
+                    onChange={(e) => setThreatConfigForm({ ...threatConfigForm, auto_block_enabled: e.target.checked })}
+                  />{' '}
+                  Blocco automatico locale (iptables)
+                </label>
+              </div>
+
+              <div className="td-form-group">
+                <label className="td-label">Soglia auto-block: {threatConfigForm.auto_block_threshold}/100</label>
+                <input
+                  type="range" min="0" max="100" step="5"
+                  value={threatConfigForm.auto_block_threshold}
+                  onChange={(e) => setThreatConfigForm({ ...threatConfigForm, auto_block_threshold: parseIntKeepPrevious(e.target.value, threatConfigForm.auto_block_threshold) })}
+                />
+              </div>
+
+              <div className="td-form-group">
+                <label className="td-label">Brute-force SSH: tentativi minimi</label>
+                <input
+                  type="number" className="td-input" min="1" max="100"
+                  value={threatConfigForm.bruteforce_min_attempts}
+                  onChange={(e) => setThreatConfigForm({ ...threatConfigForm, bruteforce_min_attempts: parseIntKeepPrevious(e.target.value, threatConfigForm.bruteforce_min_attempts) })}
+                />
+              </div>
+
+              <div className="td-form-group">
+                <label className="td-label">Brute-force SSH: punti per tentativo</label>
+                <input
+                  type="number" className="td-input" min="1" max="100"
+                  value={threatConfigForm.bruteforce_score_per_attempt}
+                  onChange={(e) => setThreatConfigForm({ ...threatConfigForm, bruteforce_score_per_attempt: parseIntKeepPrevious(e.target.value, threatConfigForm.bruteforce_score_per_attempt) })}
+                />
+              </div>
+
+              <div className="td-form-group">
+                <label className="td-label">SYN flood: connessioni minime</label>
+                <input
+                  type="number" className="td-input" min="1" max="1000"
+                  value={threatConfigForm.synflood_min_connections}
+                  onChange={(e) => setThreatConfigForm({ ...threatConfigForm, synflood_min_connections: parseIntKeepPrevious(e.target.value, threatConfigForm.synflood_min_connections) })}
+                />
+              </div>
+
+              <div className="td-form-group">
+                <label className="td-label">SYN flood: punti per connessione</label>
+                <input
+                  type="number" className="td-input" min="1" max="100"
+                  value={threatConfigForm.synflood_score_per_conn}
+                  onChange={(e) => setThreatConfigForm({ ...threatConfigForm, synflood_score_per_conn: parseIntKeepPrevious(e.target.value, threatConfigForm.synflood_score_per_conn) })}
+                />
+              </div>
+
+              <div className="td-config-actions">
+                <button
+                  className="td-btn td-btn-primary"
+                  onClick={handlePushThreatConfig}
+                  disabled={pushingThreatConfig}
+                >
+                  {pushingThreatConfig ? 'Invio...' : 'Invia al target'}
                 </button>
               </div>
             </div>

@@ -147,6 +147,14 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* Equivalente dello zoom browser all'80% (richiesto: l'interfaccia si
+     vede meglio così) applicato di default invece di doverlo impostare
+     manualmente ad ogni sessione. A differenza di scalare --font-base/rem,
+     `zoom` ridimensiona TUTTO in modo uniforme — testo, padding, bordi,
+     icone — esattamente come lo zoom reale del browser, senza dover
+     toccare ogni file CSS che usa px invece di rem. Supportato da tutti i
+     browser major, incluso Firefox dalla 126 (2024). */
+  zoom: 0.8;
 }
 
 body {

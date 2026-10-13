@@ -2,11 +2,14 @@
 venv/
 venv.broken.bak/
 __pycache__/
+*.pyc
 *.log
 files/*
 *.sublime-*
 .env
 docs/*
+backend/staticfiles/
+*.sqlite3
 
 # Node
 node_modules/
@@ -17,6 +20,9 @@ frontend/build/
 
 # Build artifacts (rebuild with firedog-package/build-package.sh)
 firedog-package/dog-agent/dog-agent
+
+# Artefatti di release/VM (rebuild con packaging/build-release.sh e build-vm.sh)
+dist/
 
 # Log ruotati del backend (celery.log.1, django.log.2, ...)
 backend/logs/*

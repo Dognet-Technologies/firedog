@@ -115,6 +115,70 @@ class TargetViewSet(viewsets.ModelViewSet):
         except AgentNotConnected as e:
             return Response({"error": str(e)}, status=409)
 
+    @action(detail=True, methods=["post"], url_path="update-threat-config")
+    def update_threat_config(self, request, pk=None):
+        """Pusha una nuova config threat-scoring all'agent del target.
+
+        Dispatcha CommandAction::UpdateConfig (action="update_config").
+        L'agent riscrive le chiavi cambiate in agent.conf e si riavvia per
+        applicarle (nessun hot-reload, vedi dog_agent/src/threat/mod.rs).
+        `Target.config_overrides` viene aggiornato da handle_command_response
+        SOLO sull'ack di successo — qui dispatchiamo soltanto.
+        """
+        from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
+
+        # (tipo, minimo, massimo) — stessi range imposti lato UI
+        # (TargetDetail.tsx/Settings.tsx), riapplicati qui perché l'agent si
+        # fida ciecamente del payload e lo scrive diretto in agent.conf: senza
+        # questo controllo un valore fuori scala (es. soglia 0 → auto-block
+        # immediato di qualunque IP osservato, o un numero enorme che
+        # disabilita di fatto il rilevamento) arriverebbe comunque a
+        # destinazione.
+        field_ranges = {
+            "auto_block_threshold": (int, 0, 100),
+            "bruteforce_min_attempts": (int, 1, 100),
+            "bruteforce_score_per_attempt": (int, 1, 100),
+            "synflood_min_connections": (int, 1, 1000),
+            "synflood_score_per_conn": (int, 1, 100),
+        }
+        allowed_fields = set(field_ranges) | {"auto_block_enabled"}
+
+        payload: dict = {}
+        errors: dict[str, str] = {}
+        for key, value in request.data.items():
+            if key not in allowed_fields:
+                continue
+            if key == "auto_block_enabled":
+                if not isinstance(value, bool):
+                    errors[key] = "deve essere un booleano"
+                    continue
+                payload[key] = value
+                continue
+
+            expected_type, lo, hi = field_ranges[key]
+            if isinstance(value, bool) or not isinstance(value, expected_type):
+                errors[key] = f"deve essere un intero tra {lo} e {hi}"
+                continue
+            if not (lo <= value <= hi):
+                errors[key] = f"fuori range (atteso {lo}-{hi}, ricevuto {value})"
+                continue
+            payload[key] = value
+
+        if errors:
+            return Response({"error": "Valori non validi", "fields": errors}, status=400)
+        if not payload:
+            return Response(
+                {"error": f"Nessun campo valido nel body. Campi ammessi: {sorted(allowed_fields)}"},
+                status=400,
+            )
+
+        target = self.get_object()
+        try:
+            cmd = dispatch_command_to_agent(target, action="update_config", payload=payload)
+            return Response({"command_id": str(cmd.command_id), "status": "dispatched"}, status=202)
+        except AgentNotConnected as e:
+            return Response({"error": str(e)}, status=409)
+
     @action(detail=False, methods=["get"], url_path="check-ip")
     def check_ip(self, request):
         """

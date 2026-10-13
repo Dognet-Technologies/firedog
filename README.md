@@ -15,6 +15,14 @@ Piattaforma di gestione centralizzata del firewall per flotte di host Linux — 
 > curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
 > ```
 
+## 🆕 Novità in v1.1.0
+
+- **HTTPS di default sul master** — nuovo installer automatico [`deploy/install.sh`](deploy/install.sh) (prima l'installazione era interamente manuale, vedi [INSTALL.md](INSTALL.md)): genera un certificato TLS self-signed, configura nginx con redirect `:80`→`:443`, e imposta `SECRET_KEY`/password DB generate automaticamente. `--skip-tls` per restare su solo-HTTP.
+- **Trasporto agent cifrato** — `dog-agent` supporta `wss://` verso il master, accettando anche certificati self-signed (stessa fiducia già richiesta al browser per lo stesso certificato — protegge da chi origlia passivamente sulla rete, non da un MITM attivo con pinning). `ws://` in chiaro resta supportato per compatibilità con master senza TLS. Consigliato aggiornare `url` in `agent.conf` da `ws://` a `wss://` sui target esistenti.
+- **Distribuzione come immagine VM** — `.qcow2` (KVM/Proxmox) e `.ova` (VirtualBox/VMware) prodotte da [`packaging/build-vm.sh`](packaging/build-vm.sh), stesso modello già in uso per SentinelCore: ogni clone rigenera al primo avvio segreti, password DB e certificato TLS (legato all'IP reale del clone), stampa le credenziali iniziali in `/etc/motd`.
+- **Impostazioni pcap** — path di salvataggio configurabile, scelta esplicita tra `tcpdump`/`tshark` (prima auto-rilevata in modo silenzioso), fino a 5 filtri custom riutilizzabili nell'analisi del traffico bloccato.
+- **Threat-score configurabile** — la formula di scoring di `dog-agent` (soglie di innesco brute-force/SYN-flood + punti per evento) non è più hardcoded: editabile per-target dalla UI (pagina target → Configurazione), pushata all'agent via comando remoto (`agent.conf` riscritto, servizio riavviato in automatico). **Default ricalibrati meno aggressivi**: prima bastavano ~8 tentativi SSH falliti per l'auto-block con la soglia di default, ora ne servono ~15.
+
 ## 🆕 Novità in v1.0.1
 
 - **Fix**: soglie di rate-limit del firewall (`SSH_PROTECT`, `SYN_FLOOD`) troppo aggressive — bastavano pochi tentativi ravvicinati di connessione legittima (SSH, tool di amministrazione/debug) per restare bloccati con "Connection reset by peer" o timeout. Default alzati: `SSH_PROTECT_MAX_ATTEMPTS` 4→20, `SYN_FLOOD` 10/s→50/s (burst 20→100, ora configurabile via `firedog.conf` come già era per SSH_PROTECT).

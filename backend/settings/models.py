@@ -205,7 +205,7 @@ class NotificationConfig(models.Model):
         blank=True, max_length=500, help_text="URL webhook Discord"
     )
 
-    # Trigger Alerts (basati su threatThreshold in SystemSettings)
+    # Trigger Alerts (soglia in SystemSettings.alertNotificationMinScore)
     alert_on_critical_threat = models.BooleanField(
         default=True, help_text="Invia alert per minacce critiche"
     )

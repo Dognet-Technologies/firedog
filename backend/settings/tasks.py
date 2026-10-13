@@ -393,8 +393,11 @@ def trigger_threat_alert(threat, severity):
     """
     from settings.models import SystemSettings
 
-    # Verifica soglia minaccia
-    threat_threshold = SystemSettings.get_setting("threatThreshold", 8)
+    # Verifica soglia minaccia (soglia GLOBALE di invio alert — non va
+    # confusa con agentThreatScoring.autoBlockThreshold, la soglia di
+    # auto-block per-target lato agent, o col vecchio nome "threatThreshold"
+    # mai davvero seedato/usato altrove).
+    threat_threshold = SystemSettings.get_setting("alertNotificationMinScore", 8)
 
     if threat.threat_score < threat_threshold:
         return  # Sotto soglia, non inviare alert

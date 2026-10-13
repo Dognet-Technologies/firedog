@@ -7,6 +7,7 @@ Conforme a OWASP/NIST security standards
 
 import argparse
 import subprocess
+import shlex
 import sys
 import os
 import json
@@ -82,6 +83,28 @@ def load_firedog_conf(path: str = None) -> Dict[str, str]:
     except (FileNotFoundError, PermissionError, OSError):
         pass
     return values
+
+
+# Impostazioni pcap configurabili da settings (UI → SystemSettings →
+# dog-agent riceve CommandAction::UpdatePcapConfig e scrive queste chiavi
+# direttamente in firedog.conf, vedi dog_agent/src/targets/firedog.rs
+# update_pcap_config/upsert_conf_line — nessun demone da riavviare, il file
+# viene riletto qui ad ogni invocazione). PCAP_SAVE_PATH sovrascrive
+# CONFIG['log_dir'] per TUTTI i punti che lo referenziano (nessun altro punto
+# di modifica necessario). PCAP_ANALYSIS_TOOL: 'tcpdump' (default, storico) o
+# 'tshark', validato a runtime in analyze_dropped_traffic (fallback a tcpdump
+# se il binario scelto non è installato). PCAP_FILTER_N (N=1..5): stringhe di
+# filtro custom, sintassi opaca al tool scelto (BPF per tcpdump, display
+# filter per tshark) — nessuna validazione semantica, stessa responsabilità di
+# chi le scrive di una query salvata.
+_firedog_conf = load_firedog_conf()
+if _firedog_conf.get('PCAP_SAVE_PATH'):
+    CONFIG['log_dir'] = _firedog_conf['PCAP_SAVE_PATH']
+CONFIG['pcap_analysis_tool'] = _firedog_conf.get('PCAP_ANALYSIS_TOOL', 'tcpdump').strip() or 'tcpdump'
+CONFIG['pcap_custom_filters'] = [
+    _firedog_conf[k] for k in sorted(_firedog_conf) if k.startswith('PCAP_FILTER_') and _firedog_conf[k]
+][:5]
+
 
 class FirewallManager:
     """Classe principale per gestione firewall"""
@@ -418,38 +441,71 @@ class FirewallManager:
         """Analizza traffico bloccato dai PCAP"""
         
         self.info(f"Analisi traffico bloccato ultime {hours} ora/e...")
-        
-        # Verifica presenza tcpdump/tshark
-        analyzer = 'tshark' if self.check_command('tshark') else 'tcpdump'
-        
+
+        # Tool scelto esplicitamente in settings (PCAP_ANALYSIS_TOOL), non più
+        # auto-rilevato — se il binario scelto non è installato, fallback a
+        # tcpdump con avviso invece di scavalcare silenziosamente la scelta.
+        analyzer = CONFIG['pcap_analysis_tool']
+        if not self.check_command(analyzer):
+            if analyzer != 'tcpdump':
+                self.warning(f"'{analyzer}' non installato, uso tcpdump")
+            analyzer = 'tcpdump'
+
         if not self.check_command(analyzer):
             self.error("Richiesto tcpdump o tshark per analisi. Installa con: apt install tcpdump (Debian/Ubuntu) o zypper install tcpdump (openSUSE)")
             return
-        
+
         pcap_files = [
             f"{CONFIG['log_dir']}/input_dropped.pcap",
             f"{CONFIG['log_dir']}/output_dropped.pcap"
         ]
-        
+
         for pcap in pcap_files:
             if not os.path.exists(pcap):
                 self.warning(f"File {pcap} non trovato")
                 continue
-            
+
             direction = "INPUT" if "input" in pcap else "OUTPUT"
             print(f"\n{Colors.BOLD}=== Analisi {direction} ==={Colors.RESET}\n")
-            
+
             # Analisi con tcpdump
             if analyzer == 'tcpdump':
                 self.analyze_with_tcpdump(pcap, hours, limit)
             else:
                 self.analyze_with_tshark(pcap, hours, limit)
+
+            for custom_filter in CONFIG['pcap_custom_filters']:
+                print(f"\n{Colors.YELLOW}Filtro custom: {custom_filter}{Colors.RESET}")
+                self.analyze_with_custom_filter(pcap, analyzer, custom_filter, limit)
+
+    def analyze_with_custom_filter(self, pcap: str, analyzer: str, custom_filter: str, limit: int):
+        """Esegue un filtro custom (BPF per tcpdump, display filter per
+        tshark) definito dall'utente in settings, e stampa le righe risultanti
+        (troncate a `limit`)."""
+        try:
+            if analyzer == 'tcpdump':
+                cmd = ['tcpdump', '-nn', '-r', pcap] + shlex.split(custom_filter)
+            else:
+                cmd = ['tshark', '-r', pcap, '-Y', custom_filter]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            lines = [ln for ln in result.stdout.split('\n') if ln.strip()][:limit]
+            if lines:
+                print('\n'.join(lines))
+            elif result.stderr:
+                self.warning(f"Filtro '{custom_filter}' non valido per {analyzer}: {result.stderr.strip()[:200]}")
+            else:
+                print("(nessun risultato)")
+        except Exception as e:
+            self.error(f"Errore filtro custom: {e}")
     
     def analyze_with_tcpdump(self, pcap: str, hours: int, limit: int):
         """Analizza PCAP con tcpdump"""
         try:
-            # Top IP sorgenti
-            cmd = f"tcpdump -nn -r {pcap} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort | uniq -c | sort -rn | head -{limit}"
+            # pcap/limit passano per un template di shell (pipeline awk/cut/
+            # sort): quotati esplicitamente per evitare command injection —
+            # pcap viene da CONFIG['log_dir'] (configurabile da settings),
+            # limit da input utente CLI.
+            cmd = f"tcpdump -nn -r {shlex.quote(pcap)} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort | uniq -c | sort -rn | head -{int(limit)}"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
             if result.stdout:
@@ -526,25 +582,29 @@ class FirewallManager:
     
     def get_threat_score(self, ip: str) -> Tuple[int, List[str]]:
         """Calcola threat score per IP (0-100)"""
-        
+
         score = 0
         reasons = []
-        
-        # Verifica IP privati (meno sospetti)
+
+        # Verifica IP privati (meno sospetti). ip arriva da un parsing di
+        # output tcpdump su dati di rete non fidati (show_threats/
+        # get_threats_data): se non è un IP valido, non proseguire — evita
+        # sia crash a valle sia interpolazione di valori inattesi nel
+        # comando shell sotto.
         try:
             ip_obj = ipaddress.ip_address(ip)
             if ip_obj.is_private:
                 reasons.append("IP privato (-10)")
                 score -= 10
-        except:
-            pass
-        
+        except ValueError:
+            return 0, []
+
         # Controlla nel PCAP quante volte compare questo IP
         pcap_input = f"{CONFIG['log_dir']}/input_dropped.pcap"
-        
+
         if os.path.exists(pcap_input):
             try:
-                cmd = f"tcpdump -nn -r {pcap_input} 'src host {ip}' 2>/dev/null | wc -l"
+                cmd = f"tcpdump -nn -r {shlex.quote(pcap_input)} 'src host {shlex.quote(ip)}' 2>/dev/null | wc -l"
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                 count = int(result.stdout.strip())
                 
@@ -583,7 +643,7 @@ class FirewallManager:
 
         # Estrai IP unici
         try:
-            cmd = f"tcpdump -nn -r {pcap_input} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
+            cmd = f"tcpdump -nn -r {shlex.quote(pcap_input)} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
             ips = [ip.strip() for ip in result.stdout.split('\n') if ip.strip()]
@@ -665,7 +725,7 @@ class FirewallManager:
             return threats
 
         try:
-            cmd = f"tcpdump -nn -r {pcap_input} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
+            cmd = f"tcpdump -nn -r {shlex.quote(pcap_input)} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
             ips = [ip.strip() for ip in result.stdout.split('\n') if ip.strip()]
@@ -676,7 +736,7 @@ class FirewallManager:
                     # Estraiamo tutte le righe pcap per questo source IP, ci
                     # servono sia il count totale sia il dest_port + protocol
                     # più frequenti.
-                    cmd_lines = f"tcpdump -nn -r {pcap_input} 'src host {ip}' 2>/dev/null"
+                    cmd_lines = f"tcpdump -nn -r {shlex.quote(pcap_input)} 'src host {shlex.quote(ip)}' 2>/dev/null"
                     lines_result = subprocess.run(
                         cmd_lines, shell=True, capture_output=True, text=True
                     )

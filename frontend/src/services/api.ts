@@ -204,9 +204,33 @@ class ApiService {
 
   // ========== Targets ==========
 
+  // Il backend pagina a PAGE_SIZE=20 fisso (PageNumberPagination senza
+  // page_size_query_param: un ?page_size=... dal client viene ignorato in
+  // silenzio). Ogni chiamante di getTargets() in questo repo assume di
+  // ricevere la lista COMPLETA (TargetContext, Targets.tsx, Dashboard,
+  // Monitoring, Settings — nessuno gestisce `next`), quindi oltre il 20°
+  // target diventava invisibile ovunque nell'app, non solo nella tabella
+  // Targets Management. Segue qui `next` finché non è esaurito, così i
+  // chiamanti restano invariati e vedono sempre l'elenco vero.
   async getTargets(): Promise<PaginatedResponse<Target>> {
-    const response = await this.api.get('/targets/');
-    return response.data;
+    const first = await this.api.get('/targets/');
+    const data: PaginatedResponse<Target> = first.data;
+    const results = [...data.results];
+    let next = data.next;
+    while (next) {
+      // `next` è un URL assoluto costruito da Django (request.build_absolute_uri)
+      // che non sa che nginx fa da proxy HTTPS: arriva come http://, non
+      // https://. Passato così com'è a una pagina caricata su https verrebbe
+      // bloccato come contenuto misto; usarne anche solo il pathname
+      // duplicherebbe il prefisso /api già incluso in baseURL. Si tiene solo
+      // la query string (il numero di pagina) sullo stesso path relativo
+      // della prima chiamata, lasciando baseURL/scheme quelli già configurati.
+      const { search } = new URL(next);
+      const page = await this.api.get(`/targets/${search}`);
+      results.push(...page.data.results);
+      next = page.data.next;
+    }
+    return { ...data, results, next: null };
   }
 
   async getTarget(id: number): Promise<Target> {
@@ -584,6 +608,21 @@ class ApiService {
     return response.data;
   }
 
+  async updateTargetThreatConfig(
+    targetId: number,
+    payload: Partial<{
+      auto_block_threshold: number;
+      auto_block_enabled: boolean;
+      bruteforce_min_attempts: number;
+      bruteforce_score_per_attempt: number;
+      synflood_min_connections: number;
+      synflood_score_per_conn: number;
+    }>
+  ): Promise<{ command_id: string; status: string }> {
+    const response = await this.api.post(`/targets/${targetId}/update-threat-config/`, payload);
+    return response.data;
+  }
+
   async checkSystemUpdate(): Promise<{ ok: boolean; error?: string; branch?: string; installed?: string; available?: string; commits_behind?: number; changelog?: string[]; up_to_date?: boolean }> {
     const response = await this.api.get('/system/update/check/');
     return response.data;
@@ -661,33 +700,57 @@ class ApiService {
     return response.data;
   }
 
+  // NOTA percorso: il router in backend/firedog/urls.py registra
+  // SystemSettingsViewSet come "settings/settings" (prefisso raddoppiato,
+  // refuso storico mai corretto perché finora nessuno chiamava questi
+  // metodi) → risolve a /api/settings/settings/, non /api/settings/.
+  // Vedi backend/settings/urls.py per il router "pulito" mai effettivamente
+  // incluso (path commentato in urls.py).
   async getSettings(category?: string): Promise<SystemSetting[]> {
-    const params = category ? { category } : {};
-    const response = await this.api.get('/settings/', { params });
-    return response.data.results || response.data;
+    // L'endpoint è paginato (DEFAULT_PAGE_SIZE=20, nessun page_size_query_param
+    // esposto): con più di 20 chiavi (facile, sono ~30 solo tra
+    // general/appearance/monitoring) una singola richiesta perde silenziosamente
+    // le pagine successive. Segue `next` con richieste relative sullo stesso
+    // client axios invece dell'URL assoluto restituito dal backend, che può
+    // avere una porta diversa da quella con cui il browser sta davvero parlando
+    // (proxy/port-forward).
+    const results: SystemSetting[] = [];
+    let page: number | undefined = 1;
+    while (page) {
+      const params: any = category ? { category, page } : { page };
+      const response = await this.api.get('/settings/settings/', { params });
+      const data = response.data;
+      if (Array.isArray(data)) {
+        results.push(...data);
+        break;
+      }
+      results.push(...(data.results || []));
+      page = data.next ? page + 1 : undefined;
+    }
+    return results;
   }
 
   async getSetting(id: number): Promise<SystemSetting> {
-    const response = await this.api.get(`/settings/${id}/`);
+    const response = await this.api.get(`/settings/settings/${id}/`);
     return response.data;
   }
 
   async createSetting(data: Partial<SystemSetting>): Promise<SystemSetting> {
-    const response = await this.api.post('/settings/', data);
+    const response = await this.api.post('/settings/settings/', data);
     return response.data;
   }
 
   async updateSetting(id: number, data: Partial<SystemSetting>): Promise<SystemSetting> {
-    const response = await this.api.patch(`/settings/${id}/`, data);
+    const response = await this.api.patch(`/settings/settings/${id}/`, data);
     return response.data;
   }
 
   async deleteSetting(id: number): Promise<void> {
-    await this.api.delete(`/settings/${id}/`);
+    await this.api.delete(`/settings/settings/${id}/`);
   }
 
   async bulkUpdateSettings(settings: { [key: string]: any }, category?: string): Promise<any> {
-    const response = await this.api.post('/settings/bulk_update/', {
+    const response = await this.api.post('/settings/settings/bulk_update/', {
       settings,
       category,
     });
@@ -695,7 +758,7 @@ class ApiService {
   }
 
   async resetSettings(category?: string): Promise<any> {
-    const response = await this.api.post('/settings/reset/', {
+    const response = await this.api.post('/settings/settings/reset/', {
       category,
     });
     return response.data;

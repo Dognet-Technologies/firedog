@@ -7,6 +7,32 @@ con Python 3.13 e Node 20.
 > Per l'installazione **sui target** (firewall gestiti) vedi invece
 > [README.md](README.md) e `firedog-package/install.sh`.
 
+## Install automatico: `deploy/install.sh`
+
+```bash
+git clone https://github.com/Dognet-Technologies/firedog.git
+cd firedog
+sudo ./deploy/install.sh
+```
+
+Esegue tutti i passi manuali descritti sotto, più la generazione di un
+certificato TLS self-signed e la configurazione HTTPS di nginx (default —
+il browser avviserà "connessione non sicura" al primo accesso, è atteso).
+Genera automaticamente `SECRET_KEY`, password del database e password
+dell'utente admin se non passate esplicitamente, e le stampa a fine
+installazione — **annotale, non vengono ristampate**.
+
+Opzioni principali: `--server-name <ip-o-host>`, `--install-user <utente>`
+(default: crea un utente di sistema dedicato `firedog`), `--skip-tls`
+(nginx solo HTTP), `--force` (procede anche se DB/utente esistono già).
+`./deploy/install.sh --help` per l'elenco completo.
+
+I passi manuali sotto restano come riferimento — utile per capire cosa fa
+lo script, o per un'installazione passo-passo/debug di un run automatico
+fallito.
+
+## Installazione manuale
+
 ## Prerequisiti
 
 | Componente | Versione testata | Note |

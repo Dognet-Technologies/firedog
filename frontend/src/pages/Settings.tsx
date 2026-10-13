@@ -38,8 +38,48 @@ interface SettingsData {
   scanInterval: number;
   logRetention: number;
   enableAutoBlock: boolean;
-  threatThreshold: number;
+  // Soglia minima di score per l'invio di un alert (SystemSettings key
+  // "alertNotificationMinScore") — NON è la soglia di auto-block per-target
+  // lato agent (quella vive in agent.conf sul target, vedi dog_agent).
+  alertNotificationMinScore: number;
+  // Path di salvataggio pcap (letto da firewall-manager.py/traffic-analyzer.py
+  // via /etc/firewall/firedog.conf), tool di analisi e filtri custom.
+  pcapSavePath: string;
+  pcapAnalysisTool: 'tcpdump' | 'tshark';
+  pcapCustomFilters: string[];
+
+  // Default globali della formula threat-score lato agent (dog_agent) —
+  // proposti quando si apre il pannello "push al target" nella pagina di
+  // dettaglio target; il valore effettivo per-target vive in
+  // Target.config_overrides, non qui (target diversi possono ragionevolmente
+  // volere soglie diverse). Corrispondono 1:1 ai campi di TargetConfig in
+  // dog_agent/src/config.rs — niente punto nel nome chiave (SystemSettings
+  // valida key con ^[a-zA-Z0-9_]+$, i punti non sono ammessi).
+  agentAutoBlockThreshold: number;
+  agentAutoBlockEnabled: boolean;
+  agentBruteforceMinAttempts: number;
+  agentBruteforceScorePerAttempt: number;
+  agentSynfloodMinConnections: number;
+  agentSynfloodScorePerConn: number;
 }
+
+const MAX_PCAP_FILTERS = 5;
+
+const SETTINGS_CATEGORY: Record<keyof SettingsData, string> = {
+  systemName: 'general', timezone: 'general', language: 'general',
+  theme: 'appearance', fontFamily: 'appearance', fontSize: 'appearance',
+  borderRadius: 'appearance', enableAnimations: 'appearance',
+  emailNotifications: 'notifications', slackNotifications: 'notifications',
+  discordNotifications: 'notifications', notificationEmail: 'notifications',
+  notificationWebhook: 'notifications',
+  sessionTimeout: 'security', maxLoginAttempts: 'security', enableMFA: 'security',
+  scanInterval: 'monitoring', logRetention: 'monitoring', enableAutoBlock: 'monitoring',
+  alertNotificationMinScore: 'monitoring', pcapSavePath: 'monitoring',
+  pcapAnalysisTool: 'monitoring', pcapCustomFilters: 'monitoring',
+  agentAutoBlockThreshold: 'monitoring', agentAutoBlockEnabled: 'monitoring',
+  agentBruteforceMinAttempts: 'monitoring', agentBruteforceScorePerAttempt: 'monitoring',
+  agentSynfloodMinConnections: 'monitoring', agentSynfloodScorePerConn: 'monitoring',
+};
 
 interface AgentAPIKey {
   id: number;
@@ -240,8 +280,20 @@ const Settings: React.FC = () => {
     scanInterval: 60,
     logRetention: 30,
     enableAutoBlock: true,
-    threatThreshold: 8,
+    alertNotificationMinScore: 8,
+    pcapSavePath: '/var/log/ulogd',
+    pcapAnalysisTool: 'tcpdump',
+    pcapCustomFilters: [],
+    // Ricalibrati in v1.1.0 (meno aggressivi degli storici 5/×10, 20/×3 —
+    // vedi dog_agent/src/config.rs per il razionale)
+    agentAutoBlockThreshold: 75,
+    agentAutoBlockEnabled: true,
+    agentBruteforceMinAttempts: 10,
+    agentBruteforceScorePerAttempt: 7,
+    agentSynfloodMinConnections: 35,
+    agentSynfloodScorePerConn: 2,
   });
+  const [pcapFilterInput, setPcapFilterInput] = useState('');
 
   // Agent API Keys State
   const [agentAPIKeys, setAgentAPIKeys] = useState<AgentAPIKey[]>([]);
@@ -392,14 +444,17 @@ const Settings: React.FC = () => {
 
   const loadSettings = async () => {
     try {
-      // TODO: Replace with actual API call
-      // const response = await api.get('/settings/');
-      // setSettings(response.data);
-      
-      // For now, load from localStorage
-      const savedSettings = localStorage.getItem('firedog_settings');
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
+      const stored = await api.getSettings();
+      if (stored.length > 0) {
+        setSettings(prev => {
+          const next = { ...prev };
+          for (const s of stored) {
+            if (s.key in next) {
+              (next as any)[s.key] = s.value;
+            }
+          }
+          return next;
+        });
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -416,17 +471,42 @@ const Settings: React.FC = () => {
     setSaveMessage(null);
 
     try {
-      // TODO: Replace with actual API call
-      // await api.post('/settings/', settings);
-      
-      // For now, save to localStorage
-      localStorage.setItem('firedog_settings', JSON.stringify(settings));
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      // Un'unica bulk_update per categoria: SystemSettings è raggruppato per
+      // categoria (general/appearance/notifications/security/monitoring),
+      // vedi SETTINGS_CATEGORY.
+      const byCategory = new Map<string, { [key: string]: any }>();
+      for (const [key, value] of Object.entries(settings)) {
+        const category = SETTINGS_CATEGORY[key as keyof SettingsData];
+        if (!byCategory.has(category)) byCategory.set(category, {});
+        byCategory.get(category)![key] = value;
+      }
+      const results = await Promise.all(
+        Array.from(byCategory.entries()).map(([category, values]) =>
+          api.bulkUpdateSettings(values, category)
+        )
+      );
+
       setSaveMessage({ type: 'success', text: 'Impostazioni salvate con successo!' });
       showToast({ type: 'success', title: 'Successo', message: 'Impostazioni salvate' });
+
+      // pcap_sync è presente solo nella risposta della categoria "monitoring"
+      // quando pcapSavePath/pcapAnalysisTool/pcapCustomFilters sono stati
+      // toccati (vedi backend/settings/views.py::_sync_pcap_settings_to_targets):
+      // best-effort push a tutti i target connessi, non blocca il salvataggio.
+      const pcapSync = results.find(r => r?.pcap_sync)?.pcap_sync;
+      if (pcapSync) {
+        const synced = pcapSync.synced?.length ?? 0;
+        const offline = pcapSync.offline?.length ?? 0;
+        if (synced > 0 || offline > 0) {
+          showToast({
+            type: offline > 0 ? 'warning' : 'success',
+            title: 'Sync pcap target',
+            message: offline > 0
+              ? `Sincronizzato su ${synced} target, ${offline} non raggiungibili (riceveranno il valore al prossimo salvataggio)`
+              : `Impostazioni pcap sincronizzate su ${synced} target`,
+          });
+        }
+      }
     } catch (error) {
       setSaveMessage({ type: 'error', text: 'Errore nel salvataggio delle impostazioni.' });
       showToast({ type: 'error', title: 'Errore', message: 'Errore salvataggio impostazioni' });
@@ -436,11 +516,33 @@ const Settings: React.FC = () => {
     }
   };
 
-  const handleReset = () => {
-    if (window.confirm('Sei sicuro di voler ripristinare le impostazioni predefinite?')) {
-      localStorage.removeItem('firedog_settings');
+  const handleReset = async () => {
+    if (!window.confirm('Sei sicuro di voler ripristinare le impostazioni predefinite?')) return;
+    try {
+      await api.resetSettings();
       window.location.reload();
+    } catch (error) {
+      showToast({ type: 'error', title: 'Errore', message: 'Errore ripristino impostazioni' });
     }
+  };
+
+  const addPcapFilter = () => {
+    const value = pcapFilterInput.trim();
+    if (!value) return;
+    if (settings.pcapCustomFilters.length >= MAX_PCAP_FILTERS) {
+      showToast({ type: 'warning', title: 'Attenzione', message: `Massimo ${MAX_PCAP_FILTERS} filtri custom` });
+      return;
+    }
+    if (settings.pcapCustomFilters.includes(value)) {
+      showToast({ type: 'warning', title: 'Attenzione', message: 'Filtro già presente' });
+      return;
+    }
+    handleInputChange('pcapCustomFilters', [...settings.pcapCustomFilters, value]);
+    setPcapFilterInput('');
+  };
+
+  const removePcapFilter = (filter: string) => {
+    handleInputChange('pcapCustomFilters', settings.pcapCustomFilters.filter(f => f !== filter));
   };
 
   // ============================================================================
@@ -1881,22 +1983,179 @@ const Settings: React.FC = () => {
         </div>
 
         <div className="form-group">
-          <label htmlFor="threatThreshold">Soglia Minaccia: {settings.threatThreshold}/10</label>
+          <label htmlFor="alertNotificationMinScore">Soglia invio alert: {settings.alertNotificationMinScore}/10</label>
           <input
-            id="threatThreshold"
+            id="alertNotificationMinScore"
             type="range"
             min="1"
             max="10"
             step="1"
-            value={settings.threatThreshold}
-            onChange={(e) => handleInputChange('threatThreshold', parseInt(e.target.value))}
+            value={settings.alertNotificationMinScore}
+            onChange={(e) => handleInputChange('alertNotificationMinScore', parseInt(e.target.value))}
             className="slider"
           />
           <div className="slider-labels">
             <span>1 (Bassa)</span>
             <span>10 (Alta)</span>
           </div>
-          <span className="form-hint">Livello minimo per considerare un evento come minaccia</span>
+          <span className="form-hint">Score minimo di una minaccia sotto il quale non viene inviato nessun alert (email/Slack/Discord). Non è la soglia di auto-block dell'agent sul target.</span>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="pcapSavePath">Path salvataggio pcap</label>
+          <input
+            id="pcapSavePath"
+            type="text"
+            className="input"
+            value={settings.pcapSavePath}
+            onChange={(e) => handleInputChange('pcapSavePath', e.target.value)}
+            placeholder="/var/log/ulogd"
+          />
+          <span className="form-hint">Directory sul target dove firewall-manager/traffic-analyzer salvano i pcap del traffico bloccato. Al salvataggio viene pushata su tutti i target connessi.</span>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="pcapAnalysisTool">Tool di analisi pcap</label>
+          <select
+            id="pcapAnalysisTool"
+            className="input"
+            value={settings.pcapAnalysisTool}
+            onChange={(e) => handleInputChange('pcapAnalysisTool', e.target.value as 'tcpdump' | 'tshark')}
+          >
+            <option value="tcpdump">tcpdump</option>
+            <option value="tshark">tshark</option>
+          </select>
+          <span className="form-hint">Se il tool scelto non è installato sul target, firewall-manager ricade automaticamente su tcpdump</span>
+        </div>
+
+        <div className="form-group">
+          <label>Filtri pcap custom ({settings.pcapCustomFilters.length}/{MAX_PCAP_FILTERS})</label>
+          <div className="email-input-group">
+            <input
+              type="text"
+              value={pcapFilterInput}
+              onChange={e => setPcapFilterInput(e.target.value)}
+              onKeyPress={e => e.key === 'Enter' && addPcapFilter()}
+              placeholder="es. tcp port 22 and src host 1.2.3.4"
+              className="input"
+              disabled={settings.pcapCustomFilters.length >= MAX_PCAP_FILTERS}
+            />
+            <button
+              type="button"
+              onClick={addPcapFilter}
+              className="btn-primary"
+              disabled={settings.pcapCustomFilters.length >= MAX_PCAP_FILTERS}
+            >
+              +
+            </button>
+          </div>
+          <div className="email-chips">
+            {settings.pcapCustomFilters.map((filter, index) => (
+              <div key={index} className="chip">
+                <span>{filter}</span>
+                <button
+                  type="button"
+                  onClick={() => removePcapFilter(filter)}
+                  className="chip-remove"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <span className="form-hint">
+            Sintassi BPF per tcpdump (es. "tcp port 22") o display filter per tshark (es. "tcp.port == 22") a seconda del tool scelto sopra — nessuna validazione, stessa responsabilità di chi scrive la stringa
+          </span>
+        </div>
+      </div>
+
+      <h2 className="section-title" style={{ marginTop: '2rem' }}>Threat-score agent (default)</h2>
+      <p className="section-description">
+        Formula di scoring usata da dog_agent sul target per rilevare brute-force SSH e SYN flood. Questi sono i default proposti quando si pusha una config a un target dalla sua pagina di dettaglio — ogni target può avere override propri.
+      </p>
+
+      <div className="settings-grid">
+        <div className="form-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={settings.agentAutoBlockEnabled}
+              onChange={(e) => handleInputChange('agentAutoBlockEnabled', e.target.checked)}
+            />
+            <span>Blocco automatico locale sull'agent (iptables)</span>
+          </label>
+          <span className="form-hint">Se disattivo, l'agent rileva e segnala le minacce ma non blocca nulla in autonomia</span>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="agentAutoBlockThreshold">Soglia auto-block: {settings.agentAutoBlockThreshold}/100</label>
+          <input
+            id="agentAutoBlockThreshold"
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            value={settings.agentAutoBlockThreshold}
+            onChange={(e) => handleInputChange('agentAutoBlockThreshold', parseInt(e.target.value))}
+            className="slider"
+          />
+          <span className="form-hint">Score minimo per cui l'agent blocca automaticamente un IP</span>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="agentBruteforceMinAttempts">Brute-force SSH: tentativi minimi</label>
+          <input
+            id="agentBruteforceMinAttempts"
+            type="number"
+            className="input"
+            min="1"
+            max="100"
+            value={settings.agentBruteforceMinAttempts}
+            onChange={(e) => handleInputChange('agentBruteforceMinAttempts', parseInt(e.target.value))}
+          />
+          <span className="form-hint">Tentativi falliti da cui scatta il rilevamento (auth.log)</span>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="agentBruteforceScorePerAttempt">Brute-force SSH: punti per tentativo</label>
+          <input
+            id="agentBruteforceScorePerAttempt"
+            type="number"
+            className="input"
+            min="1"
+            max="100"
+            value={settings.agentBruteforceScorePerAttempt}
+            onChange={(e) => handleInputChange('agentBruteforceScorePerAttempt', parseInt(e.target.value))}
+          />
+          <span className="form-hint">Score = tentativi × questo valore (max 100). Es. {settings.agentBruteforceMinAttempts} tentativi = {Math.min(100, settings.agentBruteforceMinAttempts * settings.agentBruteforceScorePerAttempt)}/100</span>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="agentSynfloodMinConnections">SYN flood: connessioni minime</label>
+          <input
+            id="agentSynfloodMinConnections"
+            type="number"
+            className="input"
+            min="1"
+            max="1000"
+            value={settings.agentSynfloodMinConnections}
+            onChange={(e) => handleInputChange('agentSynfloodMinConnections', parseInt(e.target.value))}
+          />
+          <span className="form-hint">Connessioni SYN_RECV simultanee da cui scatta il rilevamento</span>
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="agentSynfloodScorePerConn">SYN flood: punti per connessione</label>
+          <input
+            id="agentSynfloodScorePerConn"
+            type="number"
+            className="input"
+            min="1"
+            max="100"
+            value={settings.agentSynfloodScorePerConn}
+            onChange={(e) => handleInputChange('agentSynfloodScorePerConn', parseInt(e.target.value))}
+          />
+          <span className="form-hint">Score = connessioni × questo valore (max 100). Es. {settings.agentSynfloodMinConnections} connessioni = {Math.min(100, settings.agentSynfloodMinConnections * settings.agentSynfloodScorePerConn)}/100</span>
         </div>
       </div>
     </div>
