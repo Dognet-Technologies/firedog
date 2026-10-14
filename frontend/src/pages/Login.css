@@ -9,7 +9,7 @@
  * ============================================================================ */
 
 .fd-login {
-  min-height: 100vh;
+  min-height: var(--vh-full);
   display: grid;
   place-items: center;
   padding: 24px;
