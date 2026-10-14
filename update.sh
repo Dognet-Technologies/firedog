@@ -2,7 +2,7 @@
 # update.sh — FireDog master-side update script.
 #
 # Pulls latest code from origin, rebuilds the React frontend, applies
-# backend dependencies + migrations, restarts daphne + celery.
+# backend dependencies + migrations, restarts daphne + celery + celerybeat.
 #
 # Usage:
 #   ./update.sh           # apply latest commits of the configured branch
@@ -16,6 +16,7 @@
 #   - microcyber must have NOPASSWD sudo for:
 #       /bin/systemctl restart firedog-backend
 #       /bin/systemctl restart firedog-celery
+#       /bin/systemctl restart firedog-celerybeat
 #     (see /etc/sudoers.d/microcyber-firedog-update)
 
 set -euo pipefail
@@ -121,8 +122,14 @@ ok "Migrazioni applicate"
 # prima di essere ucciso e re-spawn. Non perfetto vs race, ma sufficiente per
 # l'uso interattivo dal pulsante "Installa update" della UI.
 step "Step 5/5 — restart services (no-block)"
-sudo -n /bin/systemctl restart --no-block firedog-backend && ok "firedog-backend restart scheduled" || fail "restart backend fallito"
-sudo -n /bin/systemctl restart --no-block firedog-celery  && ok "firedog-celery restart scheduled"  || warn "restart celery fallito (non bloccante)"
+sudo -n /bin/systemctl restart --no-block firedog-backend   && ok "firedog-backend restart scheduled"   || fail "restart backend fallito"
+sudo -n /bin/systemctl restart --no-block firedog-celery     && ok "firedog-celery restart scheduled"     || warn "restart celery fallito (non bloccante)"
+# celerybeat tiene in memoria il beat_schedule letto all'avvio: se non viene
+# riavviato continua a schedulare task col nome/schema VECCHIO anche dopo che
+# il codice su disco è già aggiornato (bug reale osservato: ha continuato per
+# minuti a inviare un task rimosso dalla nuova versione, fallendo ad ogni giro
+# finché non è stato riavviato a mano).
+sudo -n /bin/systemctl restart --no-block firedog-celerybeat && ok "firedog-celerybeat restart scheduled" || warn "restart celerybeat fallito (non bloccante)"
 
 deactivate || true
 
