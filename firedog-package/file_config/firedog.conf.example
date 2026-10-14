@@ -26,6 +26,21 @@ MONITORED_INTERFACES=""
 # non appena la policy DROP viene applicata.
 ALWAYS_OPEN_PORTS=""
 
+# ── Sorgenti SSH sempre fidate ───────────────────────────────────────────
+# Lista separata da virgole di IP/CIDR (es. "10.10.0.0/24,203.0.113.5") per
+# cui SSH bypassa interamente la protezione brute-force (SSH_PROTECT): niente
+# rate limit, niente ban, nessuna dipendenza dalle soglie sotto. Pensato per
+# la propria rete di management/bastion (VPN, jump host) — NON un modo per
+# aprire SSH al pubblico: le sorgenti qui restano protette solo da
+# autenticazione SSH stessa.
+#
+# Nota: ALWAYS_OPEN_PORTS non basta per SSH perché la porta SSH viene
+# intercettata da SSH_PROTECT prima che qualunque regola ALWAYS_OPEN_PORTS
+# venga valutata — per questo esiste questa lista separata.
+#
+# Vuoto di default: nessun cambiamento al comportamento storico.
+TRUSTED_SSH_SOURCES=""
+
 # ── Protezione SSH brute-force ───────────────────────────────────────────
 # Soglia: quanti nuovi tentativi di connessione SSH in che finestra di
 # tempo (secondi) fanno scattare la protezione. Default alzati (era 4/60s)
