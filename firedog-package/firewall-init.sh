@@ -20,6 +20,7 @@ SSH_PORT="${SSH_PORT:-22}"
 # così se il file manca o non le imposta lo script funziona lo stesso
 # (nessuna porta extra aperta, comportamento storico).
 ALWAYS_OPEN_PORTS=""
+TRUSTED_SSH_SOURCES=""
 MONITORED_INTERFACES=""
 SSH_PROTECT_MAX_ATTEMPTS="20"
 SSH_PROTECT_WINDOW_SECONDS="60"
@@ -313,6 +314,12 @@ setup_input_rules() {
     iptables -A INPUT -p icmp --icmp-type destination-unreachable -j ACCEPT
     iptables -A INPUT -p icmp --icmp-type time-exceeded -j ACCEPT
     
+    # Sorgenti fidate (TRUSTED_SSH_SOURCES): bypassano del tutto la
+    # protezione brute-force su SSH. Deve precedere il jump a SSH_PROTECT
+    # sotto, altrimenti quel jump intercetta già ogni nuova connessione SSH
+    # prima che qualunque regola successiva venga valutata.
+    setup_trusted_ssh_sources
+
     # SSH con protezione brute force (porta configurabile via $SSH_PORT)
     iptables -A INPUT -p tcp --dport "${SSH_PORT}" -m conntrack --ctstate NEW -j SSH_PROTECT
 
@@ -328,6 +335,31 @@ setup_input_rules() {
     setup_always_open_ports
 
     success "Regole INPUT configurate"
+}
+
+# Applica TRUSTED_SSH_SOURCES da firedog.conf (vedi setup_input_rules).
+# Le sorgenti elencate bypassano interamente SSH_PROTECT (nessun rate
+# limit, nessun ban) — pensato per reti di management/bastion fidate, non
+# per aprire SSH al pubblico. Vuoto di default: nessun cambiamento al
+# comportamento storico.
+setup_trusted_ssh_sources() {
+    [[ -z "${TRUSTED_SSH_SOURCES}" ]] && return 0
+
+    local entry entries cidr_re
+    cidr_re='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$'
+    IFS=',' read -ra entries <<< "${TRUSTED_SSH_SOURCES}"
+    for entry in "${entries[@]}"; do
+        entry="$(echo "$entry" | tr -d '[:space:]')"
+        [[ -z "$entry" ]] && continue
+
+        if ! [[ "$entry" =~ $cidr_re ]]; then
+            warning "TRUSTED_SSH_SOURCES: sorgente non valida '$entry' (attesa IPv4 o IPv4/CIDR), saltata"
+            continue
+        fi
+
+        iptables -A INPUT -p tcp -s "$entry" --dport "${SSH_PORT}" -m conntrack --ctstate NEW -j ACCEPT
+        log "TRUSTED_SSH_SOURCES: SSH sempre accettato da $entry (bypass SSH_PROTECT)"
+    done
 }
 
 # Applica ALWAYS_OPEN_PORTS da firedog.conf (vedi setup_input_rules)
@@ -481,6 +513,9 @@ show_stats() {
         echo "SSH brute-force ban: ${SSH_PROTECT_MAX_ATTEMPTS} tentativi/${SSH_PROTECT_WINDOW_SECONDS}s -> ban ${dur_desc} (ipset ${SSH_BANSET})"
     else
         echo "SSH brute-force ban: disabilitato (${SSH_PROTECT_MAX_ATTEMPTS} tentativi/${SSH_PROTECT_WINDOW_SECONDS}s -> drop nella finestra, nessun ban)"
+    fi
+    if [[ -n "${TRUSTED_SSH_SOURCES}" ]]; then
+        echo "SSH sempre aperto (bypass SSH_PROTECT) per: ${TRUSTED_SSH_SOURCES}"
     fi
     echo ""
     echo "Usa 'firewall-manager --help' per gestire il firewall"
