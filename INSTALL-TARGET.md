@@ -106,6 +106,16 @@ MONITORED_INTERFACES="eth0,eth1"
 # protetta a parte (auto-rilevata / $SSH_PORT), non va elencata qui.
 ALWAYS_OPEN_PORTS="80/tcp,443/tcp"
 
+# Sorgenti SSH sempre fidate (IP/CIDR, separate da virgola): bypassano
+# interamente SSH_PROTECT sotto (niente rate limit, niente ban). Per la
+# propria rete di management/bastion (VPN, jump host), non per esporre SSH
+# al pubblico — resta protetto solo dall'autenticazione SSH stessa.
+# Attenzione: aggiungere la porta 22 a ALWAYS_OPEN_PORTS sopra NON ha
+# questo effetto — quella porta è già intercettata da SSH_PROTECT prima
+# che ALWAYS_OPEN_PORTS venga anche solo valutato, per questo serve questa
+# lista separata.
+TRUSTED_SSH_SOURCES="10.10.0.0/24"
+
 # Protezione SSH brute-force: soglia (tentativi/finestra in secondi) e cosa
 # succede al suo superamento. SSH_PROTECT_BAN_DURATION: "0" nessun ban (solo
 # drop nella finestra, storico) | "<N>m"/"<N>h"/"<N>d" ban temporaneo |

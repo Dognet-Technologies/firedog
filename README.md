@@ -149,6 +149,15 @@ MONITORED_INTERFACES="eth0,eth1"
 # Porte da tenere sempre aperte in INPUT, prima della policy DROP finale.
 ALWAYS_OPEN_PORTS="80/tcp,443/tcp"
 
+# Sorgenti SSH sempre fidate (IP/CIDR, separate da virgola): bypassano del
+# tutto SSH_PROTECT, niente rate limit né ban. Pensato per la propria rete
+# di management/bastion (VPN, jump host) — NON un modo per aprire SSH al
+# pubblico, resta protetto solo dall'autenticazione SSH stessa.
+# ALWAYS_OPEN_PORTS non basta per SSH: quella porta viene già intercettata
+# da SSH_PROTECT prima che ALWAYS_OPEN_PORTS venga valutata, per questo
+# esiste questa lista separata.
+TRUSTED_SSH_SOURCES="10.10.0.0/24"
+
 # Protezione SSH brute-force: soglia/finestra e cosa succede al superamento.
 # BAN_DURATION: "0" nessun ban | "<N>m"/"<N>h"/"<N>d" temporaneo | "permanent"
 SSH_PROTECT_MAX_ATTEMPTS="4"
@@ -156,7 +165,7 @@ SSH_PROTECT_WINDOW_SECONDS="60"
 SSH_PROTECT_BAN_DURATION="0"
 ```
 
-> **Importante**: `ALWAYS_OPEN_PORTS` va valorizzato **prima** di lanciare `firewall-init.sh` la prima volta — senza, qualunque servizio su quelle porte diventa irraggiungibile appena la policy DROP entra in vigore. Dopo una modifica, riapplica con `sudo firewall-init.sh`.
+> **Importante**: `ALWAYS_OPEN_PORTS` e `TRUSTED_SSH_SOURCES` vanno valorizzati **prima** di lanciare `firewall-init.sh` la prima volta — senza, qualunque servizio su quelle porte diventa irraggiungibile (o SSH resta soggetto al rate-limit) appena la policy DROP entra in vigore. Dopo una modifica, riapplica con `sudo firewall-init.sh`.
 
 Gestione ban SSH attivi:
 ```bash
@@ -249,11 +258,13 @@ firedog/
 
 **Non riesco più a connettermi via SSH dopo l'attivazione del firewall**
 ```bash
-# da console fisica/IPMI/seriale
+# da console fisica/IPMI/seriale, sblocco immediato (non persiste al rilancio di firewall-init.sh)
 sudo iptables -I INPUT 1 -p tcp --dport 22 -j ACCEPT
 sudo firewall-manager --save
 ```
 Se hai configurato un ban SSH (capitolo Configurazione), controlla anche `firewall-manager --list-bans` — potresti aver bannato te stesso durante un test.
+
+Per non doverlo rifare a ogni rilancio di `firewall-init.sh`, aggiungi la tua rete di management a `TRUSTED_SSH_SOURCES` in `firedog.conf` (vedi capitolo Configurazione) e rilancia `firewall-init.sh` — diventa una regola permanente del ruleset invece di una patch manuale.
 
 **Un servizio non è raggiungibile dopo l'attivazione della policy DROP**
 ```bash
