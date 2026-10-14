@@ -7,7 +7,7 @@
 
 .layout {
   display: flex;
-  height: 100vh;
+  height: var(--vh-full);
   overflow: hidden;
   background: var(--bg-primary);
 }
@@ -415,7 +415,9 @@
 
 .content-wrapper {
   padding: var(--space-2xl);
+  height: 100%;
   min-height: 100%;
+  box-sizing: border-box;
 }
 
 /* ===== RESPONSIVE ===== */
