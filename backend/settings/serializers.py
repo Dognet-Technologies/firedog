@@ -221,6 +221,7 @@ class NotificationConfigSerializer(serializers.ModelSerializer):
             "smtp_user",
             "smtp_password",
             "smtp_use_tls",
+            "smtp_skip_tls_verify",
             "smtp_from_email",
             "slack_enabled",
             "slack_webhook_url",
