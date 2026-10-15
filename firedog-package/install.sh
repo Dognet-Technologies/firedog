@@ -80,7 +80,15 @@ if [[ "$OS_FAMILY" == "debian" ]]; then
     echo -e "${GREEN}[1/7]${NC} apt deps"
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq iptables iptables-persistent ipset ulogd2 python3 tcpdump logrotate cron
+    # ulogd2-pcap è un sottopacchetto separato (come ulogd-pcap su SUSE,
+    # vedi sotto) — senza, ulogd.conf di FireDog (stack con output PCAP)
+    # non trova 'ulogd_output_PCAP.so' e fallisce con "not even a single
+    # working plugin stack": il demone resta "attivo" solo perché gira
+    # ancora con la vecchia config fino al primo restart/reboot, poi va in
+    # crash-loop/timeout indefinito (osservato dal vivo: Debian si blocca
+    # fino al TimeoutStartSec, Ubuntu esce subito con exit-code — stessa
+    # causa, due sintomi).
+    apt-get install -y -qq iptables iptables-persistent ipset ulogd2 ulogd2-pcap python3 tcpdump logrotate cron
 else
     echo -e "${GREEN}[1/7]${NC} zypper deps"
     zypper --non-interactive --quiet refresh
