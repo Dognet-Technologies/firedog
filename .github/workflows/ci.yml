@@ -54,6 +54,12 @@ jobs:
         env:
           SECRET_KEY: ci-secret-key-not-for-production
           DEBUG: "False"
+          # DEBUG=False attiva il blocco settings.py che imposta
+          # SECURE_SSL_REDIRECT quando TLS_ENABLED (default True) non è
+          # disattivato esplicitamente — qui non c'è nginx/TLS davanti al
+          # runner, quindi va spento o ogni richiesta del test client
+          # finisce in redirect 301 verso https.
+          TLS_ENABLED: "False"
           ALLOWED_HOSTS: localhost
           DB_NAME: firedog_test
           DB_USER: firedog
@@ -67,6 +73,7 @@ jobs:
         env:
           SECRET_KEY: ci-secret-key-not-for-production
           DEBUG: "False"
+          TLS_ENABLED: "False"
           ALLOWED_HOSTS: localhost
           DB_NAME: firedog_test
           DB_USER: firedog
