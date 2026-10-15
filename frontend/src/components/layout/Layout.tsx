@@ -5,6 +5,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import api from '../../services/api';
 import './Layout.css';
 
 interface LayoutProps {
@@ -142,9 +143,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [masterVersion, setMasterVersion] = useState<string | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const pageTitle = getPageTitle(location.pathname);
+
+  // Versione del master attualmente in esecuzione (backend/VERSION) — era
+  // "v2.0.0" scritto a mano in JSX, scollegato da qualunque cosa fosse
+  // realmente installata. Endpoint dedicato e leggero (nessun git fetch,
+  // a differenza del check aggiornamenti in Settings): sicuro da chiamare
+  // ad ogni mount del layout.
+  useEffect(() => {
+    api.getSystemVersion()
+      .then((res) => setMasterVersion(res.version))
+      .catch(() => setMasterVersion(null));
+  }, []);
 
   // Close user menu on outside click
   useEffect(() => {
@@ -218,7 +231,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Version footer */}
         <div className="sidebar-version">
-          {!isCollapsed && <span className="version-text">v2.0.0</span>}
+          {!isCollapsed && masterVersion && <span className="version-text">v{masterVersion}</span>}
         </div>
       </aside>
 
