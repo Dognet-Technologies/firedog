@@ -367,6 +367,7 @@ export interface NotificationConfig {
   smtp_user: string;
   smtp_password?: string;
   smtp_use_tls: boolean;
+  smtp_skip_tls_verify: boolean;
   smtp_from_email: string;
   slack_enabled: boolean;
   slack_webhook_url: string;
