@@ -60,9 +60,13 @@ class SystemUpdateCheckView(APIView):
                 {
                     "ok": False,
                     "error": (
-                        "Il path di installazione non è un git clone — l'update "
-                        "automatico richiede che il repo sia gestito con git. "
-                        f"Path: {REPO_ROOT}"
+                        "Il path di installazione non è un git clone (tipico di "
+                        "un'installazione da tarball di release o appliance "
+                        "OVA/qcow2) — questo controllo automatico richiede un "
+                        "repo gestito con git. Per aggiornare questa istanza: "
+                        "scarica l'ultima release da GitHub ed esegui "
+                        "'sudo ./deploy/upgrade.sh' dalla directory estratta "
+                        f"(vedi deploy/upgrade.sh). Path: {REPO_ROOT}"
                     ),
                 },
                 status=200,
