@@ -623,7 +623,7 @@ class ApiService {
     return response.data;
   }
 
-  async checkSystemUpdate(): Promise<{ ok: boolean; error?: string; branch?: string; installed?: string; available?: string; commits_behind?: number; changelog?: string[]; up_to_date?: boolean }> {
+  async checkSystemUpdate(): Promise<{ ok: boolean; error?: string; branch?: string; installed?: string; available?: string; commits_behind?: number; changelog?: string[]; up_to_date?: boolean; master_version?: string }> {
     const response = await this.api.get('/system/update/check/');
     return response.data;
   }

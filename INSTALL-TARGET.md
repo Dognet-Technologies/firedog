@@ -125,6 +125,14 @@ TRUSTED_SSH_SOURCES="10.10.0.0/24"
 SSH_PROTECT_MAX_ATTEMPTS="4"
 SSH_PROTECT_WINDOW_SECONDS="60"
 SSH_PROTECT_BAN_DURATION="0"
+
+# Controllo periodico aggiornamenti del pacchetto target (giorni tra un
+# controllo e il successivo, "0" = disabilitato di default). Confronta il
+# file VERSION locale con quello pubblicato su stabile — solo
+# segnalazione, non installa nulla da solo. Agganciato al già esistente
+# export ogni 5 minuti (firewall-manager --export-json via crontab): si
+# auto-limita all'intervallo configurato qui.
+UPDATE_CHECK_INTERVAL_DAYS="0"
 ```
 
 Dopo aver modificato il file, applica con `sudo firewall-init.sh` (idempotente:

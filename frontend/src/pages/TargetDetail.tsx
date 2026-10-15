@@ -75,6 +75,11 @@ const TargetDetail: React.FC = () => {
   const [selectedInterface, setSelectedInterface] = useState<string>('');
   const [threats, setThreats] = useState<ThreatLog[]>([]);
   const [integrity, setIntegrity] = useState<FileIntegrity[]>([]);
+  // Snapshot FirewallStats più recente — usato nel tab Config per mostrare
+  // la versione di firewall-manager e l'esito dell'ultimo controllo
+  // aggiornamenti (update_check), nessuno dei due coperto da un campo
+  // dedicato su Target.
+  const [latestStats, setLatestStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
@@ -180,6 +185,9 @@ const TargetDetail: React.FC = () => {
 
       const statsData = statsRes.status === 'fulfilled' ? statsRes.value : [];
       const heartbeatData = heartbeatRes.status === 'fulfilled' ? heartbeatRes.value : [];
+      // L'API restituisce i più recenti per primi (vedi .reverse() sotto per
+      // ottenere l'ordine cronologico) — [0] è quindi l'ultimo snapshot.
+      setLatestStats(statsData.length ? statsData[0] : null);
 
       // Traffic data from FirewallStats
       if (statsData.length) {
@@ -475,7 +483,9 @@ const TargetDetail: React.FC = () => {
                 </span>
               )}
               {target.firedog_version && (
-                <span className="td-meta-item">v{target.firedog_version}</span>
+                <span className="td-meta-item" title="Versione firewall-manager installata su questo target">
+                  firewall-manager v{target.firedog_version}
+                </span>
               )}
             </div>
           </div>
@@ -1112,6 +1122,39 @@ const TargetDetail: React.FC = () => {
           <div className="td-config">
             <div className="td-section-header">
               <h2>Configuration</h2>
+            </div>
+
+            <div className="td-config-form" style={{ marginBottom: '2rem' }}>
+              <div className="td-section-header">
+                <h2>Software installato</h2>
+              </div>
+              <div className="td-form-group">
+                <label className="td-label">firewall-manager</label>
+                <div>
+                  {target?.firedog_version ? `v${target.firedog_version}` : <span className="text-muted">Not installed</span>}
+                </div>
+              </div>
+              {latestStats?.update_check?.enabled && (
+                <div className="td-form-group">
+                  <label className="td-label">Controllo aggiornamenti</label>
+                  <div>
+                    {latestStats.update_check.error ? (
+                      <span className="text-muted">Ultimo controllo fallito: {latestStats.update_check.error}</span>
+                    ) : latestStats.update_check.update_available ? (
+                      <span style={{ color: 'var(--status-warning)' }}>
+                        Aggiornamento disponibile: v{latestStats.update_check.latest_version}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--status-success)' }}>Aggiornato</span>
+                    )}
+                    {latestStats.update_check.checked_at && (
+                      <span className="text-muted" style={{ marginLeft: 8 }}>
+                        (ultimo controllo: {new Date(latestStats.update_check.checked_at).toLocaleString()})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="td-config-form">

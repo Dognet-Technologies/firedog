@@ -163,6 +163,10 @@ TRUSTED_SSH_SOURCES="10.10.0.0/24"
 SSH_PROTECT_MAX_ATTEMPTS="4"
 SSH_PROTECT_WINDOW_SECONDS="60"
 SSH_PROTECT_BAN_DURATION="0"
+
+# Controllo periodico aggiornamenti pacchetto target (giorni, "0" = disabilitato).
+# Solo segnalazione — non installa nulla da solo.
+UPDATE_CHECK_INTERVAL_DAYS="0"
 ```
 
 > **Importante**: `ALWAYS_OPEN_PORTS` e `TRUSTED_SSH_SOURCES` vanno valorizzati **prima** di lanciare `firewall-init.sh` la prima volta — senza, qualunque servizio su quelle porte diventa irraggiungibile (o SSH resta soggetto al rate-limit) appena la policy DROP entra in vigore. Dopo una modifica, riapplica con `sudo firewall-init.sh`.
@@ -194,6 +198,10 @@ sudo firewall-manager --remove INPUT 5
 # Ban SSH
 firewall-manager --list-bans
 sudo firewall-manager --unban 203.0.113.5
+
+# Versione e aggiornamenti
+firewall-manager --version                # versione installata del pacchetto target
+sudo firewall-manager --check-updates     # controlla se è disponibile una versione più recente
 ```
 
 Sul master, le stesse operazioni si fanno da UI o via API REST (`/api/rules/`, `/api/settings/...`) — vedi [ROLES_AND_PERMISSIONS.md](backend/ROLES_AND_PERMISSIONS.md).

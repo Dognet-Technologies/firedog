@@ -134,6 +134,7 @@ interface UpdateCheckResponse {
   commits_behind?: number;
   changelog?: string[];
   up_to_date?: boolean;
+  master_version?: string;
 }
 
 interface UpdateInstallResponse {
@@ -222,6 +223,11 @@ const UpdateSection: React.FC = () => {
 
       {info && info.ok && (
         <div style={{ background: 'var(--bg-secondary, #1a1a1a)', padding: 12, borderRadius: 6, fontFamily: 'monospace', fontSize: 12 }}>
+          {info.master_version && (
+            <div title="Versione del master (backend+frontend) — distinta dalla versione del pacchetto target mostrata nella tabella Targets">
+              Versione master: <strong>v{info.master_version}</strong>
+            </div>
+          )}
           <div>Branch:    <strong>{info.branch}</strong></div>
           <div>Installato: {info.installed}</div>
           <div>Disponibile: {info.available}</div>
