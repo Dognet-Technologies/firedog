@@ -111,6 +111,10 @@ class SystemUpdateCheckView(APIView):
                 "changelog": [line for line in log_diff.splitlines() if line.strip()],
                 "up_to_date": ahead == 0,
                 "update_script": str(UPDATE_SCRIPT),
+                # Versione del master (fonte: VERSION, vedi settings.py) — distinta
+                # dalla versione del pacchetto target mostrata nella tabella Targets
+                # (firedog_version, riportata da firewall-manager su ogni target).
+                "master_version": settings.FIREDOG_VERSION,
             }
         )
 

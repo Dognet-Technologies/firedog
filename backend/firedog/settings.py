@@ -11,6 +11,16 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Versione del master (backend+frontend) — fonte unica, letta da qui invece
+# di essere ridigitata altrove. Distinta dalla versione del pacchetto target
+# (firedog-package/VERSION, letta da firewall-manager): i due si aggiornano
+# con processi indipendenti e possono trovarsi a versioni diverse in un dato
+# momento (un target non ancora aggiornato).
+try:
+    FIREDOG_VERSION = (BASE_DIR / "VERSION").read_text().strip()
+except OSError:
+    FIREDOG_VERSION = "unknown"
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config("SECRET_KEY")
 
