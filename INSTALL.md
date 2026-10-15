@@ -153,6 +153,21 @@ Login UI: `http://<host>/` con l'utente creato al passo 2.
 
 ## Aggiornamenti
 
-Usa [`update.sh`](update.sh): fa pull della branch configurata, rebuild del
-frontend, `pip install` + `migrate` e riavvia i servizi. Richiede NOPASSWD
-sudo per i soli restart (vedi commento in testa allo script).
+**Installazione da git clone**: usa [`update.sh`](update.sh) — fa pull della
+branch configurata, rebuild del frontend, `pip install` + `migrate` e riavvia
+i servizi. Richiede NOPASSWD sudo per i soli restart (vedi commento in testa
+allo script).
+
+**Installazione da tarball di release o appliance OVA/qcow2** (nessuna
+directory `.git` — `update.sh` non è applicabile, e il bottone "Verifica/
+Installa aggiornamenti" del frontend risponde con un errore esplicito per lo
+stesso motivo): scarica l'ultima release da GitHub e usa
+[`deploy/upgrade.sh`](deploy/upgrade.sh) dalla directory estratta —
+backup del DB, installazione dei nuovi artefatti (preserva `.env`), migration
+con rollback automatico se falliscono, verifica finale.
+
+```bash
+tar xzf firedog-<tag>-linux-x86_64.tar.gz
+cd firedog-<tag>-linux-x86_64
+sudo ./deploy/upgrade.sh
+```

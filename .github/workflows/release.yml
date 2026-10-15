@@ -273,7 +273,9 @@ jobs:
           ```bash
           tar xzf firedog-__TAG__-linux-x86_64.tar.gz
           cd firedog-__TAG__-linux-x86_64
-          sudo ./install.sh
+          sudo ./deploy/install.sh
+          # Aggiornamento di un'istanza esistente (non un primo install):
+          #   sudo ./deploy/upgrade.sh
           ```
           EOF
           } > NOTES.md
