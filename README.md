@@ -281,6 +281,22 @@ sudo firewall-manager --add-input <PORTA> --comment "Nome servizio"
 # oppure aggiungi la porta a ALWAYS_OPEN_PORTS in firedog.conf e rilancia firewall-init.sh
 ```
 
+**`ulogd2`/`ulogd` va in "failed" o si blocca dopo un restart/reboot (traccato PCAP vuoto)**
+
+Bug corretto dalla v1.1.0 (`install.sh` installava `ulogd2` senza il sottopacchetto PCAP su
+Debian/Ubuntu): se hai installato una versione precedente, su quei sistemi `ulogd.conf` di
+FireDog usa uno stack con output PCAP che quel plugin non trova — il demone resta "attivo" solo
+perché continua a girare con la vecchia config fino al primo restart o reboot, poi fallisce
+("not even a single working plugin stack" in `/var/log/ulogd/ulogd.log`; su Debian si blocca per
+~90s con "Failed to create reference to PID ... Invalid argument" nel journal, su Ubuntu esce
+subito con exit-code). Remediation su un target già installato, senza aggiornare l'intero
+pacchetto:
+```bash
+sudo apt-get install -y ulogd2-pcap
+sudo systemctl restart ulogd2
+```
+openSUSE/SLES non è affetto (`ulogd-pcap` era già nella lista di installazione).
+
 **Il target non risulta online sul master**
 ```bash
 systemctl status dog-agent

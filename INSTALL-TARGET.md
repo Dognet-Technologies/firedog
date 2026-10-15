@@ -250,3 +250,11 @@ systemctl status dog-agent         # agent connesso al master
 ls /opt/sentinelsuite/firedog      # layout base
 ```
 
+> **Verifica che valga la pena fare subito, non solo al primo check**: `systemctl status
+> ulogd2` appena dopo l'install risulta "active" anche su un sistema con il bug corretto in
+> v1.1.0 (installava `ulogd2` senza il sottopacchetto `ulogd2-pcap` su Debian/Ubuntu), perché
+> il demone continua a girare con la vecchia config finché non viene riavviato — il problema si
+> vede solo al primo restart o reboot. Conferma con `sudo systemctl restart ulogd2 && systemctl
+> is-active ulogd2`: se resta "active" in pochi secondi va tutto bene, se va in "failed" manca
+> `ulogd2-pcap` (`sudo apt-get install -y ulogd2-pcap`, vedi Troubleshooting nel README).
+
