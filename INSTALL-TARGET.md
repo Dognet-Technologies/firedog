@@ -207,7 +207,15 @@ Passi operativi:
 2. **Sul master** — crea il **Target** (Targets → Add) con **ip, hostname e
    MAC address esatti** della macchina: il master ne calcola
    `identity_hash = SHA512(ip+hostname+mac)` al salvataggio.
-3. **Sul target** — edita `/etc/dog-agent/agent.conf` (seedato
+3. **Sul master** — clicca **Pair** sul target appena creato (o
+   `POST /api/agent/pairing/start/` con `{"target_id": <id>}`). Apre una
+   finestra di pairing di **3 minuti**: l'agent deve connettersi entro quel
+   tempo. Passo facile da saltare seguendo solo i campi del Target — senza,
+   la fase 2 fallisce con "Identity hash verification failed" anche con
+   ip/hostname/mac corretti, perché il server non ha ancora una sessione di
+   pairing in attesa a cui associare la richiesta (verificato dal vivo: un
+   target creato e mai "pairato" così resta per sempre irraggiungibile).
+4. **Sul target** — edita `/etc/dog-agent/agent.conf` (seedato
    dall'example durante l'installazione):
 
    ```toml
@@ -225,18 +233,19 @@ Passi operativi:
    heartbeat_interval = 30
    ```
 
-4. **Sul target** — avvia l'agent:
+5. **Sul target** — avvia l'agent **entro la finestra di 3 minuti** del passo 3:
 
    ```bash
    sudo systemctl enable --now dog-agent
    journalctl -u dog-agent -f    # verifica "pairing success"
    ```
 
-5. **Sul master** — il target passa a stato *online* e inizia a ricevere
+6. **Sul master** — il target passa a stato *online* e inizia a ricevere
    heartbeat, statistiche e minacce.
 
-Se il pairing fallisce: API key errata/disattivata (fase 1) oppure
-ip/hostname/mac che non coincidono con quelli del Target sul master
+Se il pairing fallisce: API key errata/disattivata (fase 1); oppure, in
+fase 2, ip/hostname/mac che non coincidono con quelli del Target sul master
+— o la finestra di pairing del passo 3 non è stata avviata o è scaduta
 (fase 2) — l'errore è visibile sia in `journalctl -u dog-agent` sia nella
 UI (Pairing sessions).
 

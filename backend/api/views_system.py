@@ -35,6 +35,20 @@ def _run(cmd: list[str], cwd: Path | str | None = None, timeout: int = 30) -> tu
         return 127, "", f"comando non trovato: {e}"
 
 
+class SystemVersionView(APIView):
+    """GET /api/system/version/ — versione del master in esecuzione in questo
+    momento (settings.FIREDOG_VERSION, da backend/VERSION). Nessuna chiamata
+    git: a differenza di SystemUpdateCheckView deve poter essere richiamato
+    da ogni pagina (footer sidebar) senza costare un fetch di rete ad ogni
+    caricamento.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({"version": settings.FIREDOG_VERSION})
+
+
 class SystemUpdateCheckView(APIView):
     """GET /api/system/update/check/ — versione corrente vs disponibile su GitHub."""
 

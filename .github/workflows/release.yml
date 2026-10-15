@@ -1,0 +1,308 @@
+name: Release
+
+# Al push di un tag vX.Y.Z[-suffisso] compila, firma e prepara (come BOZZA) la
+# release con tutti gli asset: tarball installabile, VM qcow2/OVA, SHA256SUMS
+# firmato con GPG e chiave pubblica. Nessun upload manuale.
+#
+# Un suffisso nel tag (es. v1.1.0-beta, v1.1.0-rc1) marca automaticamente la
+# release come "Pre-release" su GitHub — canale di test per chi vuole provare
+# funzionalità non ancora passate su stabile, senza bisogno di un branch
+# persistente dedicato. Stesso meccanismo di SentinelCore (packaging/release.yml
+# là), qui adattato per lo stack Django/React invece di Rust.
+#
+# Flusso:  verify -> package -> vm -> release (bozza)
+# Se un job fallisce: "Re-run failed jobs" dall'interfaccia Actions riusa gli
+# artifact gia' prodotti (es. rilancia solo `vm` e poi `release`).
+#
+# Secrets richiesti (Settings -> Secrets and variables -> Actions):
+#   GPG_PRIVATE_KEY   chiave privata di rilascio, ASCII-armored
+#   GPG_PASSPHRASE    passphrase della chiave
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag esistente da (ri)costruire, es. v1.1.0-beta'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # Mai interpolare direttamente nei run: passa sempre da $TAG
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    name: Verifica tag, versioni, CI e secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Tag coerente con le versioni nel codice
+        run: packaging/check-version.sh "$TAG"
+
+      - name: CI verde sul commit taggato
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA="$(git rev-parse "${TAG}^{commit}")"
+          OK="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+                  --commit "$SHA" --status success --json databaseId --jq 'length')"
+          if [ "${OK:-0}" -lt 1 ]; then
+            echo "::error::Nessuna esecuzione 'CI' riuscita sul commit $SHA. Fai passare la CI prima di taggare."
+            exit 1
+          fi
+          echo "CI verde sul commit $SHA"
+
+      - name: Secrets di firma presenti
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          [ -n "$GPG_PRIVATE_KEY" ] && [ -n "$GPG_PASSPHRASE" ] || {
+            echo "::error::Mancano i secrets GPG_PRIVATE_KEY / GPG_PASSPHRASE: una release non firmata non viene prodotta."
+            exit 1
+          }
+
+  package:
+    name: Compila e impacchetta (tarball firmato)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Importa chiave GPG di rilascio
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --list-secret-keys --keyid-format long | grep -E '^(sec|ssb)|^ +[0-9A-F]{40}'
+
+      - name: Build + tarball + checksum + firma
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          CI: "false"
+        run: packaging/build-release.sh "$TAG"
+
+      - name: Verifica dell'output prodotto
+        run: |
+          gpg --armor --export > dist/firedog-release.pub.asc
+          cd dist
+          sha256sum -c "firedog-${TAG}-linux-x86_64.tar.gz.sha256"
+          gpg --verify "firedog-${TAG}-linux-x86_64.tar.gz.asc" \
+                       "firedog-${TAG}-linux-x86_64.tar.gz"
+
+      - name: Upload tarball e firma
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: firedog-tarball
+          path: |
+            dist/firedog-*-linux-x86_64.tar.gz
+            dist/firedog-*-linux-x86_64.tar.gz.asc
+            dist/firedog-release.pub.asc
+          if-no-files-found: error
+          retention-days: 7
+
+  vm:
+    name: Build VM appliance (qcow2 + OVA)
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Scarica il tarball
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: firedog-tarball
+          path: dist/
+
+      - name: Libera spazio sul runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Dipendenze (qemu, cloud-init, VirtualBox)
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            qemu-system-x86 qemu-utils cloud-image-utils genisoimage wget python3 virtualbox
+          command -v VBoxManage >/dev/null || { echo "::error::VBoxManage non disponibile"; exit 1; }
+          VBoxManage --version
+
+      - name: Build VM
+        run: |
+          # Il tarball e' gia' in dist/ (scaricato sopra, stesso nome di build-release.sh)
+          # Nome file atteso: firedog-<TAG>-linux-x86_64.tar.gz
+          ls -l dist/
+          packaging/build-vm.sh "$TAG"
+
+      - name: Upload VM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: firedog-vm
+          path: |
+            dist/firedog-*-linux-x86_64.qcow2
+            dist/firedog-*-linux-x86_64.ova
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload log console VM (debug)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: firedog-vm-console-log
+          path: dist/build-vm-console.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  release:
+    name: Firma checksum e crea la bozza di release
+    needs: [ package, vm ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (storia completa per il changelog)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Scarica gli asset
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: firedog-{tarball,vm}
+          merge-multiple: true
+          path: dist/
+
+      - name: SHA256SUMS firmato
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          cd dist
+          ls -l
+          # Checksum di tutti gli asset binari (tarball + VM), non delle firme
+          sha256sum "firedog-${TAG}-linux-x86_64.tar.gz" \
+                    "firedog-${TAG}-linux-x86_64.qcow2" \
+                    "firedog-${TAG}-linux-x86_64.ova" > SHA256SUMS
+          cat SHA256SUMS
+
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 \
+              --armor --detach-sign --output SHA256SUMS.asc SHA256SUMS 3<<<"$GPG_PASSPHRASE"
+
+          # Verifica indipendente con keyring pulito e solo la chiave pubblica
+          VERIFY_HOME="$(mktemp -d)"; chmod 700 "$VERIFY_HOME"
+          GNUPGHOME="$VERIFY_HOME" gpg --batch --import firedog-release.pub.asc
+          GNUPGHOME="$VERIFY_HOME" gpg --verify SHA256SUMS.asc SHA256SUMS
+          sha256sum -c SHA256SUMS
+          echo "FPR=$(gpg --batch --with-colons --fingerprint | awk -F: '/^fpr:/ {print $10; exit}')" >> "$GITHUB_ENV"
+
+      - name: Note di rilascio
+        run: |
+          set -euo pipefail
+          PREV="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          if [ -n "$PREV" ]; then
+            git log "${PREV}..${TAG}" --pretty=format:"- %s (%h)" --no-merges > CHANGES.md
+          else
+            git log -n 30 "${TAG}" --pretty=format:"- %s (%h)" --no-merges > CHANGES.md
+          fi
+          {
+            echo "## Cosa cambia"
+            echo
+            cat CHANGES.md
+            echo
+            cat <<'EOF'
+          ## Asset
+
+          | File | Descrizione |
+          |------|-------------|
+          | `firedog-__TAG__-linux-x86_64.tar.gz` | Pacchetto installabile (backend Django, frontend/build, `deploy/`, `INSTALL.md`) |
+          | `firedog-__TAG__-linux-x86_64.qcow2` | VM appliance per KVM / Proxmox |
+          | `firedog-__TAG__-linux-x86_64.ova` | VM appliance per VirtualBox / VMware |
+          | `SHA256SUMS` / `SHA256SUMS.asc` | Checksum di tutti gli asset e firma GPG |
+          | `firedog-__TAG__-linux-x86_64.tar.gz.asc` | Firma GPG separata del tarball |
+          | `firedog-release.pub.asc` | Chiave pubblica di rilascio |
+
+          ## Verifica degli asset
+
+          Impronta (fingerprint) della chiave di rilascio: `__FPR__`
+
+          ```bash
+          gpg --import firedog-release.pub.asc
+          gpg --fingerprint | grep -A1 pub        # confronta con l'impronta qui sopra
+          gpg --verify SHA256SUMS.asc SHA256SUMS
+          sha256sum -c SHA256SUMS --ignore-missing
+          ```
+
+          ## Installazione
+
+          ```bash
+          tar xzf firedog-__TAG__-linux-x86_64.tar.gz
+          cd firedog-__TAG__-linux-x86_64
+          sudo ./install.sh
+          ```
+          EOF
+          } > NOTES.md
+          sed -i -e "s/__TAG__/${TAG}/g" -e "s/__FPR__/${FPR}/g" NOTES.md
+
+      - name: Crea la bozza di release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Rilancio: le bozze non sono raggiungibili per tag, quindi si cerca
+          # nella lista. Si sostituisce solo una bozza, mai una release pubblicata.
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.tag_name == env.TAG) | "\(.id) \(.draft)"' |
+          while read -r ID DRAFT; do
+            if [ "$DRAFT" != "true" ]; then
+              echo "::error::La release $TAG e' gia' pubblicata: non la sovrascrivo."
+              exit 1
+            fi
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${ID}"
+          done
+          PRE=""
+          case "$TAG" in *-*) PRE="--prerelease" ;; esac
+          gh release create "$TAG" --draft --verify-tag $PRE \
+            --title "FireDog ${TAG}" \
+            --notes-file NOTES.md \
+            "dist/firedog-${TAG}-linux-x86_64.tar.gz" \
+            "dist/firedog-${TAG}-linux-x86_64.tar.gz.asc" \
+            "dist/firedog-${TAG}-linux-x86_64.qcow2" \
+            "dist/firedog-${TAG}-linux-x86_64.ova" \
+            dist/SHA256SUMS dist/SHA256SUMS.asc dist/firedog-release.pub.asc
+          echo "Bozza creata: controlla e pubblica da GitHub -> Releases"
