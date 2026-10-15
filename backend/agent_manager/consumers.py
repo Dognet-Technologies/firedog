@@ -266,6 +266,13 @@ class AgentConsumer(AsyncWebsocketConsumer):
         if command_status == "success" and isinstance(result, str):
             await self._maybe_ingest_sync_rules_output(command_id, result)
 
+        # Side-effect: se il comando era update_config (push threat-scoring),
+        # l'ack di successo è l'unica conferma che l'agent ha davvero
+        # riscritto agent.conf — solo ORA il payload diventa lo stato
+        # server-side autoritativo in Target.config_overrides.
+        if command_status == "success":
+            await self._maybe_apply_threat_config(command_id)
+
         # Aggiorna comando
         await self.update_command_status(command_id, command_status, result, error)
 
@@ -294,6 +301,25 @@ class AgentConsumer(AsyncWebsocketConsumer):
     def _get_command(self, command_id):
         from .models import AgentCommand as _AC
         return _AC.objects.filter(command_id=command_id).first()
+
+    async def _maybe_apply_threat_config(self, command_id):
+        """Se il comando era 'update_config', fonde il payload dispatchato
+        dentro Target.config_overrides — è la conferma che l'agent ha
+        riscritto agent.conf per davvero, non solo che il comando è stato
+        accodato (vedi views.py::TargetViewSet.update_threat_config)."""
+        cmd = await self._get_command(command_id)
+        if not cmd or cmd.action != "update_config":
+            return
+        await self._merge_config_overrides(cmd.target_id, cmd.payload)
+
+    @database_sync_to_async
+    def _merge_config_overrides(self, target_id, payload):
+        from targets.models import Target as _Target
+        target = _Target.objects.filter(pk=target_id).first()
+        if not target:
+            return
+        target.config_overrides = {**target.config_overrides, **payload}
+        target.save(update_fields=["config_overrides"])
 
     async def handle_firewall_stats(self, data):
         """

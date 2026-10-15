@@ -4,6 +4,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
+  /* `zoom: 0.8` su html (sotto) scala il RENDERING di tutto il sottoalbero,
+     100vh compreso: un box con height:100vh finisce dipinto all'80% x
+     altezza reale della finestra, lasciando uno spazio vuoto sotto (bug
+     osservato su Dashboard/Targets/ecc., tutte le pagine dentro .layout).
+     --vh-full compensa: 100vh / 0.8 = 125vh, così dopo lo zoom il box
+     torna a occupare l'intera finestra reale. Usarla al posto di "100vh"
+     ovunque serva un full-bleed verticale. */
+  --vh-full: 125vh;
+
   /* === COLOR SYSTEM === */
   
   /* Background Colors */
@@ -147,6 +156,14 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* Equivalente dello zoom browser all'80% (richiesto: l'interfaccia si
+     vede meglio così) applicato di default invece di doverlo impostare
+     manualmente ad ogni sessione. A differenza di scalare --font-base/rem,
+     `zoom` ridimensiona TUTTO in modo uniforme — testo, padding, bordi,
+     icone — esattamente come lo zoom reale del browser, senza dover
+     toccare ogni file CSS che usa px invece di rem. Supportato da tutti i
+     browser major, incluso Firefox dalla 126 (2024). */
+  zoom: 0.8;
 }
 
 body {

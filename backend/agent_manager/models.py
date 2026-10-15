@@ -312,6 +312,7 @@ class AgentCommand(models.Model):
         ("block_ip", "Block IP"),
         ("unblock_ip", "Unblock IP"),
         ("update_config", "Update Configuration"),
+        ("update_pcap_config", "Update PCAP Configuration"),
         ("check_integrity", "Check File Integrity"),
     ]
 

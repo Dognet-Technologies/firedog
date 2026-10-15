@@ -26,6 +26,21 @@ MONITORED_INTERFACES=""
 # non appena la policy DROP viene applicata.
 ALWAYS_OPEN_PORTS=""
 
+# ── Sorgenti SSH sempre fidate ───────────────────────────────────────────
+# Lista separata da virgole di IP/CIDR (es. "10.10.0.0/24,203.0.113.5") per
+# cui SSH bypassa interamente la protezione brute-force (SSH_PROTECT): niente
+# rate limit, niente ban, nessuna dipendenza dalle soglie sotto. Pensato per
+# la propria rete di management/bastion (VPN, jump host) — NON un modo per
+# aprire SSH al pubblico: le sorgenti qui restano protette solo da
+# autenticazione SSH stessa.
+#
+# Nota: ALWAYS_OPEN_PORTS non basta per SSH perché la porta SSH viene
+# intercettata da SSH_PROTECT prima che qualunque regola ALWAYS_OPEN_PORTS
+# venga valutata — per questo esiste questa lista separata.
+#
+# Vuoto di default: nessun cambiamento al comportamento storico.
+TRUSTED_SSH_SOURCES=""
+
 # ── Protezione SSH brute-force ───────────────────────────────────────────
 # Soglia: quanti nuovi tentativi di connessione SSH in che finestra di
 # tempo (secondi) fanno scattare la protezione. Default alzati (era 4/60s)
@@ -52,6 +67,22 @@ SSH_PROTECT_WINDOW_SECONDS="60"
 # Gestione ban attivi: 'firewall-manager --list-bans' / '--unban <IP>'.
 # Esempi: SSH_PROTECT_BAN_DURATION="30m"   SSH_PROTECT_BAN_DURATION="1d"
 SSH_PROTECT_BAN_DURATION="0"
+
+# ── Controllo aggiornamenti pacchetto target ─────────────────────────────
+# Ogni quanti giorni firewall-manager controlla se è disponibile una
+# versione più recente del pacchetto target (confronta il file VERSION
+# locale con quello pubblicato su stabile — nessuna chiamata di rete se
+# lasciato vuoto/"0", comportamento di default). Il controllo è passivo:
+# segnala solo, non installa nulla da solo — l'aggiornamento resta un
+# `get-firedog.sh`/update.sh manuale o pianificato separatamente.
+#
+# Il controllo vero e proprio è agganciato al già esistente export ogni 5
+# minuti (`firewall-manager --export-json`, vedi crontab): si auto-limita
+# all'intervallo configurato qui, non fa una richiesta di rete ad ogni
+# export solo perché è configurato un controllo settimanale.
+#
+# Esempi: UPDATE_CHECK_INTERVAL_DAYS="7" (settimanale) | "1" (giornaliero)
+UPDATE_CHECK_INTERVAL_DAYS="0"
 
 # ── Protezione SYN flood ─────────────────────────────────────────────────
 # Rate limit sui nuovi pacchetti SYN in INPUT (qualunque porta): oltre la

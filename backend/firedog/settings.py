@@ -11,6 +11,16 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Versione del master (backend+frontend) — fonte unica, letta da qui invece
+# di essere ridigitata altrove. Distinta dalla versione del pacchetto target
+# (firedog-package/VERSION, letta da firewall-manager): i due si aggiornano
+# con processi indipendenti e possono trovarsi a versioni diverse in un dato
+# momento (un target non ancora aggiornato).
+try:
+    FIREDOG_VERSION = (BASE_DIR / "VERSION").read_text().strip()
+except OSError:
+    FIREDOG_VERSION = "unknown"
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config("SECRET_KEY")
 
@@ -290,16 +300,27 @@ LOGGING = {
 }
 
 # Security Settings (Production)
+# TLS_ENABLED è distinto da DEBUG: nginx potrebbe terminare TLS oppure no
+# (deploy/install.sh --skip-tls) indipendentemente dall'ambiente. Se
+# SECURE_SSL_REDIRECT scattasse con nginx in solo-HTTP si otterrebbe un
+# redirect verso un https:// che non esiste — da qui la variabile separata.
+TLS_ENABLED = config("TLS_ENABLED", default=True, cast=bool)
+
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = TLS_ENABLED
+    CSRF_COOKIE_SECURE = TLS_ENABLED
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    if TLS_ENABLED:
+        SECURE_SSL_REDIRECT = True
+        # nginx termina TLS e proxya in HTTP verso Daphne: senza questo,
+        # Django non si fida dell'header X-Forwarded-Proto già inviato da
+        # nginx e considera ogni richiesta come non sicura.
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+        SECURE_HSTS_SECONDS = 31536000
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+        SECURE_HSTS_PRELOAD = True
 
 # ==================== DJANGO CHANNELS CONFIGURATION ====================
 

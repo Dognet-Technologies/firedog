@@ -5,6 +5,9 @@
 # Base dir layout (all management/config lives under /opt/sentinelsuite/firedog):
 #
 #   /opt/sentinelsuite/firedog/
+#     ├── VERSION              versione installata del pacchetto target (fonte
+#     │                        unica — letta da firewall-manager --version e
+#     │                        riportata al master via --export-json)
 #     ├── bin/                 firewall-manager, traffic-analyzer, firewall-init.sh
 #     ├── conf/                ulogd.conf, custom_rules.conf.example, firedog-cron,
 #     │                        firewall-fm.service, firewall-pcap-logrotate,
@@ -77,7 +80,15 @@ if [[ "$OS_FAMILY" == "debian" ]]; then
     echo -e "${GREEN}[1/7]${NC} apt deps"
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq iptables iptables-persistent ipset ulogd2 python3 tcpdump logrotate cron
+    # ulogd2-pcap è un sottopacchetto separato (come ulogd-pcap su SUSE,
+    # vedi sotto) — senza, ulogd.conf di FireDog (stack con output PCAP)
+    # non trova 'ulogd_output_PCAP.so' e fallisce con "not even a single
+    # working plugin stack": il demone resta "attivo" solo perché gira
+    # ancora con la vecchia config fino al primo restart/reboot, poi va in
+    # crash-loop/timeout indefinito (osservato dal vivo: Debian si blocca
+    # fino al TimeoutStartSec, Ubuntu esce subito con exit-code — stessa
+    # causa, due sintomi).
+    apt-get install -y -qq iptables iptables-persistent ipset ulogd2 ulogd2-pcap python3 tcpdump logrotate cron
 else
     echo -e "${GREEN}[1/7]${NC} zypper deps"
     zypper --non-interactive --quiet refresh
@@ -137,6 +148,7 @@ echo -e "${GREEN}[3/7]${NC} binaries"
 install -m 0755 "${SCRIPT_DIR}/firewall-manager.py" "${BASE_DIR}/bin/firewall-manager"
 install -m 0755 "${SCRIPT_DIR}/traffic-analyzer.py" "${BASE_DIR}/bin/traffic-analyzer"
 install -m 0755 "${SCRIPT_DIR}/firewall-init.sh"    "${BASE_DIR}/bin/firewall-init.sh"
+install -m 0644 "${SCRIPT_DIR}/VERSION"             "${BASE_DIR}/VERSION"
 ln -sfn "${BASE_DIR}/bin/firewall-manager" /usr/local/bin/firewall-manager
 ln -sfn "${BASE_DIR}/bin/traffic-analyzer" /usr/local/bin/traffic-analyzer
 ln -sfn "${BASE_DIR}/bin/firewall-init.sh" /usr/local/sbin/firewall-init.sh

@@ -35,6 +35,86 @@ from .serializers import (
 
 logger = logging.getLogger("firedog.settings")
 
+# Chiave SystemSettings (camelCase, lato Settings.tsx) → campo payload per
+# CommandAction::UpdatePcapConfig (snake_case, lato dog_agent). Le pcap
+# settings sono globali (SystemSettings), non per-target: al salvataggio le
+# pushiamo a TUTTI i target connessi. Best-effort: un target offline non
+# blocca il salvataggio, riceverà il valore corrente al prossimo push
+# (prossimo salvataggio di Settings) o via un futuro comando manuale — non
+# esiste ancora un "sync ora" per i singoli target, coerente con l'essere
+# un default globale piuttosto che un override per-target come invece è
+# agentThreatScoring.*.
+PCAP_SETTINGS_KEYS = {
+    "pcapSavePath": "pcap_save_path",
+    "pcapAnalysisTool": "pcap_analysis_tool",
+    "pcapCustomFilters": "pcap_custom_filters",
+}
+MAX_PCAP_FILTERS = 5
+
+
+def _build_pcap_sync_payload(settings_data: dict) -> tuple[dict, dict]:
+    """Filtra/valida le chiavi pcap presenti in settings_data.
+
+    Ritorna (payload, errors): payload contiene solo i campi validi da
+    dispatchare, errors mappa field->messaggio per quelli scartati (loggati,
+    mai bloccanti per il salvataggio delle SystemSettings stesse — l'utente
+    ha comunque salvato la sua impostazione, la sync verso i target è un
+    side-effect best-effort).
+    """
+    payload: dict = {}
+    errors: dict[str, str] = {}
+    for ui_key, agent_key in PCAP_SETTINGS_KEYS.items():
+        if ui_key not in settings_data:
+            continue
+        value = settings_data[ui_key]
+        if agent_key == "pcap_analysis_tool":
+            if value not in ("tcpdump", "tshark"):
+                errors[ui_key] = "deve essere 'tcpdump' o 'tshark'"
+                continue
+        elif agent_key == "pcap_save_path":
+            if not isinstance(value, str) or not value.strip():
+                errors[ui_key] = "deve essere una stringa non vuota"
+                continue
+        elif agent_key == "pcap_custom_filters":
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                errors[ui_key] = "deve essere una lista di stringhe"
+                continue
+            value = value[:MAX_PCAP_FILTERS]
+        payload[agent_key] = value
+    return payload, errors
+
+
+def _sync_pcap_settings_to_targets(settings_data: dict) -> dict | None:
+    """Pusha le pcap settings cambiate a tutti i target FireDog connessi.
+
+    Chiamata da bulk_update dopo il salvataggio delle SystemSettings. Non
+    solleva mai: un errore qui non deve far fallire il salvataggio delle
+    impostazioni stesse (che sono già persistite a questo punto).
+    """
+    payload, field_errors = _build_pcap_sync_payload(settings_data)
+    if not payload and not field_errors:
+        return None  # nessuna chiave pcap in questo bulk_update
+
+    result = {"synced": [], "offline": [], "field_errors": field_errors}
+    if not payload:
+        return result
+
+    from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
+    from targets.models import Target
+
+    for target in Target.objects.all():
+        try:
+            dispatch_command_to_agent(target, action="update_pcap_config", payload=payload)
+            result["synced"].append(target.id)
+        except AgentNotConnected:
+            result["offline"].append(target.id)
+        except Exception:
+            logger.exception(
+                "Sync pcap settings fallita per target %s (non bloccante)", target.id
+            )
+            result["offline"].append(target.id)
+    return result
+
 
 class SystemSettingsViewSet(viewsets.ModelViewSet):
     """
@@ -110,16 +190,20 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
         from audit.models import AuditLog
 
         AuditLog.log_action(
-            username=request.user.username,
-            action="settings.bulk_update",
-            details={"updated_count": len(updated_settings), "category": category},
+            action="update",
+            description=f"Bulk update di {len(updated_settings)} impostazioni (categoria: {category})",
+            user=request.user,
+            new_values={"updated_count": len(updated_settings), "category": category},
             ip_address=request.META.get("REMOTE_ADDR"),
         )
 
+        pcap_sync = _sync_pcap_settings_to_targets(settings_data)
+
         result_serializer = SystemSettingsSerializer(updated_settings, many=True)
-        return Response(
-            {"updated_count": len(updated_settings), "settings": result_serializer.data}
-        )
+        response_data = {"updated_count": len(updated_settings), "settings": result_serializer.data}
+        if pcap_sync is not None:
+            response_data["pcap_sync"] = pcap_sync
+        return Response(response_data)
 
     @action(detail=False, methods=["post"])
     def reset(self, request):
@@ -142,9 +226,10 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
         from audit.models import AuditLog
 
         AuditLog.log_action(
-            username=request.user.username,
-            action="settings.reset",
-            details={"deleted_count": deleted_count, "category": category or "all"},
+            action="delete",
+            description=f"Reset impostazioni (categoria: {category or 'all'}, {deleted_count} eliminate)",
+            user=request.user,
+            new_values={"deleted_count": deleted_count, "category": category or "all"},
             ip_address=request.META.get("REMOTE_ADDR"),
         )
 

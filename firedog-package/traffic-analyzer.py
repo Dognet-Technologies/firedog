@@ -5,12 +5,31 @@ Analisi intelligente del traffico bloccato con machine learning-like scoring
 """
 
 import subprocess
+import shlex
 import os
 import sys
 from collections import defaultdict, Counter
 from datetime import datetime
 import json
 import re
+
+
+def load_pcap_save_path(default: str = "/var/log/ulogd/input_dropped.pcap") -> str:
+    """Legge PCAP_SAVE_PATH da /etc/firewall/firedog.conf se presente (stessa
+    chiave usata da firewall-manager.py) — duplica load_firedog_conf() invece
+    di importarla, i due CLI restano eseguibili indipendentemente."""
+    try:
+        with open('/etc/firewall/firedog.conf', 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('PCAP_SAVE_PATH='):
+                    path = line.partition('=')[2].strip().strip('"').strip("'")
+                    if path:
+                        return f"{path}/input_dropped.pcap"
+    except (FileNotFoundError, PermissionError, OSError):
+        pass
+    return default
+
 
 class TrafficAnalyzer:
     """Analizzatore avanzato traffico con scoring anomalie"""
@@ -78,14 +97,17 @@ class TrafficAnalyzer:
         """Estrae statistiche base dal PCAP"""
         
         try:
+            # self.pcap_file è configurabile da settings (PCAP_SAVE_PATH) o
+            # passato via CLI: quotato per evitare command injection.
+            quoted_pcap = shlex.quote(self.pcap_file)
             # Conta pacchetti totali
-            cmd = f"tcpdump -nn -r {self.pcap_file} 2>/dev/null | wc -l"
+            cmd = f"tcpdump -nn -r {quoted_pcap} 2>/dev/null | wc -l"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             self.stats['total_packets'] = int(result.stdout.strip())
-            
+
             # Conta per protocollo
             for proto in ['tcp', 'udp', 'icmp']:
-                cmd = f"tcpdump -nn -r {self.pcap_file} {proto} 2>/dev/null | wc -l"
+                cmd = f"tcpdump -nn -r {quoted_pcap} {proto} 2>/dev/null | wc -l"
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                 self.stats[f'{proto}_packets'] = int(result.stdout.strip())
             
@@ -97,7 +119,7 @@ class TrafficAnalyzer:
         
         try:
             # Leggi tutti i pacchetti
-            cmd = f"tcpdump -nn -tttt -r {self.pcap_file} 2>/dev/null"
+            cmd = f"tcpdump -nn -tttt -r {shlex.quote(self.pcap_file)} 2>/dev/null"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
             for line in result.stdout.split('\n'):
@@ -370,8 +392,8 @@ def main():
     if len(sys.argv) > 1:
         pcap_file = sys.argv[1]
     else:
-        # Default: analizza INPUT dropped
-        pcap_file = "/var/log/ulogd/input_dropped.pcap"
+        # Default: analizza INPUT dropped, path da settings se configurato
+        pcap_file = load_pcap_save_path()
     
     if not os.path.exists(pcap_file):
         print(f"Errore: File {pcap_file} non trovato")

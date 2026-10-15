@@ -9,6 +9,7 @@ import { useTarget } from '../contexts/TargetContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import PageHeader from '../components/shared/PageHeader';
 import TabBar from '../components/shared/TabBar';
+import StatusDot from '../components/shared/StatusDot';
 import './Firewall.css';
 
 type TabId = 'rules' | 'blocked' | 'whitelist';
@@ -797,6 +798,7 @@ const WhitelistTab: React.FC = () => {
 
 const Firewall: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('rules');
+  const { selectedTarget, targets, setSelectedTarget, loading: targetsLoading } = useTarget();
 
   return (
     <div className="firewall-page">
@@ -807,6 +809,27 @@ const Firewall: React.FC = () => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
+        }
+        actions={
+          <div className="fw-target-selector">
+            {selectedTarget && <StatusDot status={selectedTarget.status as any} />}
+            <select
+              className="fw-input"
+              disabled={targetsLoading || targets.length === 0}
+              value={selectedTarget?.id ?? ''}
+              onChange={(e) => {
+                const target = targets.find((t) => t.id === parseInt(e.target.value, 10));
+                setSelectedTarget(target || null);
+              }}
+            >
+              {targets.length === 0 && <option value="">Nessun target</option>}
+              {targets.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.hostname || t.ip_address} — {t.status}
+                </option>
+              ))}
+            </select>
+          </div>
         }
       />
 

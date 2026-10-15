@@ -5,7 +5,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTarget } from '../../contexts/TargetContext';
 import './Layout.css';
 
 interface LayoutProps {
@@ -138,22 +137,10 @@ const renderIcon = (iconName: string): React.ReactElement => {
   return icons[iconName] || icons.dashboard;
 };
 
-const getStatusClass = (status: string): string => {
-  switch (status) {
-    case 'online': return 'status-online';
-    case 'offline': return 'status-offline';
-    case 'error': return 'status-error';
-    case 'installing': return 'status-installing';
-    default: return 'status-pending';
-  }
-};
-
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { logout, user } = useAuth();
-  const { selectedTarget, targets, setSelectedTarget, loading: targetsLoading } = useTarget();
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [showTargetDropdown, setShowTargetDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -242,78 +229,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           {/* Left: breadcrumb */}
           <div className="header-left">
             <span className="breadcrumb-title">{pageTitle}</span>
-          </div>
-
-          {/* Center: target selector */}
-          <div className="header-center">
-            <div className="target-selector">
-              <button
-                className="target-selector-btn"
-                onClick={() => setShowTargetDropdown(!showTargetDropdown)}
-                disabled={targetsLoading}
-              >
-                {targetsLoading ? (
-                  <span className="target-selector-text">Loading...</span>
-                ) : selectedTarget ? (
-                  <>
-                    <span className={`status-dot ${getStatusClass(selectedTarget.status)}`} />
-                    <span className="target-selector-text">
-                      {selectedTarget.hostname || selectedTarget.ip_address}
-                    </span>
-                  </>
-                ) : (
-                  <span className="target-selector-empty">Select target...</span>
-                )}
-                <span className="target-selector-arrow">{renderIcon('chevron')}</span>
-              </button>
-
-              {showTargetDropdown && (
-                <>
-                  <div
-                    className="dropdown-overlay"
-                    onClick={() => setShowTargetDropdown(false)}
-                  />
-                  <div className="target-dropdown">
-                    {targets.length === 0 ? (
-                      <div className="dropdown-empty">
-                        <p>No targets configured</p>
-                        <Link
-                          to="/targets"
-                          className="dropdown-link"
-                          onClick={() => setShowTargetDropdown(false)}
-                        >
-                          Manage targets →
-                        </Link>
-                      </div>
-                    ) : (
-                      targets.map((target) => (
-                        <button
-                          key={target.id}
-                          className={`target-dropdown-item${selectedTarget?.id === target.id ? ' selected' : ''}`}
-                          onClick={() => {
-                            setSelectedTarget(target);
-                            setShowTargetDropdown(false);
-                          }}
-                        >
-                          <span className={`status-dot ${getStatusClass(target.status)}`} />
-                          <div className="target-dropdown-info">
-                            <span className="target-dropdown-name">
-                              {target.hostname || target.ip_address}
-                            </span>
-                            <span className="target-dropdown-ip">{target.ip_address}</span>
-                          </div>
-                          {selectedTarget?.id === target.id && (
-                            <svg className="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
           </div>
 
           {/* Right: bell + user avatar */}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -59,9 +60,15 @@ class SystemUpdateCheckView(APIView):
             logger.warning("git fetch failed: %s", err)
             return Response({"ok": False, "error": f"git fetch fallito: {err.strip() or rc}"}, status=200)
 
-        # branch corrente
-        rc, branch, _ = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=REPO_ROOT)
-        branch = branch.strip() or "HEAD"
+        # Branch da controllare: deve essere lo STESSO che update.sh userà per
+        # l'install (env UPDATE_BRANCH), altrimenti Check e Install possono
+        # disaccordarsi — es. Check dice "aggiornato" guardando HEAD, mentre
+        # Install fa checkout di un branch diverso e più avanti. Fallback sul
+        # branch effettivamente checkoutato solo se UPDATE_BRANCH non è impostata.
+        branch = os.environ.get("UPDATE_BRANCH", "").strip()
+        if not branch:
+            rc, branch, _ = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=REPO_ROOT)
+            branch = branch.strip() or "HEAD"
 
         rc, local_sha, _ = _run(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT)
         rc, remote_sha, _ = _run(["git", "rev-parse", f"origin/{branch}"], cwd=REPO_ROOT)
@@ -104,6 +111,10 @@ class SystemUpdateCheckView(APIView):
                 "changelog": [line for line in log_diff.splitlines() if line.strip()],
                 "up_to_date": ahead == 0,
                 "update_script": str(UPDATE_SCRIPT),
+                # Versione del master (fonte: VERSION, vedi settings.py) — distinta
+                # dalla versione del pacchetto target mostrata nella tabella Targets
+                # (firedog_version, riportata da firewall-manager su ogni target).
+                "master_version": settings.FIREDOG_VERSION,
             }
         )
 

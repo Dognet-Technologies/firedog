@@ -45,6 +45,16 @@ export interface Target {
   interfaces?: NetworkInterface[];
   // Presente solo nella lista (TargetListSerializer), conteggio leggero.
   interfaces_count?: number;
+  // Ultima config threat-scoring confermata (ack ricevuto) per questo
+  // target — sola lettura, scritta da agent_manager consumers.py.
+  config_overrides?: Partial<{
+    auto_block_threshold: number;
+    auto_block_enabled: boolean;
+    bruteforce_min_attempts: number;
+    bruteforce_score_per_attempt: number;
+    synflood_min_connections: number;
+    synflood_score_per_conn: number;
+  }>;
 }
 
 // Interfaccia di rete (NIC) di un target — supporto host multi-homed.

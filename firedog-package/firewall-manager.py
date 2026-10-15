@@ -7,10 +7,13 @@ Conforme a OWASP/NIST security standards
 
 import argparse
 import subprocess
+import shlex
 import sys
 import os
 import json
 import re
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
@@ -29,6 +32,12 @@ CONFIG = {
     # devono restare in sync con SSH_BANSET/SSH_BANSET_SAVE là.
     'ssh_banset': 'ssh_banned',
     'ssh_banset_save': '/etc/firewall/ssh_banned.save',
+    # Versione installata del pacchetto target, seedata da install.sh —
+    # fonte unica, mai più una stringa letterale dentro export_json (era
+    # '1.0.1' hardcoded e non si è mai più mosso da lì).
+    'version_file': '/opt/sentinelsuite/firedog/VERSION',
+    'update_check_state': '/opt/sentinelsuite/firedog/data/update_check.json',
+    'update_check_url': 'https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/VERSION',
 }
 
 # Porte comuni e servizi
@@ -82,6 +91,61 @@ def load_firedog_conf(path: str = None) -> Dict[str, str]:
     except (FileNotFoundError, PermissionError, OSError):
         pass
     return values
+
+
+# Impostazioni pcap configurabili da settings (UI → SystemSettings →
+# dog-agent riceve CommandAction::UpdatePcapConfig e scrive queste chiavi
+# direttamente in firedog.conf, vedi dog_agent/src/targets/firedog.rs
+# update_pcap_config/upsert_conf_line — nessun demone da riavviare, il file
+# viene riletto qui ad ogni invocazione). PCAP_SAVE_PATH sovrascrive
+# CONFIG['log_dir'] per TUTTI i punti che lo referenziano (nessun altro punto
+# di modifica necessario). PCAP_ANALYSIS_TOOL: 'tcpdump' (default, storico) o
+# 'tshark', validato a runtime in analyze_dropped_traffic (fallback a tcpdump
+# se il binario scelto non è installato). PCAP_FILTER_N (N=1..5): stringhe di
+# filtro custom, sintassi opaca al tool scelto (BPF per tcpdump, display
+# filter per tshark) — nessuna validazione semantica, stessa responsabilità di
+# chi le scrive di una query salvata.
+_firedog_conf = load_firedog_conf()
+if _firedog_conf.get('PCAP_SAVE_PATH'):
+    CONFIG['log_dir'] = _firedog_conf['PCAP_SAVE_PATH']
+CONFIG['pcap_analysis_tool'] = _firedog_conf.get('PCAP_ANALYSIS_TOOL', 'tcpdump').strip() or 'tcpdump'
+CONFIG['pcap_custom_filters'] = [
+    _firedog_conf[k] for k in sorted(_firedog_conf) if k.startswith('PCAP_FILTER_') and _firedog_conf[k]
+][:5]
+
+# Giorni tra un controllo aggiornamenti e il successivo (vedi check_for_updates
+# sotto). "0"/vuoto/non numerico = disabilitato: nessuna chiamata di rete
+# silenziosa su un target che non l'ha richiesto esplicitamente.
+try:
+    CONFIG['update_check_interval_days'] = max(0, int((_firedog_conf.get('UPDATE_CHECK_INTERVAL_DAYS') or '0').strip()))
+except ValueError:
+    CONFIG['update_check_interval_days'] = 0
+
+
+def read_local_version() -> str:
+    """Versione installata del pacchetto target (file VERSION, seedato da
+    install.sh). Assente su un install più vecchio di questa feature, o se
+    il file è stato rimosso a mano — stringa vuota, non un'eccezione: la UI
+    mostra "Not installed" come già fa oggi quando firedog_version è vuota.
+    """
+    try:
+        return Path(CONFIG['version_file']).read_text().strip()
+    except (FileNotFoundError, PermissionError, OSError):
+        return ''
+
+
+def _version_tuple(v: str) -> Tuple[int, ...]:
+    """'1.2.10' -> (1, 2, 10). Il primo componente non numerico TRONCA il
+    parsing invece di sollevare un'eccezione (es. '1.2.0-rc1' -> (1, 2, 0)),
+    così un tag non-standard sul remoto degrada a confronto parziale invece
+    di rompere il check."""
+    parts: List[int] = []
+    for chunk in v.strip().lstrip('v').split('.'):
+        if not chunk.isdigit():
+            break
+        parts.append(int(chunk))
+    return tuple(parts)
+
 
 class FirewallManager:
     """Classe principale per gestione firewall"""
@@ -418,38 +482,71 @@ class FirewallManager:
         """Analizza traffico bloccato dai PCAP"""
         
         self.info(f"Analisi traffico bloccato ultime {hours} ora/e...")
-        
-        # Verifica presenza tcpdump/tshark
-        analyzer = 'tshark' if self.check_command('tshark') else 'tcpdump'
-        
+
+        # Tool scelto esplicitamente in settings (PCAP_ANALYSIS_TOOL), non più
+        # auto-rilevato — se il binario scelto non è installato, fallback a
+        # tcpdump con avviso invece di scavalcare silenziosamente la scelta.
+        analyzer = CONFIG['pcap_analysis_tool']
+        if not self.check_command(analyzer):
+            if analyzer != 'tcpdump':
+                self.warning(f"'{analyzer}' non installato, uso tcpdump")
+            analyzer = 'tcpdump'
+
         if not self.check_command(analyzer):
             self.error("Richiesto tcpdump o tshark per analisi. Installa con: apt install tcpdump (Debian/Ubuntu) o zypper install tcpdump (openSUSE)")
             return
-        
+
         pcap_files = [
             f"{CONFIG['log_dir']}/input_dropped.pcap",
             f"{CONFIG['log_dir']}/output_dropped.pcap"
         ]
-        
+
         for pcap in pcap_files:
             if not os.path.exists(pcap):
                 self.warning(f"File {pcap} non trovato")
                 continue
-            
+
             direction = "INPUT" if "input" in pcap else "OUTPUT"
             print(f"\n{Colors.BOLD}=== Analisi {direction} ==={Colors.RESET}\n")
-            
+
             # Analisi con tcpdump
             if analyzer == 'tcpdump':
                 self.analyze_with_tcpdump(pcap, hours, limit)
             else:
                 self.analyze_with_tshark(pcap, hours, limit)
+
+            for custom_filter in CONFIG['pcap_custom_filters']:
+                print(f"\n{Colors.YELLOW}Filtro custom: {custom_filter}{Colors.RESET}")
+                self.analyze_with_custom_filter(pcap, analyzer, custom_filter, limit)
+
+    def analyze_with_custom_filter(self, pcap: str, analyzer: str, custom_filter: str, limit: int):
+        """Esegue un filtro custom (BPF per tcpdump, display filter per
+        tshark) definito dall'utente in settings, e stampa le righe risultanti
+        (troncate a `limit`)."""
+        try:
+            if analyzer == 'tcpdump':
+                cmd = ['tcpdump', '-nn', '-r', pcap] + shlex.split(custom_filter)
+            else:
+                cmd = ['tshark', '-r', pcap, '-Y', custom_filter]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            lines = [ln for ln in result.stdout.split('\n') if ln.strip()][:limit]
+            if lines:
+                print('\n'.join(lines))
+            elif result.stderr:
+                self.warning(f"Filtro '{custom_filter}' non valido per {analyzer}: {result.stderr.strip()[:200]}")
+            else:
+                print("(nessun risultato)")
+        except Exception as e:
+            self.error(f"Errore filtro custom: {e}")
     
     def analyze_with_tcpdump(self, pcap: str, hours: int, limit: int):
         """Analizza PCAP con tcpdump"""
         try:
-            # Top IP sorgenti
-            cmd = f"tcpdump -nn -r {pcap} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort | uniq -c | sort -rn | head -{limit}"
+            # pcap/limit passano per un template di shell (pipeline awk/cut/
+            # sort): quotati esplicitamente per evitare command injection —
+            # pcap viene da CONFIG['log_dir'] (configurabile da settings),
+            # limit da input utente CLI.
+            cmd = f"tcpdump -nn -r {shlex.quote(pcap)} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort | uniq -c | sort -rn | head -{int(limit)}"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
             if result.stdout:
@@ -526,25 +623,29 @@ class FirewallManager:
     
     def get_threat_score(self, ip: str) -> Tuple[int, List[str]]:
         """Calcola threat score per IP (0-100)"""
-        
+
         score = 0
         reasons = []
-        
-        # Verifica IP privati (meno sospetti)
+
+        # Verifica IP privati (meno sospetti). ip arriva da un parsing di
+        # output tcpdump su dati di rete non fidati (show_threats/
+        # get_threats_data): se non è un IP valido, non proseguire — evita
+        # sia crash a valle sia interpolazione di valori inattesi nel
+        # comando shell sotto.
         try:
             ip_obj = ipaddress.ip_address(ip)
             if ip_obj.is_private:
                 reasons.append("IP privato (-10)")
                 score -= 10
-        except:
-            pass
-        
+        except ValueError:
+            return 0, []
+
         # Controlla nel PCAP quante volte compare questo IP
         pcap_input = f"{CONFIG['log_dir']}/input_dropped.pcap"
-        
+
         if os.path.exists(pcap_input):
             try:
-                cmd = f"tcpdump -nn -r {pcap_input} 'src host {ip}' 2>/dev/null | wc -l"
+                cmd = f"tcpdump -nn -r {shlex.quote(pcap_input)} 'src host {shlex.quote(ip)}' 2>/dev/null | wc -l"
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                 count = int(result.stdout.strip())
                 
@@ -583,7 +684,7 @@ class FirewallManager:
 
         # Estrai IP unici
         try:
-            cmd = f"tcpdump -nn -r {pcap_input} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
+            cmd = f"tcpdump -nn -r {shlex.quote(pcap_input)} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
             ips = [ip.strip() for ip in result.stdout.split('\n') if ip.strip()]
@@ -665,7 +766,7 @@ class FirewallManager:
             return threats
 
         try:
-            cmd = f"tcpdump -nn -r {pcap_input} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
+            cmd = f"tcpdump -nn -r {shlex.quote(pcap_input)} 2>/dev/null | awk '{{print $3}}' | cut -d'.' -f1-4 | sort -u"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 
             ips = [ip.strip() for ip in result.stdout.split('\n') if ip.strip()]
@@ -676,7 +777,7 @@ class FirewallManager:
                     # Estraiamo tutte le righe pcap per questo source IP, ci
                     # servono sia il count totale sia il dest_port + protocol
                     # più frequenti.
-                    cmd_lines = f"tcpdump -nn -r {pcap_input} 'src host {ip}' 2>/dev/null"
+                    cmd_lines = f"tcpdump -nn -r {shlex.quote(pcap_input)} 'src host {shlex.quote(ip)}' 2>/dev/null"
                     lines_result = subprocess.run(
                         cmd_lines, shell=True, capture_output=True, text=True
                     )
@@ -1022,6 +1123,59 @@ class FirewallManager:
             pass
         return stats
 
+    def check_for_updates(self) -> Dict:
+        """Confronta la versione locale con quella pubblicata su `stabile`,
+        al più una volta ogni UPDATE_CHECK_INTERVAL_DAYS (0 = disabilitato).
+
+        Chiamato anche da export_json ad ogni invocazione (ogni 5 minuti via
+        cron): il risultato è cacheato su file e riusato finché non è di
+        nuovo "dovuto" — non deve fare una richiesta di rete ad ogni singolo
+        export solo perché qualcuno ha configurato un controllo settimanale.
+        """
+        if CONFIG['update_check_interval_days'] <= 0:
+            return {'enabled': False}
+
+        state_path = Path(CONFIG['update_check_state'])
+        try:
+            cached = json.loads(state_path.read_text())
+        except (FileNotFoundError, PermissionError, OSError, json.JSONDecodeError):
+            cached = {}
+
+        now = datetime.now(timezone.utc)
+        checked_at = cached.get('checked_at')
+        if checked_at:
+            try:
+                last = datetime.fromisoformat(checked_at)
+                if now - last < timedelta(days=CONFIG['update_check_interval_days']):
+                    return {**cached, 'enabled': True}
+            except ValueError:
+                pass
+
+        local_version = read_local_version()
+        result = {
+            'enabled': True,
+            'checked_at': now.isoformat(),
+            'local_version': local_version,
+            'latest_version': cached.get('latest_version', ''),
+            'update_available': False,
+            'error': None,
+        }
+        try:
+            with urllib.request.urlopen(CONFIG['update_check_url'], timeout=10) as resp:
+                remote_version = resp.read().decode('utf-8', errors='replace').strip()
+            result['latest_version'] = remote_version
+            result['update_available'] = _version_tuple(remote_version) > _version_tuple(local_version)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            result['error'] = str(e)
+
+        try:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            state_path.write_text(json.dumps(result))
+        except (PermissionError, OSError):
+            pass
+
+        return result
+
     def export_json(self, output_path: str = '/opt/sentinelsuite/firedog/export/status.json'):
         """Esporta stato completo firewall in JSON"""
 
@@ -1042,7 +1196,11 @@ class FirewallManager:
                 # interpreta come ora locale (Europe/Rome) e applica un doppio
                 # offset, sfasando di 2h tutto il chart.
                 'timestamp': datetime.now(timezone.utc).isoformat(),
-                'firedog_version': '1.0.1',
+                'firedog_version': read_local_version(),
+                # Esito dell'ultimo controllo aggiornamenti (cacheato, vedi
+                # check_for_updates): {'enabled': False} se
+                # UPDATE_CHECK_INTERVAL_DAYS non è configurato in firedog.conf.
+                'update_check': self.check_for_updates(),
                 'system': self.get_system_info(),
                 # Counters per protocollo da /proc/net/snmp (cumulativi del kernel).
                 # Il server scala in delta per il Protocol Distribution chart.
@@ -1159,9 +1317,14 @@ Esempi:
   %(prog)s --export-json /tmp/fw.json      # Esporta in path custom
   %(prog)s --list-bans                     # IP bannati da SSH_PROTECT (SSH_PROTECT_BAN_DURATION)
   %(prog)s --unban 203.0.113.5             # Rimuovi un ban (anche permanente)
+  %(prog)s --version                       # Versione installata del pacchetto target
+  %(prog)s --check-updates                 # Controlla aggiornamenti (vedi UPDATE_CHECK_INTERVAL_DAYS)
         """
     )
-    
+
+    parser.add_argument('--version', action='store_true',
+                       help='Mostra la versione installata del pacchetto target (file VERSION)')
+
     # Comandi principali
     parser.add_argument('--list', '-l', metavar='CHAIN',
                        nargs='?', const='', default=None,
@@ -1217,8 +1380,17 @@ Esempi:
                        nargs='?', const='/opt/sentinelsuite/firedog/export/status.json',
                        help='Esporta stato completo in JSON (default: /opt/sentinelsuite/firedog/export/status.json)')
 
+    parser.add_argument('--check-updates', action='store_true',
+                       help='Controlla se è disponibile un aggiornamento (rispetta UPDATE_CHECK_INTERVAL_DAYS in firedog.conf)')
+
     args = parser.parse_args()
-    
+
+    # --version non richiede privilegi root: nessuna istanza di FirewallManager
+    # (che li impone per qualunque altro comando), solo lettura di un file.
+    if args.version:
+        print(read_local_version() or 'unknown')
+        return
+
     # Istanzia manager
     fw = FirewallManager()
     
@@ -1269,6 +1441,17 @@ Esempi:
 
     elif args.export_json is not None:
         fw.export_json(args.export_json)
+
+    elif args.check_updates:
+        result = fw.check_for_updates()
+        if not result.get('enabled'):
+            fw.info("Controllo aggiornamenti disabilitato (UPDATE_CHECK_INTERVAL_DAYS non impostato in firedog.conf)")
+        elif result.get('error'):
+            fw.warning(f"Controllo aggiornamenti fallito: {result['error']}")
+        elif result.get('update_available'):
+            fw.warning(f"Aggiornamento disponibile: v{result.get('local_version') or '?'} -> v{result.get('latest_version')}")
+        else:
+            fw.success(f"Nessun aggiornamento disponibile (locale: v{result.get('local_version') or 'unknown'})")
 
     else:
         parser.print_help()

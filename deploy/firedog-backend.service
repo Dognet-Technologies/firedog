@@ -1,8 +1,8 @@
 # FireDog Backend (Daphne ASGI)
-# Installazione:
-#   sudo cp deploy/firedog-backend.service /etc/systemd/system/
-#   (adatta User/Group/percorsi se il clone non è in /home/microcyber/firedog)
-#   sudo systemctl daemon-reload && sudo systemctl enable --now firedog-backend
+# Installazione automatica: deploy/install.sh (sostituisce i placeholder
+# __FIREDOG_USER__/__FIREDOG_DIR__ con i valori scelti in fase di install).
+# Installazione manuale: copia in /etc/systemd/system/ dopo aver sostituito
+# a mano i placeholder, poi `systemctl daemon-reload && enable --now`.
 
 [Unit]
 Description=FireDog Backend (Daphne ASGI)
@@ -10,11 +10,11 @@ After=network.target postgresql.service redis-server.service
 Requires=postgresql.service redis-server.service
 
 [Service]
-User=microcyber
-Group=microcyber
-WorkingDirectory=/home/microcyber/firedog/backend
-EnvironmentFile=/home/microcyber/firedog/backend/.env
-ExecStart=/home/microcyber/firedog/backend/venv/bin/daphne -b 0.0.0.0 -p 8000 firedog.asgi:application
+User=__FIREDOG_USER__
+Group=__FIREDOG_USER__
+WorkingDirectory=__FIREDOG_DIR__/backend
+EnvironmentFile=__FIREDOG_DIR__/backend/.env
+ExecStart=__FIREDOG_DIR__/backend/venv/bin/daphne -b 0.0.0.0 -p 8000 firedog.asgi:application
 Restart=always
 RestartSec=5
 StandardOutput=journal

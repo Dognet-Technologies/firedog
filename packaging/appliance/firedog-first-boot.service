@@ -1,0 +1,26 @@
+[Unit]
+Description=FireDog – rigenerazione segreti al primo avvio
+Documentation=file:///opt/firedog/deploy/first-boot.sh
+After=postgresql.service
+Wants=postgresql.service
+# NIENTE `Before=firedog-backend.service` qui: first-boot.sh chiama al suo
+# interno `systemctl restart firedog-backend ...` (step 8/9) per applicare i
+# segreti appena rigenerati. Se questa unit fosse ordinata PRIMA delle unit
+# firedog, quella restart sincrona e il vincolo d'ordine si bloccherebbero a
+# vicenda (systemd non può far partire firedog-backend finché first-boot non
+# è "completata", ma first-boot non completa finché la restart non ritorna)
+# — deadlock che fa fallire l'unit al TimeoutStartSec. Lasciando le unit
+# indipendenti, firedog parte in parallelo con le credenziali vecchie
+# (ancora valide in quel momento) e viene poi riavviato da first-boot con
+# quelle nuove — nessun ciclo. Stesso pattern già usato da SentinelCore.
+
+[Service]
+Type=oneshot
+ExecStart=/opt/firedog/deploy/first-boot.sh
+RemainAfterExit=no
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

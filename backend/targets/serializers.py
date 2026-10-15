@@ -73,6 +73,7 @@ class TargetSerializer(serializers.ModelSerializer):
             "is_active",
             "target_groups",
             "interfaces",
+            "config_overrides",
         ]
         read_only_fields = [
             "status",
@@ -82,6 +83,10 @@ class TargetSerializer(serializers.ModelSerializer):
             "error_message",
             "created_at",
             "updated_at",
+            # Scritto solo da agent_manager consumers.py sull'ack di
+            # update_config, mai via PATCH diretto (vedi
+            # TargetViewSet.update_threat_config).
+            "config_overrides",
         ]
 
     def get_target_groups(self, obj):
@@ -446,6 +451,16 @@ class FirewallStatsSerializer(serializers.ModelSerializer):
     """Serializer per statistiche firewall (traffico)"""
 
     target_hostname = serializers.CharField(source="target.hostname", read_only=True)
+    # Estratto da raw_json invece di esporre l'intero blob (già contiene
+    # rules/network_flows/threats, duplicati di altri endpoint dedicati).
+    # Vedi FirewallManager.check_for_updates in firewall-manager.py:
+    # {'enabled': bool, 'checked_at', 'local_version', 'latest_version',
+    #  'update_available': bool, 'error'} — {'enabled': False} se
+    # UPDATE_CHECK_INTERVAL_DAYS non è configurato sul target.
+    update_check = serializers.SerializerMethodField()
+
+    def get_update_check(self, obj):
+        return (obj.raw_json or {}).get("update_check")
 
     class Meta:
         model = FirewallStats
@@ -471,6 +486,7 @@ class FirewallStatsSerializer(serializers.ModelSerializer):
             "status",
             "collected_at",
             "imported_at",
+            "update_check",
         ]
         read_only_fields = ["id", "imported_at"]
 

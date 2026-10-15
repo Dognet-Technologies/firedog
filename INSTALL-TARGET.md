@@ -106,6 +106,16 @@ MONITORED_INTERFACES="eth0,eth1"
 # protetta a parte (auto-rilevata / $SSH_PORT), non va elencata qui.
 ALWAYS_OPEN_PORTS="80/tcp,443/tcp"
 
+# Sorgenti SSH sempre fidate (IP/CIDR, separate da virgola): bypassano
+# interamente SSH_PROTECT sotto (niente rate limit, niente ban). Per la
+# propria rete di management/bastion (VPN, jump host), non per esporre SSH
+# al pubblico — resta protetto solo dall'autenticazione SSH stessa.
+# Attenzione: aggiungere la porta 22 a ALWAYS_OPEN_PORTS sopra NON ha
+# questo effetto — quella porta è già intercettata da SSH_PROTECT prima
+# che ALWAYS_OPEN_PORTS venga anche solo valutato, per questo serve questa
+# lista separata.
+TRUSTED_SSH_SOURCES="10.10.0.0/24"
+
 # Protezione SSH brute-force: soglia (tentativi/finestra in secondi) e cosa
 # succede al suo superamento. SSH_PROTECT_BAN_DURATION: "0" nessun ban (solo
 # drop nella finestra, storico) | "<N>m"/"<N>h"/"<N>d" ban temporaneo |
@@ -115,6 +125,14 @@ ALWAYS_OPEN_PORTS="80/tcp,443/tcp"
 SSH_PROTECT_MAX_ATTEMPTS="4"
 SSH_PROTECT_WINDOW_SECONDS="60"
 SSH_PROTECT_BAN_DURATION="0"
+
+# Controllo periodico aggiornamenti del pacchetto target (giorni tra un
+# controllo e il successivo, "0" = disabilitato di default). Confronta il
+# file VERSION locale con quello pubblicato su stabile — solo
+# segnalazione, non installa nulla da solo. Agganciato al già esistente
+# export ogni 5 minuti (firewall-manager --export-json via crontab): si
+# auto-limita all'intervallo configurato qui.
+UPDATE_CHECK_INTERVAL_DAYS="0"
 ```
 
 Dopo aver modificato il file, applica con `sudo firewall-init.sh` (idempotente:
@@ -231,4 +249,12 @@ systemctl status ulogd2            # logging PCAP (su openSUSE: ulogd)
 systemctl status dog-agent         # agent connesso al master
 ls /opt/sentinelsuite/firedog      # layout base
 ```
+
+> **Verifica che valga la pena fare subito, non solo al primo check**: `systemctl status
+> ulogd2` appena dopo l'install risulta "active" anche su un sistema con il bug corretto in
+> v1.1.0 (installava `ulogd2` senza il sottopacchetto `ulogd2-pcap` su Debian/Ubuntu), perché
+> il demone continua a girare con la vecchia config finché non viene riavviato — il problema si
+> vede solo al primo restart o reboot. Conferma con `sudo systemctl restart ulogd2 && systemctl
+> is-active ulogd2`: se resta "active" in pochi secondi va tutto bene, se va in "failed" manca
+> `ulogd2-pcap` (`sudo apt-get install -y ulogd2-pcap`, vedi Troubleshooting nel README).
 

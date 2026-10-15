@@ -81,6 +81,18 @@ class Target(models.Model):
     )
     error_message = models.TextField(blank=True, help_text="Ultimo messaggio di errore")
 
+    # Vista server-side dell'ultima config threat-scoring nota/desiderata per
+    # questo target (agentThreatScoring.* — auto_block_threshold,
+    # auto_block_enabled, bruteforce_min_attempts, bruteforce_score_per_attempt,
+    # synflood_min_connections, synflood_score_per_conn). NON autoritativa
+    # finché il push (dispatch_command_to_agent action="update_config") non
+    # riceve l'ack di successo — stesso principio di firedog_version/status.
+    config_overrides = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Override threat-scoring per-target, applicati via push all'agent",
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

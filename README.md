@@ -15,6 +15,14 @@ Piattaforma di gestione centralizzata del firewall per flotte di host Linux — 
 > curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
 > ```
 
+## 🆕 Novità in v1.1.0
+
+- **HTTPS di default sul master** — nuovo installer automatico [`deploy/install.sh`](deploy/install.sh) (prima l'installazione era interamente manuale, vedi [INSTALL.md](INSTALL.md)): genera un certificato TLS self-signed, configura nginx con redirect `:80`→`:443`, e imposta `SECRET_KEY`/password DB generate automaticamente. `--skip-tls` per restare su solo-HTTP.
+- **Trasporto agent cifrato** — `dog-agent` supporta `wss://` verso il master, accettando anche certificati self-signed (stessa fiducia già richiesta al browser per lo stesso certificato — protegge da chi origlia passivamente sulla rete, non da un MITM attivo con pinning). `ws://` in chiaro resta supportato per compatibilità con master senza TLS. Consigliato aggiornare `url` in `agent.conf` da `ws://` a `wss://` sui target esistenti.
+- **Distribuzione come immagine VM** — `.qcow2` (KVM/Proxmox) e `.ova` (VirtualBox/VMware) prodotte da [`packaging/build-vm.sh`](packaging/build-vm.sh), stesso modello già in uso per SentinelCore: ogni clone rigenera al primo avvio segreti, password DB e certificato TLS (legato all'IP reale del clone), stampa le credenziali iniziali in `/etc/motd`.
+- **Impostazioni pcap** — path di salvataggio configurabile, scelta esplicita tra `tcpdump`/`tshark` (prima auto-rilevata in modo silenzioso), fino a 5 filtri custom riutilizzabili nell'analisi del traffico bloccato.
+- **Threat-score configurabile** — la formula di scoring di `dog-agent` (soglie di innesco brute-force/SYN-flood + punti per evento) non è più hardcoded: editabile per-target dalla UI (pagina target → Configurazione), pushata all'agent via comando remoto (`agent.conf` riscritto, servizio riavviato in automatico). **Default ricalibrati meno aggressivi**: prima bastavano ~8 tentativi SSH falliti per l'auto-block con la soglia di default, ora ne servono ~15.
+
 ## 🆕 Novità in v1.0.1
 
 - **Fix**: soglie di rate-limit del firewall (`SSH_PROTECT`, `SYN_FLOOD`) troppo aggressive — bastavano pochi tentativi ravvicinati di connessione legittima (SSH, tool di amministrazione/debug) per restare bloccati con "Connection reset by peer" o timeout. Default alzati: `SSH_PROTECT_MAX_ATTEMPTS` 4→20, `SYN_FLOOD` 10/s→50/s (burst 20→100, ora configurabile via `firedog.conf` come già era per SSH_PROTECT).
@@ -141,14 +149,27 @@ MONITORED_INTERFACES="eth0,eth1"
 # Porte da tenere sempre aperte in INPUT, prima della policy DROP finale.
 ALWAYS_OPEN_PORTS="80/tcp,443/tcp"
 
+# Sorgenti SSH sempre fidate (IP/CIDR, separate da virgola): bypassano del
+# tutto SSH_PROTECT, niente rate limit né ban. Pensato per la propria rete
+# di management/bastion (VPN, jump host) — NON un modo per aprire SSH al
+# pubblico, resta protetto solo dall'autenticazione SSH stessa.
+# ALWAYS_OPEN_PORTS non basta per SSH: quella porta viene già intercettata
+# da SSH_PROTECT prima che ALWAYS_OPEN_PORTS venga valutata, per questo
+# esiste questa lista separata.
+TRUSTED_SSH_SOURCES="10.10.0.0/24"
+
 # Protezione SSH brute-force: soglia/finestra e cosa succede al superamento.
 # BAN_DURATION: "0" nessun ban | "<N>m"/"<N>h"/"<N>d" temporaneo | "permanent"
 SSH_PROTECT_MAX_ATTEMPTS="4"
 SSH_PROTECT_WINDOW_SECONDS="60"
 SSH_PROTECT_BAN_DURATION="0"
+
+# Controllo periodico aggiornamenti pacchetto target (giorni, "0" = disabilitato).
+# Solo segnalazione — non installa nulla da solo.
+UPDATE_CHECK_INTERVAL_DAYS="0"
 ```
 
-> **Importante**: `ALWAYS_OPEN_PORTS` va valorizzato **prima** di lanciare `firewall-init.sh` la prima volta — senza, qualunque servizio su quelle porte diventa irraggiungibile appena la policy DROP entra in vigore. Dopo una modifica, riapplica con `sudo firewall-init.sh`.
+> **Importante**: `ALWAYS_OPEN_PORTS` e `TRUSTED_SSH_SOURCES` vanno valorizzati **prima** di lanciare `firewall-init.sh` la prima volta — senza, qualunque servizio su quelle porte diventa irraggiungibile (o SSH resta soggetto al rate-limit) appena la policy DROP entra in vigore. Dopo una modifica, riapplica con `sudo firewall-init.sh`.
 
 Gestione ban SSH attivi:
 ```bash
@@ -177,6 +198,10 @@ sudo firewall-manager --remove INPUT 5
 # Ban SSH
 firewall-manager --list-bans
 sudo firewall-manager --unban 203.0.113.5
+
+# Versione e aggiornamenti
+firewall-manager --version                # versione installata del pacchetto target
+sudo firewall-manager --check-updates     # controlla se è disponibile una versione più recente
 ```
 
 Sul master, le stesse operazioni si fanno da UI o via API REST (`/api/rules/`, `/api/settings/...`) — vedi [ROLES_AND_PERMISSIONS.md](backend/ROLES_AND_PERMISSIONS.md).
@@ -241,11 +266,13 @@ firedog/
 
 **Non riesco più a connettermi via SSH dopo l'attivazione del firewall**
 ```bash
-# da console fisica/IPMI/seriale
+# da console fisica/IPMI/seriale, sblocco immediato (non persiste al rilancio di firewall-init.sh)
 sudo iptables -I INPUT 1 -p tcp --dport 22 -j ACCEPT
 sudo firewall-manager --save
 ```
 Se hai configurato un ban SSH (capitolo Configurazione), controlla anche `firewall-manager --list-bans` — potresti aver bannato te stesso durante un test.
+
+Per non doverlo rifare a ogni rilancio di `firewall-init.sh`, aggiungi la tua rete di management a `TRUSTED_SSH_SOURCES` in `firedog.conf` (vedi capitolo Configurazione) e rilancia `firewall-init.sh` — diventa una regola permanente del ruleset invece di una patch manuale.
 
 **Un servizio non è raggiungibile dopo l'attivazione della policy DROP**
 ```bash
@@ -253,6 +280,22 @@ sudo netstat -tulpn | grep <servizio>
 sudo firewall-manager --add-input <PORTA> --comment "Nome servizio"
 # oppure aggiungi la porta a ALWAYS_OPEN_PORTS in firedog.conf e rilancia firewall-init.sh
 ```
+
+**`ulogd2`/`ulogd` va in "failed" o si blocca dopo un restart/reboot (traccato PCAP vuoto)**
+
+Bug corretto dalla v1.1.0 (`install.sh` installava `ulogd2` senza il sottopacchetto PCAP su
+Debian/Ubuntu): se hai installato una versione precedente, su quei sistemi `ulogd.conf` di
+FireDog usa uno stack con output PCAP che quel plugin non trova — il demone resta "attivo" solo
+perché continua a girare con la vecchia config fino al primo restart o reboot, poi fallisce
+("not even a single working plugin stack" in `/var/log/ulogd/ulogd.log`; su Debian si blocca per
+~90s con "Failed to create reference to PID ... Invalid argument" nel journal, su Ubuntu esce
+subito con exit-code). Remediation su un target già installato, senza aggiornare l'intero
+pacchetto:
+```bash
+sudo apt-get install -y ulogd2-pcap
+sudo systemctl restart ulogd2
+```
+openSUSE/SLES non è affetto (`ulogd-pcap` era già nella lista di installazione).
 
 **Il target non risulta online sul master**
 ```bash

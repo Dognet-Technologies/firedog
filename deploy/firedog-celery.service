@@ -1,5 +1,6 @@
 # FireDog Celery Worker
-# Installazione: vedi INSTALL.md (sezione systemd)
+# Installazione automatica: deploy/install.sh (sostituisce i placeholder
+# __FIREDOG_USER__/__FIREDOG_DIR__). Manuale: vedi INSTALL.md.
 
 [Unit]
 Description=FireDog Celery Worker
@@ -7,11 +8,11 @@ After=network.target postgresql.service redis-server.service
 Requires=postgresql.service redis-server.service
 
 [Service]
-User=microcyber
-Group=microcyber
-WorkingDirectory=/home/microcyber/firedog/backend
-EnvironmentFile=/home/microcyber/firedog/backend/.env
-ExecStart=/home/microcyber/firedog/backend/venv/bin/celery -A firedog worker -l info
+User=__FIREDOG_USER__
+Group=__FIREDOG_USER__
+WorkingDirectory=__FIREDOG_DIR__/backend
+EnvironmentFile=__FIREDOG_DIR__/backend/.env
+ExecStart=__FIREDOG_DIR__/backend/venv/bin/celery -A firedog worker -l info
 Restart=always
 RestartSec=5
 StandardOutput=journal

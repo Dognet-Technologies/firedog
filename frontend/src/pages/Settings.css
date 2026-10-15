@@ -129,124 +129,228 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 8px;
-  padding: 2rem;
+  padding: 1.75rem 2rem;
 }
 
-.section-title {
-  font-size: 1.5rem;
+.settings-page .section-title {
+  font-size: 1.05rem;
   font-weight: 600;
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.3rem 0;
   color: #00d4ff;
 }
 
-.section-description {
+.settings-page .section-description {
   color: rgba(255, 255, 255, 0.5);
-  margin: 0 0 2rem 0;
-  font-size: 0.9rem;
+  margin: 0 0 1.25rem 0;
+  font-size: 0.8rem;
 }
 
 .section-header-with-action {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 /* ============================================================================
-   FORM ELEMENTS
+   FORM ELEMENTS — layout a righe, etichetta fissa a sinistra + campo a
+   destra (pattern GitHub/Stripe/Linear). Prima ogni .form-group era una
+   card in una griglia auto-fit multi-colonna: con contenuti di altezza
+   molto diversa (un checkbox vs. un campo con hint vs. una lista di chip)
+   le colonne non si allineavano mai davvero tra una sezione e l'altra.
+   Selettori scoped sotto .settings-page: .form-group/.checkbox-label/
+   .form-hint sono nomi riusati anche da Targets.css/Integrity.css/
+   Discovery.css (stesso bundle CSS globale) — senza lo scope qui sopra
+   queste regole uscirebbero dalla pagina Settings.
    ============================================================================ */
 
 .settings-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
-}
-
-.form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
-.form-group label {
-  font-size: 0.85rem;
+.settings-page .form-group {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  column-gap: 2rem;
+  row-gap: 0.35rem;
+  align-items: start;
+  padding: 0.95rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-grid > .form-group:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settings-grid > .form-group:first-child {
+  padding-top: 0;
+}
+
+/* Etichetta di campo "vera" (non un checkbox): ancorata in alto a
+   sinistra, il resto del contenuto del form-group (input, hint, liste di
+   chip...) si auto-posiziona in colonna 2, impilato, senza bisogno di
+   avvolgerlo in un wrapper dedicato in JSX. */
+.settings-page .form-group > label {
+  grid-column: 1;
+  grid-row: 1;
+  padding-top: 0.55rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.55);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 
-.form-group .input,
-.form-group input[type="text"],
-.form-group input[type="email"],
-.form-group input[type="url"],
-.form-group input[type="number"],
-.form-group select,
-.form-group textarea {
+.settings-page .form-group > *:not(label) {
+  grid-column: 2;
+}
+
+/* Checkbox: il testo accanto alla checkbox È l'etichetta del campo, non
+   c'è una colonna sinistra separata — occupa l'intera riga. */
+.settings-page .form-group > label.checkbox-label {
+  grid-column: 1 / -1;
+  padding-top: 0;
+}
+
+.settings-page .form-group > label.checkbox-label + .form-hint {
+  grid-column: 1 / -1;
+}
+
+.settings-page .form-group .input,
+.settings-page .form-group input[type="text"],
+.settings-page .form-group input[type="email"],
+.settings-page .form-group input[type="url"],
+.settings-page .form-group input[type="number"],
+.settings-page .form-group select {
   width: 100%;
-  padding: 0.75rem;
+  max-width: 420px;
+  padding: 0.55rem 0.75rem;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   color: rgba(255, 255, 255, 0.9);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   transition: all 0.2s ease;
   font-family: inherit;
 }
 
-.form-group .input:focus,
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
+.settings-page .form-group textarea {
+  width: 100%;
+  max-width: 520px;
+  padding: 0.55rem 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.settings-page .form-group .input:focus,
+.settings-page .form-group input:focus,
+.settings-page .form-group select:focus,
+.settings-page .form-group textarea:focus {
   outline: none;
   border-color: rgba(0, 212, 255, 0.5);
   background: rgba(255, 255, 255, 0.08);
   box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
 }
 
-.form-group .input::placeholder,
-.form-group input::placeholder,
-.form-group textarea::placeholder {
+.settings-page .form-group .input::placeholder,
+.settings-page .form-group input::placeholder,
+.settings-page .form-group textarea::placeholder {
   color: rgba(255, 255, 255, 0.3);
 }
 
-.form-group select {
+.settings-page .form-group select {
   cursor: pointer;
 }
 
-.form-hint {
-  font-size: 0.8rem;
+.settings-page .form-hint {
+  font-size: 0.78rem;
   color: rgba(255, 255, 255, 0.4);
-  margin-top: -0.25rem;
+  margin: 0;
+  max-width: 480px;
+}
+
+/* Chip lists (destinatari email, filtri pcap custom) — scoped sotto
+   .settings-page come il resto del file: nomi generici (.chip ecc.) che
+   un'altra pagina potrebbe ragionevolmente riusare per un tag/badge. */
+.settings-page .email-input-group {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 480px;
+}
+
+.settings-page .email-input-group .input {
+  flex: 1;
+  max-width: none;
+}
+
+.settings-page .email-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.settings-page .chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem 0.35rem 0.75rem;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.settings-page .chip-remove {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.settings-page .chip-remove:hover {
+  color: #ff4d4d;
 }
 
 /* Checkbox Labels */
-.checkbox-label {
-  display: flex;
+.settings-page .checkbox-label {
+  display: inline-flex;
   align-items: center;
   gap: 0.75rem;
   cursor: pointer;
-  padding: 0.75rem;
+  padding: 0.6rem 0.85rem;
   border-radius: 6px;
   transition: background 0.2s ease;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.checkbox-label:hover {
+.settings-page .checkbox-label:hover {
   background: rgba(0, 212, 255, 0.05);
   border-color: rgba(0, 212, 255, 0.2);
 }
 
-.checkbox-label input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+.settings-page .checkbox-label input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
   cursor: pointer;
   accent-color: #00d4ff;
+  flex-shrink: 0;
 }
 
-.checkbox-label span {
-  font-size: 0.9rem;
+.settings-page .checkbox-label span {
+  font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.9);
   font-weight: 500;
 }
@@ -254,6 +358,7 @@
 /* Sliders */
 .slider {
   width: 100%;
+  max-width: 420px;
   height: 6px;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.1);
@@ -292,9 +397,26 @@
 .slider-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 0.75rem;
+  max-width: 420px;
+  font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.4);
   margin-top: 0.25rem;
+}
+
+@media (max-width: 720px) {
+  .settings-page .form-group {
+    grid-template-columns: 1fr;
+    row-gap: 0.5rem;
+  }
+
+  .settings-page .form-group > label {
+    grid-column: 1;
+    padding-top: 0;
+  }
+
+  .settings-page .form-group > *:not(label) {
+    grid-column: 1;
+  }
 }
 
 /* ============================================================================

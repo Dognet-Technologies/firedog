@@ -18,8 +18,11 @@ class SettingsConfig(AppConfig):
         # Import signals
         # from . import signals
 
-        # Inizializza impostazioni default se necessario
-        # self._initialize_default_settings()
+        # _initialize_default_settings() fa query DB — NON richiamarla da
+        # qui: ready() gira anche durante `manage.py migrate` prima che la
+        # tabella system_settings esista, e romperebbe le migrazioni. Le
+        # chiavi mancanti restano semplicemente assenti finché il frontend
+        # non fa il primo salvataggio (usa i default locali fino ad allora).
         pass
 
     def _initialize_default_settings(self):
@@ -49,7 +52,10 @@ class SettingsConfig(AppConfig):
             "scanInterval": {"value": 60, "category": "monitoring"},
             "logRetention": {"value": 30, "category": "monitoring"},
             "enableAutoBlock": {"value": True, "category": "monitoring"},
-            "threatThreshold": {"value": 8, "category": "monitoring"},
+            "alertNotificationMinScore": {"value": 8, "category": "monitoring"},
+            "pcapSavePath": {"value": "/var/log/ulogd", "category": "monitoring"},
+            "pcapAnalysisTool": {"value": "tcpdump", "category": "monitoring"},
+            "pcapCustomFilters": {"value": [], "category": "monitoring"},
         }
 
         for key, config in default_settings.items():
