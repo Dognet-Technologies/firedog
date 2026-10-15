@@ -33,7 +33,7 @@ from mcp.views import MCPView, MCPAPIKeyViewSet
 
 # Import Log Views
 from api.views import LogAPIView, LogSourcesAPIView
-from api.views_system import SystemUpdateCheckView, SystemUpdateInstallView
+from api.views_system import SystemUpdateCheckView, SystemUpdateInstallView, SystemVersionView
 from api.views_dashboard import FleetTrafficView, FleetGeoView, FleetActivityView
 
 # Router per API REST
@@ -70,6 +70,7 @@ urlpatterns = [
     path("api/logs/", LogAPIView.as_view(), name="logs"),
     path("api/logs/sources/", LogSourcesAPIView.as_view(), name="logs-sources"),
     # System update (git pull + build + migrate + restart)
+    path("api/system/version/", SystemVersionView.as_view(), name="system-version"),
     path("api/system/update/check/", SystemUpdateCheckView.as_view(), name="system-update-check"),
     path("api/system/update/install/", SystemUpdateInstallView.as_view(), name="system-update-install"),
     # Dashboard aggregations
