@@ -5,6 +5,9 @@
 # Base dir layout (all management/config lives under /opt/sentinelsuite/firedog):
 #
 #   /opt/sentinelsuite/firedog/
+#     ├── VERSION              versione installata del pacchetto target (fonte
+#     │                        unica — letta da firewall-manager --version e
+#     │                        riportata al master via --export-json)
 #     ├── bin/                 firewall-manager, traffic-analyzer, firewall-init.sh
 #     ├── conf/                ulogd.conf, custom_rules.conf.example, firedog-cron,
 #     │                        firewall-fm.service, firewall-pcap-logrotate,
@@ -137,6 +140,7 @@ echo -e "${GREEN}[3/7]${NC} binaries"
 install -m 0755 "${SCRIPT_DIR}/firewall-manager.py" "${BASE_DIR}/bin/firewall-manager"
 install -m 0755 "${SCRIPT_DIR}/traffic-analyzer.py" "${BASE_DIR}/bin/traffic-analyzer"
 install -m 0755 "${SCRIPT_DIR}/firewall-init.sh"    "${BASE_DIR}/bin/firewall-init.sh"
+install -m 0644 "${SCRIPT_DIR}/VERSION"             "${BASE_DIR}/VERSION"
 ln -sfn "${BASE_DIR}/bin/firewall-manager" /usr/local/bin/firewall-manager
 ln -sfn "${BASE_DIR}/bin/traffic-analyzer" /usr/local/bin/traffic-analyzer
 ln -sfn "${BASE_DIR}/bin/firewall-init.sh" /usr/local/sbin/firewall-init.sh
