@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Count
+from django.db.models import Count, Max
 from .models import ThreatLog
 from .serializers import (
     ThreatLogSerializer,
@@ -41,7 +41,7 @@ class ThreatLogViewSet(viewsets.ModelViewSet):
             "unresolved_threats": queryset.filter(is_resolved=False).count(),
             "top_attackers": list(
                 queryset.values("source_ip")
-                .annotate(count=Count("id"))
+                .annotate(count=Count("id"), max_score=Max("threat_score"))
                 .order_by("-count")[:10]
             ),
             "recent_threats": ThreatLogListSerializer(

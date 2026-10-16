@@ -172,6 +172,7 @@ export interface ThreatStats {
   top_attackers: Array<{
     source_ip: string;
     count: number;
+    max_score: number;
   }>;
   recent_threats: ThreatLog[];
 }
