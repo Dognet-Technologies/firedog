@@ -136,6 +136,19 @@ chmod -R o+rX "$BASE/frontend/build"
 # fallisce con Permission Denied scrivendo dentro una dir non sua.
 chown -R "$SVC_USER:$SVC_USER" "$BASE/backend" "$BASE/frontend"
 
+# Dipendenza nuova introdotta in questa release (Discovery): un'istanza che
+# arriva qui da update, non da install.sh, non l'avrebbe mai presa altrimenti.
+if ! command -v arp-scan >/dev/null 2>&1; then
+  apt-get install -y -qq arp-scan >/dev/null 2>&1 || true
+fi
+if [ -f "$PKG_DIR/deploy/sudoers-arp-scan" ] && [ ! -f /etc/sudoers.d/firedog-arp-scan ]; then
+  SUDOERS_TMP="$(mktemp)"
+  sed "s#__FIREDOG_USER__#${SVC_USER}#g" "$PKG_DIR/deploy/sudoers-arp-scan" > "$SUDOERS_TMP"
+  visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1 && \
+    install -m 0440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/firedog-arp-scan
+  rm -f "$SUDOERS_TMP"
+fi
+
 # Il tarball di release non porta un venv (gitignored, vedi build-release.sh):
 # va creato da zero per il backend appena copiato, non "aggiornato" — quello
 # vecchio è stato eliminato insieme al resto di backend/ sopra (sopravvive
