@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.contrib.auth import update_session_auth_hash
 from datetime import timedelta
 import logging
+import shlex
 from .tasks import send_test_notification
 from .models import (
     SystemSettings,
@@ -50,6 +51,33 @@ PCAP_SETTINGS_KEYS = {
     "pcapCustomFilters": "pcap_custom_filters",
 }
 MAX_PCAP_FILTERS = 5
+MAX_PCAP_FILTER_LENGTH = 200
+
+
+def _validate_pcap_filter_string(filter_str: str) -> str | None:
+    """Ritorna un messaggio d'errore se il filtro NON è accettabile, None
+    se è valido. Stessa regola (e stesso motivo) di validate_pcap_filter()
+    in firedog-package/firewall-manager.py — duplicata qui, non importabile
+    da un repo a un altro: il target esegue questo filtro passandolo come
+    UN SOLO argomento a tcpdump/tshark (mai shlex.split in più argv), ma
+    bloccare qui — prima ancora che il filtro venga salvato e pushato a
+    qualunque target — è la prima rete, non l'unica. Un token che inizia
+    con '-' non è mai sintassi BPF/display-filter legittima (keyword/
+    operatori/valori, mai flag): bloccarlo previene che un filtro tipo
+    "-C 1 -z /path/evil and host X" diventi mai eseguibile, qualora in
+    futuro un punto qualsiasi della pipeline lo tokenizzasse per errore.
+    """
+    if not filter_str or not filter_str.strip():
+        return "il filtro non può essere vuoto"
+    if len(filter_str) > MAX_PCAP_FILTER_LENGTH:
+        return f"supera la lunghezza massima di {MAX_PCAP_FILTER_LENGTH} caratteri"
+    try:
+        tokens = shlex.split(filter_str)
+    except ValueError as e:
+        return f"sintassi non valida: {e}"
+    if any(tok.startswith("-") for tok in tokens):
+        return "non può contenere token che iniziano con '-' (riservato a flag, non ammessi in un filtro)"
+    return None
 
 
 def _build_pcap_sync_payload(settings_data: dict) -> tuple[dict, dict]:
@@ -80,6 +108,14 @@ def _build_pcap_sync_payload(settings_data: dict) -> tuple[dict, dict]:
                 errors[ui_key] = "deve essere una lista di stringhe"
                 continue
             value = value[:MAX_PCAP_FILTERS]
+            filter_errors = [
+                f"'{f}': {msg}"
+                for f in value
+                if (msg := _validate_pcap_filter_string(f)) is not None
+            ]
+            if filter_errors:
+                errors[ui_key] = "; ".join(filter_errors)
+                continue
         payload[agent_key] = value
     return payload, errors
 
