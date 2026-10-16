@@ -4,9 +4,10 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, LineChart, Line } from 'recharts';
 import apiService from '../services/api';
 import type { Target, FirewallRule, ThreatLog, FileIntegrity, NetworkInterface } from '../types';
+import { useLegendToggle } from '../hooks/useLegendToggle';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useTarget } from '../contexts/TargetContext';
 import StatusDot from '../components/shared/StatusDot';
@@ -82,6 +83,9 @@ const TargetDetail: React.FC = () => {
   const [latestStats, setLatestStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
+  // Un solo stato di toggle condiviso tra il chart Traffic dell'Overview e
+  // quello della tab Traffic: stessa trafficData, stesse dataKey ('in'/'out').
+  const trafficLegend = useLegendToggle(['in', 'out']);
 
   // Config form state
   const [configForm, setConfigForm] = useState({ hostname: '', description: '', ip_address: '' });
@@ -638,8 +642,9 @@ const TargetDetail: React.FC = () => {
                     <Tooltip
                       contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: '8px' }}
                     />
-                    <Area type="monotone" dataKey="in" stroke="var(--accent-primary)" fill="url(#tdIn)" name="Inbound" />
-                    <Area type="monotone" dataKey="out" stroke="var(--status-warning)" fill="url(#tdOut)" name="Outbound" />
+                    <Legend wrapperStyle={{ fontSize: '12px', cursor: 'pointer' }} onClick={trafficLegend.onLegendClick} />
+                    <Area type="monotone" dataKey="in" stroke="var(--accent-primary)" fill="url(#tdIn)" name="Inbound" hide={trafficLegend.hidden.in} />
+                    <Area type="monotone" dataKey="out" stroke="var(--status-warning)" fill="url(#tdOut)" name="Outbound" hide={trafficLegend.hidden.out} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -944,6 +949,31 @@ const TargetDetail: React.FC = () => {
               <h2>Traffic Analysis</h2>
             </div>
 
+            <div className="td-stat-cards" style={{ marginBottom: '24px' }}>
+              <DataTooltip title="Dropped Inbound" type="last"
+                description="Totale cumulativo dei pacchetti in ingresso droppati dal firewall (chain LOG_INPUT_DROP), da quando l'agente ha iniziato a loggarli. Non è un delta: cresce finché il contatore non viene azzerato (es. riavvio del firewall)."
+                source="FirewallStats.dropped_input_packets">
+                <div className="td-stat-card">
+                  <div className="td-stat-card-label">Dropped Inbound</div>
+                  <div className="td-stat-card-value">
+                    {latestStats?.dropped_input_packets != null ? latestStats.dropped_input_packets.toLocaleString() : '—'}
+                  </div>
+                  <div className="td-stat-card-sub">pkt totali · cumulativo</div>
+                </div>
+              </DataTooltip>
+              <DataTooltip title="Dropped Outbound" type="last"
+                description="Totale cumulativo dei pacchetti in uscita droppati dal firewall (chain LOG_OUTPUT_DROP), da quando l'agente ha iniziato a loggarli. Include anche traffico bloccato dalla whitelist egress del target prima che lasci l'host. Non è un delta."
+                source="FirewallStats.dropped_output_packets">
+                <div className="td-stat-card">
+                  <div className="td-stat-card-label">Dropped Outbound</div>
+                  <div className="td-stat-card-value">
+                    {latestStats?.dropped_output_packets != null ? latestStats.dropped_output_packets.toLocaleString() : '—'}
+                  </div>
+                  <div className="td-stat-card-sub">pkt totali · cumulativo</div>
+                </div>
+              </DataTooltip>
+            </div>
+
             <div className="td-charts-grid">
               <DataTooltip title="Traffic In/Out (48h)" type="delta"
                 description="Andamento dei pacchetti di rete nelle ultime 48 ore, campionato ogni 30 minuti. Ogni punto è la variazione (delta) rispetto al campione precedente dei contatori cumulativi di FirewallStats. Inbound = ingresso, Outbound = uscita."
@@ -968,8 +998,9 @@ const TargetDetail: React.FC = () => {
                     <Tooltip
                       contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: '8px' }}
                     />
-                    <Area type="monotone" dataKey="in" stroke="var(--accent-primary)" fill="url(#tdIn2)" name="Inbound" />
-                    <Area type="monotone" dataKey="out" stroke="var(--status-warning)" fill="url(#tdOut2)" name="Outbound" />
+                    <Legend wrapperStyle={{ fontSize: '12px', cursor: 'pointer' }} onClick={trafficLegend.onLegendClick} />
+                    <Area type="monotone" dataKey="in" stroke="var(--accent-primary)" fill="url(#tdIn2)" name="Inbound" hide={trafficLegend.hidden.in} />
+                    <Area type="monotone" dataKey="out" stroke="var(--status-warning)" fill="url(#tdOut2)" name="Outbound" hide={trafficLegend.hidden.out} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

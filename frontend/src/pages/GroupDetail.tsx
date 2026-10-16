@@ -4,11 +4,12 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import apiService from '../services/api';
 import DataTooltip from '../components/shared/DataTooltip';
 import type { Target, FirewallRule, ThreatLog } from '../types';
 import { useNotifications } from '../contexts/NotificationContext';
+import { useLegendToggle } from '../hooks/useLegendToggle';
 import StatusDot from '../components/shared/StatusDot';
 import SeverityBadge from '../components/shared/SeverityBadge';
 import TabBar from '../components/shared/TabBar';
@@ -68,6 +69,7 @@ const GroupDetail: React.FC = () => {
   const [members, setMembers] = useState<Target[]>([]);
   const [rules, setRules] = useState<FirewallRule[]>([]);
   const [threats, setThreats] = useState<ThreatLog[]>([]);
+  const trafficLegend = useLegendToggle(['inbound', 'outbound']);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
@@ -1019,8 +1021,9 @@ const GroupDetail: React.FC = () => {
                       <XAxis dataKey="time" tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} />
                       <Tooltip {...CHART_TOOLTIP_STYLE} />
-                      <Area type="monotone" dataKey="inbound" stroke="var(--accent-primary)" fill="url(#gdIn)" strokeWidth={2} name="Inbound" />
-                      <Area type="monotone" dataKey="outbound" stroke="var(--status-success)" fill="url(#gdOut)" strokeWidth={2} name="Outbound" />
+                      <Legend wrapperStyle={{ fontSize: '12px', cursor: 'pointer' }} onClick={trafficLegend.onLegendClick} />
+                      <Area type="monotone" dataKey="inbound" stroke="var(--accent-primary)" fill="url(#gdIn)" strokeWidth={2} name="Inbound" hide={trafficLegend.hidden.inbound} />
+                      <Area type="monotone" dataKey="outbound" stroke="var(--status-success)" fill="url(#gdOut)" strokeWidth={2} name="Outbound" hide={trafficLegend.hidden.outbound} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
