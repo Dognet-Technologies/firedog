@@ -47,6 +47,11 @@ interface SettingsData {
   pcapSavePath: string;
   pcapAnalysisTool: 'tcpdump' | 'tshark';
   pcapCustomFilters: string[];
+  // Comandi tcpdump curati (whitelist fissa, vedi PCAP_THREAT_COMMAND_OPTIONS
+  // sotto) eseguiti per ogni IP già scorato come minaccia — alimentano il
+  // pannello Dettagli nella pagina Threats. A differenza di pcapCustomFilters
+  // non è testo libero: multi-select tra chiavi note.
+  pcapThreatCommands: string[];
 
   // Default globali della formula threat-score lato agent (dog_agent) —
   // proposti quando si apre il pannello "push al target" nella pagina di
@@ -65,6 +70,18 @@ interface SettingsData {
 
 const MAX_PCAP_FILTERS = 5;
 
+// Whitelist fissa dei comandi tcpdump curati per il pannello Dettagli
+// minaccia — stesse chiavi di VALID_THREAT_COMMAND_KEYS (dog_agent) e
+// _pcap_threat_command_specs (firewall-manager.py). Multi-select, non testo
+// libero: l'utente sceglie quali eseguire, mai la sintassi del comando.
+const PCAP_THREAT_COMMAND_OPTIONS: Array<{ key: string; label: string; hint: string }> = [
+  { key: 'summary', label: 'Riepilogo pacchetti', hint: 'Una riga per pacchetto, vista rapida' },
+  { key: 'tcp_flags', label: 'Dettaglio flag TCP', hint: 'Distingue SYN scan da FIN/NULL/XMAS scan' },
+  { key: 'timing', label: 'Timing assoluto', hint: 'Scan rapido vs attività sparsa nel tempo' },
+  { key: 'hex_dump', label: 'Hex/ASCII dump', hint: 'Payload dei primi 20 pacchetti' },
+  { key: 'icmp', label: 'Attività ICMP', hint: 'Rileva ping sweep' },
+];
+
 const SETTINGS_CATEGORY: Record<keyof SettingsData, string> = {
   systemName: 'general', timezone: 'general', language: 'general',
   theme: 'appearance', fontFamily: 'appearance', fontSize: 'appearance',
@@ -76,6 +93,7 @@ const SETTINGS_CATEGORY: Record<keyof SettingsData, string> = {
   scanInterval: 'monitoring', logRetention: 'monitoring', enableAutoBlock: 'monitoring',
   alertNotificationMinScore: 'monitoring', pcapSavePath: 'monitoring',
   pcapAnalysisTool: 'monitoring', pcapCustomFilters: 'monitoring',
+  pcapThreatCommands: 'monitoring',
   agentAutoBlockThreshold: 'monitoring', agentAutoBlockEnabled: 'monitoring',
   agentBruteforceMinAttempts: 'monitoring', agentBruteforceScorePerAttempt: 'monitoring',
   agentSynfloodMinConnections: 'monitoring', agentSynfloodScorePerConn: 'monitoring',
@@ -290,6 +308,7 @@ const Settings: React.FC = () => {
     pcapSavePath: '/var/log/ulogd',
     pcapAnalysisTool: 'tcpdump',
     pcapCustomFilters: [],
+    pcapThreatCommands: [],
     // Ricalibrati in v1.1.0 (meno aggressivi degli storici 5/×10, 20/×3 —
     // vedi dog_agent/src/config.rs per il razionale)
     agentAutoBlockThreshold: 75,
@@ -2085,7 +2104,35 @@ const Settings: React.FC = () => {
             ))}
           </div>
           <span className="form-hint">
-            Sintassi BPF per tcpdump (es. "tcp port 22") o display filter per tshark (es. "tcp.port == 22") a seconda del tool scelto sopra — nessuna validazione, stessa responsabilità di chi scrive la stringa
+            Sintassi BPF per tcpdump (es. "tcp port 22") o display filter per tshark (es. "tcp.port == 22") a seconda del tool scelto sopra — un filtro con token che iniziano con '-' viene rifiutato al salvataggio (riservato a flag, non ammessi)
+          </span>
+        </div>
+
+        <div className="form-group">
+          <label>Comandi tcpdump per il pannello Dettagli minaccia</label>
+          <div className="pcap-threat-commands-list">
+            {PCAP_THREAT_COMMAND_OPTIONS.map(opt => {
+              const checked = settings.pcapThreatCommands.includes(opt.key);
+              return (
+                <label key={opt.key} className="pcap-threat-command-item">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      const next = checked
+                        ? settings.pcapThreatCommands.filter(k => k !== opt.key)
+                        : [...settings.pcapThreatCommands, opt.key];
+                      handleInputChange('pcapThreatCommands', next);
+                    }}
+                  />
+                  <span className="pcap-threat-command-label">{opt.label}</span>
+                  <span className="pcap-threat-command-hint">{opt.hint}</span>
+                </label>
+              );
+            })}
+          </div>
+          <span className="form-hint">
+            Eseguiti sul target contro input_dropped.pcap per ogni IP già segnalato come minaccia (score ≥ soglia) — alimentano il pannello "Dettagli" nella pagina Threats. Nessuno selezionato = nessun costo extra sul target.
           </span>
         </div>
       </div>

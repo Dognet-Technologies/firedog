@@ -988,19 +988,31 @@ class AgentConsumer(AsyncWebsocketConsumer):
             except (TypeError, ValueError):
                 dest_port = None
 
+            # pcap_detail: output dei comandi tcpdump curati per questo IP
+            # (vedi get_pcap_threat_detail in firewall-manager.py), presente
+            # solo se Settings > pcapThreatCommands ha almeno un comando
+            # abilitato. Aggiorna pcap_detail_updated_at solo quando arriva
+            # davvero un payload non vuoto — un sync che non lo include
+            # (es. comandi disabilitati) non deve cancellare l'ultimo noto.
+            defaults = {
+                "threat_score": score,
+                "severity": severity,
+                "packet_count": attempts,
+                "reasons": reasons,
+                "description": ", ".join(str(r) for r in reasons)[:512],
+                "protocol": proto,
+                "dest_port": dest_port,
+            }
+            pcap_detail = t.get("pcap_detail")
+            if isinstance(pcap_detail, dict) and pcap_detail:
+                defaults["pcap_detail"] = pcap_detail
+                defaults["pcap_detail_updated_at"] = timezone.now()
+
             ThreatLog.objects.update_or_create(
                 target=self.target,
                 source_ip=ip,
                 is_resolved=False,
-                defaults={
-                    "threat_score": score,
-                    "severity": severity,
-                    "packet_count": attempts,
-                    "reasons": reasons,
-                    "description": ", ".join(str(r) for r in reasons)[:512],
-                    "protocol": proto,
-                    "dest_port": dest_port,
-                },
+                defaults=defaults,
             )
 
     @database_sync_to_async

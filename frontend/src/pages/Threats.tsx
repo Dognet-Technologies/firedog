@@ -34,6 +34,11 @@ const Threats: React.FC = () => {
   // Dettaglio minaccia selezionata
   const [selectedThreat, setSelectedThreat] = useState<ThreatLog | null>(null);
   const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
+  // Sync pcap on-demand: al click di "Dettagli" chiediamo subito un export
+  // fresco al target (stesso meccanismo di "Sync Rules"), poi ri-fetchiamo
+  // il singolo threat per mostrare pcap_detail aggiornato — non aspettiamo
+  // il prossimo ciclo di 5 minuti.
+  const [syncingPcap, setSyncingPcap] = useState<boolean>(false);
 
   // Aggiorna il filtro target quando cambia il target globale
   useEffect(() => {
@@ -101,6 +106,27 @@ const Threats: React.FC = () => {
   const openDetail = (threat: ThreatLog) => {
     setSelectedThreat(threat);
     setShowDetailModal(true);
+
+    // Chiede un export fresco al target (stesso comando di "Sync Rules" in
+    // Target Detail) invece di aspettare il prossimo ciclo periodico di 5
+    // minuti — poi ri-fetcha il singolo threat per il pcap_detail aggiornato.
+    // Best-effort: se il target è offline o la sync fallisce, il modal resta
+    // comunque utilizzabile con l'ultimo pcap_detail noto (se presente).
+    setSyncingPcap(true);
+    apiService.syncTargetRules(threat.target)
+      .catch((err) => console.error('Sync pcap detail fallita:', err))
+      .finally(() => {
+        setTimeout(async () => {
+          try {
+            const fresh = await apiService.getThreat(threat.id);
+            setSelectedThreat((prev) => (prev && prev.id === threat.id ? fresh : prev));
+          } catch (err) {
+            console.error('Refetch threat dopo sync fallito:', err);
+          } finally {
+            setSyncingPcap(false);
+          }
+        }, 1800);
+      });
   };
 
   const getSeverityColor = (severity: string): string => {
@@ -453,6 +479,34 @@ const Threats: React.FC = () => {
                   <span className="status-resolved">✓ Risolta il {selectedThreat.resolved_at ? formatDate(selectedThreat.resolved_at) : 'N/A'}</span>
                 ) : (
                   <span className="status-active">● Attiva</span>
+                )}
+              </div>
+
+              <div className="detail-row full-width pcap-detail-section">
+                <span className="detail-label">
+                  Analisi pcap
+                  {syncingPcap && <span className="pcap-sync-badge">sync in corso…</span>}
+                </span>
+                {selectedThreat.pcap_detail && Object.keys(selectedThreat.pcap_detail).length > 0 ? (
+                  <>
+                    {Object.entries(selectedThreat.pcap_detail).map(([key, entry]) => (
+                      <details key={key} className="pcap-detail-block">
+                        <summary>{entry.label}</summary>
+                        <pre className="pcap-detail-output">{entry.output}</pre>
+                      </details>
+                    ))}
+                    {selectedThreat.pcap_detail_updated_at && (
+                      <span className="pcap-detail-updated">
+                        Ultimo aggiornamento: {formatDate(selectedThreat.pcap_detail_updated_at)}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <div className="pcap-detail-empty">
+                    {syncingPcap
+                      ? 'Richiesta di sync inviata al target, in attesa di risposta…'
+                      : 'Nessun comando tcpdump abilitato per questo pannello — configurali in Settings > Analisi pcap.'}
+                  </div>
                 )}
               </div>
             </div>

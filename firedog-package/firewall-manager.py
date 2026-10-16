@@ -114,6 +114,15 @@ CONFIG['pcap_analysis_tool'] = _firedog_conf.get('PCAP_ANALYSIS_TOOL', 'tcpdump'
 CONFIG['pcap_custom_filters'] = [
     _firedog_conf[k] for k in sorted(_firedog_conf) if k.startswith('PCAP_FILTER_') and _firedog_conf[k]
 ][:5]
+# PCAP_THREAT_CMD_N (N=1..5): chiavi dei comandi tcpdump curati da eseguire
+# per ogni IP già scorato come minaccia (pannello Dettagli lato UI) — a
+# differenza di PCAP_FILTER_N non sono testo libero ma una whitelist fissa
+# (vedi PCAP_THREAT_COMMAND_SPECS sotto), scelta in Settings con un
+# multi-select e scritta da dog_agent (vedi VALID_THREAT_COMMAND_KEYS in
+# dog_agent/src/targets/firedog.rs — stessa whitelist su entrambi i lati).
+CONFIG['pcap_threat_commands'] = [
+    _firedog_conf[k] for k in sorted(_firedog_conf) if k.startswith('PCAP_THREAT_CMD_') and _firedog_conf[k]
+][:5]
 
 # Giorni tra un controllo aggiornamenti e il successivo (vedi check_for_updates
 # sotto). "0"/vuoto/non numerico = disabilitato: nessuna chiamata di rete
@@ -164,6 +173,41 @@ def validate_pcap_filter(filter_str: str) -> Optional[str]:
     if any(tok.startswith('-') for tok in tokens):
         return "non può contenere token che iniziano con '-' (riservato a flag, non ammessi in un filtro)"
     return None
+
+
+def _pcap_threat_command_specs(pcap: str, ip: str) -> Dict[str, Dict]:
+    """Comandi tcpdump curati per il pannello Dettagli minaccia (una entry
+    per chiave di PCAP_THREAT_COMMAND_KEYS/VALID_THREAT_COMMAND_KEYS, stessa
+    whitelist lato dog_agent). A differenza di pcap_custom_filters questi
+    comandi sono interamente hardcoded: l'unico input esterno è `ip`, già
+    validato come indirizzo IP sintatticamente corretto dal chiamante
+    (ipaddress.ip_address non accetta spazi/metacaratteri), quindi passato
+    come un singolo elemento di argv — nessuna superficie di injection,
+    niente da validare con validate_pcap_filter qui.
+    """
+    filt = f'src host {ip}'
+    return {
+        'summary': {
+            'label': 'Riepilogo pacchetti',
+            'cmd': ['tcpdump', '-nn', '-c', '30', '-r', pcap, filt],
+        },
+        'tcp_flags': {
+            'label': 'Dettaglio flag TCP',
+            'cmd': ['tcpdump', '-nn', '-v', '-c', '30', '-r', pcap, f'{filt} and tcp'],
+        },
+        'timing': {
+            'label': 'Timing assoluto',
+            'cmd': ['tcpdump', '-nn', '-tttt', '-c', '30', '-r', pcap, filt],
+        },
+        'hex_dump': {
+            'label': 'Hex/ASCII dump (primi 20 pacchetti)',
+            'cmd': ['tcpdump', '-nn', '-X', '-c', '20', '-r', pcap, filt],
+        },
+        'icmp': {
+            'label': 'Attività ICMP',
+            'cmd': ['tcpdump', '-nn', '-c', '30', '-r', pcap, f'{filt} and icmp'],
+        },
+    }
 
 
 def _version_tuple(v: str) -> Tuple[int, ...]:
@@ -841,6 +885,7 @@ class FirewallManager:
                         'reasons': reasons,
                         'dest_port': dest_port,
                         'protocol': protocol,
+                        'pcap_detail': self.get_pcap_threat_detail(ip, pcap_input),
                     })
 
             # Ordina per score
@@ -850,6 +895,37 @@ class FirewallManager:
             pass
 
         return threats
+
+    def get_pcap_threat_detail(self, ip: str, pcap_input: str) -> Dict[str, Dict]:
+        """Esegue i comandi tcpdump curati abilitati in Settings
+        (CONFIG['pcap_threat_commands']) per un IP già scorato come
+        minaccia — alimenta il pannello Dettagli lato UI. {} se nessun
+        comando è abilitato (default: nessuno, costo zero finché l'admin
+        non ne attiva almeno uno) o se l'IP non supera una validazione
+        sintattica (difesa in profondità, vedi _pcap_threat_command_specs).
+        """
+        enabled = CONFIG.get('pcap_threat_commands') or []
+        if not enabled:
+            return {}
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            return {}
+
+        specs = _pcap_threat_command_specs(pcap_input, ip)
+        result: Dict[str, Dict] = {}
+        for key in enabled:
+            spec = specs.get(key)
+            if not spec:
+                continue
+            try:
+                proc = subprocess.run(spec['cmd'], capture_output=True, text=True, timeout=10)
+                lines = [ln for ln in proc.stdout.split('\n') if ln.strip()]
+                output = '\n'.join(lines[:50]) if lines else '(nessun pacchetto)'
+            except Exception as e:
+                output = f'Errore: {e}'
+            result[key] = {'label': spec['label'], 'output': output}
+        return result
 
     def parse_iptables_rules(self, chain: str) -> Optional[List[Dict]]:
         """Parsa regole iptables in formato strutturato.

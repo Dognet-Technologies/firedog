@@ -158,6 +158,13 @@ export interface ThreatLog {
   detected_at: string;
   updated_at: string;
   attack_description: string;
+  // Output dei comandi tcpdump curati (Settings > pcapThreatCommands),
+  // {command_key: {label, output}} — {} se nessun comando è abilitato o se
+  // non è ancora mai arrivato un export dal target per questa minaccia.
+  // Assenti nella risposta di lista (ThreatLogListSerializer, più leggero):
+  // presenti solo dopo un fetch del singolo threat (getThreat/Dettagli).
+  pcap_detail?: Record<string, { label: string; output: string }>;
+  pcap_detail_updated_at?: string | null;
 }
 
 export interface ThreatStats {
