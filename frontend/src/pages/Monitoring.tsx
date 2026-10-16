@@ -13,6 +13,7 @@ import DataTooltip from '../components/shared/DataTooltip';
 import TabBar from '../components/shared/TabBar';
 import apiService from '../services/api';
 import type { Target } from '../types';
+import { useLegendToggle } from '../hooks/useLegendToggle';
 import './Monitoring.css';
 
 type TabId = 'traffic' | 'performance';
@@ -48,6 +49,7 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
   // FirewallStats.protocols (origine /proc/net/snmp sul target).
   const [protocolData, setProtocolData] = useState<Array<{ name: string; pct: number }>>([]);
   const [topIPs, setTopIPs] = useState<any[]>([]);
+  const trafficLegend = useLegendToggle(['inbound', 'outbound']);
 
   const load = useCallback(async () => {
     if (!targetId) return;
@@ -189,9 +191,12 @@ const TrafficTab: React.FC<TrafficTabProps> = ({ targetId }) => {
             <YAxis tick={{ fill: 'var(--text-tertiary)', fontSize: 10 }} />
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border-primary)" />
             <Tooltip {...CHART_TOOLTIP_STYLE} />
-            <Legend wrapperStyle={{ fontSize: '12px', color: 'var(--text-secondary)' }} />
-            <Area type="monotone" dataKey="inbound" stroke="var(--accent-primary)" fill="url(#monIn)" name="Inbound" />
-            <Area type="monotone" dataKey="outbound" stroke="var(--status-success)" fill="url(#monOut)" name="Outbound" />
+            <Legend
+              wrapperStyle={{ fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              onClick={trafficLegend.onLegendClick}
+            />
+            <Area type="monotone" dataKey="inbound" stroke="var(--accent-primary)" fill="url(#monIn)" name="Inbound" hide={trafficLegend.hidden.inbound} />
+            <Area type="monotone" dataKey="outbound" stroke="var(--status-success)" fill="url(#monOut)" name="Outbound" hide={trafficLegend.hidden.outbound} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
