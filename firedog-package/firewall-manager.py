@@ -103,8 +103,10 @@ def load_firedog_conf(path: str = None) -> Dict[str, str]:
 # 'tshark', validato a runtime in analyze_dropped_traffic (fallback a tcpdump
 # se il binario scelto non è installato). PCAP_FILTER_N (N=1..5): stringhe di
 # filtro custom, sintassi opaca al tool scelto (BPF per tcpdump, display
-# filter per tshark) — nessuna validazione semantica, stessa responsabilità di
-# chi le scrive di una query salvata.
+# filter per tshark). Validati per sicurezza (non per correttezza semantica
+# BPF/display-filter) in validate_pcap_filter(), chiamata da
+# analyze_with_custom_filter prima di ogni esecuzione — un filtro che
+# fallisce la validazione viene scartato con un warning, non eseguito.
 _firedog_conf = load_firedog_conf()
 if _firedog_conf.get('PCAP_SAVE_PATH'):
     CONFIG['log_dir'] = _firedog_conf['PCAP_SAVE_PATH']
@@ -132,6 +134,36 @@ def read_local_version() -> str:
         return Path(CONFIG['version_file']).read_text().strip()
     except (FileNotFoundError, PermissionError, OSError):
         return ''
+
+
+MAX_PCAP_FILTER_LENGTH = 200
+
+
+def validate_pcap_filter(filter_str: str) -> Optional[str]:
+    """Ritorna un messaggio d'errore se il filtro pcap custom NON è
+    accettabile, altrimenti None.
+
+    Vincolo di sicurezza: nessun token (dopo shlex.split) può iniziare con
+    '-'. In sintassi BPF (tcpdump) o display-filter (tshark) legittima nessun
+    token valido inizia con '-' — sono sempre keyword/operatori/valori (es.
+    "host 1.2.3.4 and tcp port 22"). Bloccarlo previene l'injection di flag
+    tcpdump arbitrari (es. -z, che esegue un comando esterno se combinato con
+    -C/-G) qualora il filtro finisca mai per essere interpretato come più
+    argv separati — difesa in profondità: il chiamante deve comunque passare
+    il filtro come UN SOLO elemento di argv, mai splittato, questo controllo
+    è la seconda rete, non l'unica.
+    """
+    if not filter_str or not filter_str.strip():
+        return "il filtro non può essere vuoto"
+    if len(filter_str) > MAX_PCAP_FILTER_LENGTH:
+        return f"supera la lunghezza massima di {MAX_PCAP_FILTER_LENGTH} caratteri"
+    try:
+        tokens = shlex.split(filter_str)
+    except ValueError as e:
+        return f"sintassi non valida: {e}"
+    if any(tok.startswith('-') for tok in tokens):
+        return "non può contenere token che iniziano con '-' (riservato a flag, non ammessi in un filtro)"
+    return None
 
 
 def _version_tuple(v: str) -> Tuple[int, ...]:
@@ -523,9 +555,23 @@ class FirewallManager:
         """Esegue un filtro custom (BPF per tcpdump, display filter per
         tshark) definito dall'utente in settings, e stampa le righe risultanti
         (troncate a `limit`)."""
+        err = validate_pcap_filter(custom_filter)
+        if err:
+            self.warning(f"Filtro custom scartato (validazione fallita): {err}")
+            return
         try:
             if analyzer == 'tcpdump':
-                cmd = ['tcpdump', '-nn', '-r', pcap] + shlex.split(custom_filter)
+                # custom_filter passato come UN SOLO elemento di argv, mai
+                # shlex.split() in token separati: tcpdump concatena comunque
+                # gli argomenti posizionali in un'unica espressione filtro
+                # (stesso risultato per sintassi BPF legittima), ma uno split
+                # permetterebbe a un filtro tipo "-C 1 -z /path/evil and host
+                # X" di essere interpretato come FLAG separati — incluso -z,
+                # che esegue un comando esterno. La validate_pcap_filter sopra
+                # è una seconda rete (rifiuta comunque token con '-'), questo
+                # è il fix strutturale: mai passare input non fidato come più
+                # argv quando un singolo argv produce lo stesso filtro valido.
+                cmd = ['tcpdump', '-nn', '-r', pcap, custom_filter]
             else:
                 cmd = ['tshark', '-r', pcap, '-Y', custom_filter]
             result = subprocess.run(cmd, capture_output=True, text=True)
