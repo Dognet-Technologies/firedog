@@ -8,6 +8,16 @@
 # utente dedicato).
 # Output di firewall-manager / iptables vanno in /opt/sentinelsuite/firedog/{data,export,rules}.
 # Il dog-agent legge periodicamente export/status.json e lo invia al server.
+#
+# PATH esplicita: cron.d NON eredita quella di /etc/crontab, e senza questa
+# riga gira con l'ambiente minimale del demone cron (spesso privo di
+# /usr/sbin). firewall-manager (in /usr/local/bin, quindi comunque invocabile)
+# chiama poi internamente `iptables` senza path assoluto — trovato dal vivo:
+# ogni export via cron falliva silenziosamente su tutte le chain con
+# "FileNotFoundError: iptables", mentre il sync on-demand dal dog-agent
+# funzionava sempre (eredita l'ambiente del servizio systemd, PATH completa).
+# Stessa PATH di /etc/crontab su Debian/Ubuntu.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # ========== STATUS EXPORT (fonte principale per il server) ==========
 # Snapshot completo firewall+system in JSON ogni 5 minuti.
