@@ -105,6 +105,17 @@ rollback() {
   exit 1
 }
 
+# Da qui in poi qualunque fallimento (anche un comando che non è in una
+# `|| rollback` esplicita, es. un errore di pip/venv) deve riportare lo stato
+# precedente invece di lasciare i servizi fermi con un backend a metà —
+# esattamente il caso che si è verificato testando questo script dal vivo:
+# la chown arrivava DOPO la creazione del venv, quindi `sudo -u "$SVC_USER"
+# python3 -m venv` falliva con Permission Denied (la cartella appena copiata
+# apparteneva ancora all'utente/gruppo del pacchetto estratto, non a
+# firedog) — e lo script si fermava senza rollback perché il trap non
+# copriva questa fase. Disattivato subito prima dello step 6.
+trap rollback ERR
+
 # ── 4. Installa i nuovi artefatti (preserva .env: segreti, DB, TLS) ─────────
 log "4/6 Installazione nuovi artefatti"
 NEW_BACKEND_TMP="$BASE/.new-backend-$TS"
@@ -117,6 +128,13 @@ rm -rf "${BASE:?}/frontend/build"
 cp -a "$PKG_DIR/frontend/build" "$BASE/frontend/build"
 # nginx (www-data) deve poter attraversare fino a frontend/build e leggerne i file.
 chmod -R o+rX "$BASE/frontend/build"
+
+# chown PRIMA di creare il venv: i file appena copiati appartengono ancora
+# all'utente/gruppo con cui sono stati impacchettati (non firedog), e il
+# venv va creato dall'utente di servizio per permessi corretti su tutto
+# l'albero — se la chown arriva dopo, `sudo -u "$SVC_USER" python3 -m venv`
+# fallisce con Permission Denied scrivendo dentro una dir non sua.
+chown -R "$SVC_USER:$SVC_USER" "$BASE/backend" "$BASE/frontend"
 
 # Il tarball di release non porta un venv (gitignored, vedi build-release.sh):
 # va creato da zero per il backend appena copiato, non "aggiornato" — quello
@@ -136,13 +154,12 @@ for svc in firedog-backend firedog-celery firedog-celerybeat; do
 done
 systemctl daemon-reload
 
-chown -R "$SVC_USER:$SVC_USER" "$BASE/backend" "$BASE/frontend"
-
 # ── 5. Applica le migration pendenti col NUOVO codice ───────────────────────
 log "5/6 Applicazione migration"
-(cd "$BASE/backend" && sudo -u "$SVC_USER" venv/bin/python manage.py migrate --noinput) || rollback
+(cd "$BASE/backend" && sudo -u "$SVC_USER" venv/bin/python manage.py migrate --noinput)
 (cd "$BASE/backend" && sudo -u "$SVC_USER" venv/bin/python manage.py collectstatic --noinput -v0) 2>/dev/null || true
 rm -rf "$ROLLBACK_DIR"
+trap - ERR
 
 # ── 6. Riavvia e verifica ────────────────────────────────────────────────────
 log "6/6 Riavvio e verifica"
