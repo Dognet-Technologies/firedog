@@ -35,7 +35,10 @@
 # The new Rust dog-agent installs separately via its own .deb under /usr/bin/dog-agent
 # and talks to the master over WebSocket — there is no SSH pull anymore.
 #
-# Supported distros: Debian/Ubuntu (apt) and openSUSE/SLES (zypper).
+# Supported distros: Debian/Ubuntu (apt), openSUSE/SLES (zypper), Fedora (dnf).
+# On Fedora, ulogd is not packaged upstream and has no working COPR for
+# current releases (verified live on Fedora 44): PCAP threat-detail capture
+# is skipped automatically, core firewall-manager is unaffected.
 #
 # Usage:  sudo ./install.sh [--skip-init]
 #
@@ -55,7 +58,7 @@ done
 
 [[ $EUID -eq 0 ]] || { echo -e "${RED}[ERROR]${NC} root required"; exit 1; }
 
-# ── distro detection (debian family / suse family) ──────────────────────────
+# ── distro detection (debian family / suse family / fedora family) ──────────
 [[ -r /etc/os-release ]] || { echo -e "${RED}[ERROR]${NC} /etc/os-release missing"; exit 1; }
 . /etc/os-release
 OS_FAMILY=""
@@ -63,10 +66,11 @@ for os_id in ${ID:-} ${ID_LIKE:-}; do
     case "$os_id" in
         debian|ubuntu)          OS_FAMILY="debian"; break ;;
         *suse*|sles)            OS_FAMILY="suse";   break ;;
+        fedora)                 OS_FAMILY="fedora"; break ;;
     esac
 done
 [[ -n "$OS_FAMILY" ]] || {
-    echo -e "${YELLOW}[WARN]${NC} unsupported distro '${ID:-?}' (supported: Debian/Ubuntu, openSUSE/SLES), aborting"
+    echo -e "${YELLOW}[WARN]${NC} unsupported distro '${ID:-?}' (supported: Debian/Ubuntu, openSUSE/SLES, Fedora), aborting"
     exit 1
 }
 
@@ -76,6 +80,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo -e "${GREEN}== FireDog target install ==${NC} base=${BASE_DIR} distro=${ID:-?} (${OS_FAMILY})"
 
 # ── 1/7 packages ─────────────────────────────────────────────────────────────
+ULOGD_AVAILABLE=true
 if [[ "$OS_FAMILY" == "debian" ]]; then
     echo -e "${GREEN}[1/7]${NC} apt deps"
     export DEBIAN_FRONTEND=noninteractive
@@ -89,7 +94,7 @@ if [[ "$OS_FAMILY" == "debian" ]]; then
     # fino al TimeoutStartSec, Ubuntu esce subito con exit-code — stessa
     # causa, due sintomi).
     apt-get install -y -qq iptables iptables-persistent ipset ulogd2 ulogd2-pcap python3 tcpdump logrotate cron
-else
+elif [[ "$OS_FAMILY" == "suse" ]]; then
     echo -e "${GREEN}[1/7]${NC} zypper deps"
     zypper --non-interactive --quiet refresh
     # no iptables-persistent on SUSE: boot persistence is handled by firewall-fm.service
@@ -119,12 +124,43 @@ else
     fi
     # cron.d support needs the cron daemon running (not enabled by default on SUSE)
     systemctl enable --now cron
+else
+    echo -e "${GREEN}[1/7]${NC} dnf deps"
+    dnf -y makecache
+    # Fedora dropped the legacy netfilter "iptables" package years ago —
+    # iptables-nft ships the same CLI (iptables/ip6tables) backed by nftables,
+    # which is what the kernel actually expects now. Verified live on Fedora
+    # 44: there is no plain "iptables" package at all, only -nft/-legacy/-libs.
+    # No iptables-persistent equivalent needed: boot persistence is handled by
+    # firewall-fm.service, same as SUSE.
+    dnf -y install iptables-nft ipset python3 tcpdump logrotate cronie curl util-linux
+    # cronie's %post scriptlet only symlinks crond.service for the NEXT boot
+    # (systemctl preset at install time) — it does not start it now. Verified
+    # live: without this, /etc/cron.d/firedog sits there with no daemon
+    # reading it until a reboot, same class of bug as SUSE below.
+    systemctl enable --now crond
+    # ulogd is NOT packaged for Fedora at all (upstream Fedora dropped it for
+    # lacking systemd integration). The only two known COPRs with a build for
+    # this feature (philantrop/ulogd, temporalia/ulogd) have no fc44 chroot as
+    # of 2026-10 — verified live, both "Chroot not found in the given Copr
+    # project". Best-effort only, same pattern as the apparmor step below:
+    # skip gracefully rather than abort the whole install over it. Effect of
+    # skipping: core firewall-manager (rules, ban/unban, heartbeat, threat
+    # scoring) is fully unaffected — only the PCAP-based threat-detail
+    # enrichment (Dettagli panel, see firewall-manager.py get_pcap_threat_detail)
+    # has no captured .pcap to analyze without a running ulogd.
+    if ! (dnf -y install ulogd ulogd-pcap 2>/dev/null || dnf -y install ulogd2 2>/dev/null); then
+        ULOGD_AVAILABLE=false
+        echo -e "${YELLOW}  [skip]${NC} ulogd not packaged for this Fedora release — PCAP threat-detail capture disabled, core firewall unaffected"
+    fi
 fi
 
 # resolve ulogd unit name (ulogd2.service on Debian, ulogd.service on SUSE)
 ULOGD_SVC="ulogd2"
-systemctl cat ulogd2.service &>/dev/null || \
-    { systemctl cat ulogd.service &>/dev/null && ULOGD_SVC="ulogd"; }
+if $ULOGD_AVAILABLE; then
+    systemctl cat ulogd2.service &>/dev/null || \
+        { systemctl cat ulogd.service &>/dev/null && ULOGD_SVC="ulogd"; }
+fi
 
 # firewalld conflicts with the raw-iptables setup (openSUSE enables it by default)
 FIREWALLD_ACTIVE=false
@@ -194,7 +230,9 @@ install -d -m 0750 -o root -g "$LOG_GRP" /var/log/ulogd
     install -m 0644 "${BASE_DIR}/conf/firedog.conf.example" /etc/firewall/firedog.conf
 
 systemctl daemon-reload
-systemctl enable --now "$ULOGD_SVC"
+if $ULOGD_AVAILABLE; then
+    systemctl enable --now "$ULOGD_SVC"
+fi
 
 # ── 5/7 cron ───────────────────────────────────────────────────────────────
 # I job in firedog-cron girano come root (non serve più microcyber): senza
@@ -251,7 +289,11 @@ echo -e "${GREEN}== done ==${NC}"
 echo "  base dir:       ${BASE_DIR}"
 echo "  CLI:            firewall-manager --help"
 echo "  firewall svc:   systemctl status firewall-fm"
-echo "  ulogd svc:      systemctl status ${ULOGD_SVC}"
+if $ULOGD_AVAILABLE; then
+    echo "  ulogd svc:      systemctl status ${ULOGD_SVC}"
+else
+    echo "  ulogd svc:      not installed (unavailable on this distro) — PCAP threat-detail disabled"
+fi
 echo "  custom rules:   /etc/firewall/custom_rules.conf"
 echo "  firedog conf:   /etc/firewall/firedog.conf (NIC monitorate, porte sempre aperte, ban SSH brute-force)"
 echo "  pcap logs:      /var/log/ulogd/"
