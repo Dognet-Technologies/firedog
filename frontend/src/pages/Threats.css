@@ -406,6 +406,68 @@
   margin-right: 8px;
 }
 
+/* Analisi pcap nel pannello Dettagli */
+.pcap-detail-section {
+  gap: 8px;
+}
+
+.pcap-sync-badge {
+  margin-left: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: none;
+  color: var(--accent-color, #00c9ff);
+  opacity: 0.85;
+}
+
+.pcap-detail-block {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--border-color, #2a2d35);
+  border-radius: 6px;
+  background: var(--bg-primary, #0d0e11);
+}
+
+.pcap-detail-block summary {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+  cursor: pointer;
+  user-select: none;
+}
+
+.pcap-detail-block summary:hover {
+  color: var(--accent-color, #00c9ff);
+}
+
+.pcap-detail-output {
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-color, #2a2d35);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary, #8e91a1);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.pcap-detail-updated {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-tertiary, #5a5d6b);
+}
+
+.pcap-detail-empty {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #8e91a1);
+  font-style: italic;
+}
+
 /* Loading & No Data */
 .loading-spinner,
 .no-data {

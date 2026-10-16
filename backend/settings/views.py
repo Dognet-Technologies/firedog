@@ -49,9 +49,18 @@ PCAP_SETTINGS_KEYS = {
     "pcapSavePath": "pcap_save_path",
     "pcapAnalysisTool": "pcap_analysis_tool",
     "pcapCustomFilters": "pcap_custom_filters",
+    "pcapThreatCommands": "pcap_threat_commands",
 }
 MAX_PCAP_FILTERS = 5
 MAX_PCAP_FILTER_LENGTH = 200
+
+# Whitelist dei comandi tcpdump curati per il pannello Dettagli minaccia —
+# stessa whitelist di VALID_THREAT_COMMAND_KEYS in
+# dog_agent/src/targets/firedog.rs e di _pcap_threat_command_specs in
+# firedog-package/firewall-manager.py. A differenza di pcapCustomFilters
+# l'utente sceglie da un multi-select (Settings.tsx), mai testo libero:
+# qui validiamo che siano esattamente queste chiavi, non sintassi BPF.
+VALID_PCAP_THREAT_COMMAND_KEYS = {"summary", "tcp_flags", "timing", "hex_dump", "icmp"}
 
 
 def _validate_pcap_filter_string(filter_str: str) -> str | None:
@@ -115,6 +124,14 @@ def _build_pcap_sync_payload(settings_data: dict) -> tuple[dict, dict]:
             ]
             if filter_errors:
                 errors[ui_key] = "; ".join(filter_errors)
+                continue
+        elif agent_key == "pcap_threat_commands":
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                errors[ui_key] = "deve essere una lista di stringhe"
+                continue
+            unknown = [v for v in value if v not in VALID_PCAP_THREAT_COMMAND_KEYS]
+            if unknown:
+                errors[ui_key] = f"chiavi sconosciute: {', '.join(unknown)}"
                 continue
         payload[agent_key] = value
     return payload, errors

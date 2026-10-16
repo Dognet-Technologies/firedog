@@ -56,6 +56,7 @@ class SettingsConfig(AppConfig):
             "pcapSavePath": {"value": "/var/log/ulogd", "category": "monitoring"},
             "pcapAnalysisTool": {"value": "tcpdump", "category": "monitoring"},
             "pcapCustomFilters": {"value": [], "category": "monitoring"},
+            "pcapThreatCommands": {"value": [], "category": "monitoring"},
         }
 
         for key, config in default_settings.items():
