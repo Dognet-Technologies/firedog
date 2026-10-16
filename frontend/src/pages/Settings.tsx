@@ -335,6 +335,7 @@ const Settings: React.FC = () => {
     smtp_user: 'microcyber',
     smtp_password: '',
     smtp_use_tls: true,
+    smtp_skip_tls_verify: false,
     smtp_from_email: 'firedog@localhost',
     slack_enabled: false,
     slack_webhook_url: '',
@@ -1425,6 +1426,20 @@ const Settings: React.FC = () => {
                     <span>Usa TLS/STARTTLS</span>
                   </label>
                   <span className="form-hint">Abilita crittografia TLS per connessioni sicure</span>
+                </div>
+
+                <div className="form-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={notificationFormData.smtp_skip_tls_verify || false}
+                      onChange={e => setNotificationFormData({ ...notificationFormData, smtp_skip_tls_verify: e.target.checked })}
+                    />
+                    <span>Accetta certificati TLS non verificabili</span>
+                  </label>
+                  <span className="form-hint" style={{ color: 'var(--status-warning)' }}>
+                    Serve solo se il server SMTP usa un certificato self-signed o emesso da una CA privata (comune per server interni). Riduce la protezione da man-in-the-middle — attivalo solo su reti di cui ti fidi.
+                  </span>
                 </div>
 
                 <div className="form-group">

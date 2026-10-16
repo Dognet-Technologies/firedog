@@ -181,6 +181,18 @@ class NotificationConfig(models.Model):
         default=True, help_text="Usa STARTTLS per connessione sicura"
     )
 
+    # Disattivato di default (verifica piena del certificato) — molti server
+    # SMTP interni/self-hosted usano un certificato self-signed o emesso da
+    # una CA privata, che fallisce sempre la verifica standard senza nessun
+    # modo di "accettarlo" dalla UI: prima di questo campo l'unica opzione
+    # era un certificato firmato da una CA pubblica. Va acceso solo quando si
+    # controlla/fida la rete verso il server SMTP (stesso principio di un
+    # certificato self-signed accettato manualmente nel browser).
+    smtp_skip_tls_verify = models.BooleanField(
+        default=False,
+        help_text="Accetta certificati TLS non verificabili (self-signed o CA privata) — riduce la protezione da man-in-the-middle, usa solo su reti di cui ti fidi",
+    )
+
     smtp_from_email = models.EmailField(
         blank=True,
         default="firedog@localhost",

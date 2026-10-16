@@ -9,6 +9,7 @@ from celery import shared_task
 from django.utils import timezone
 import logging
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import requests
@@ -49,16 +50,31 @@ def send_email_notification(subject, message, recipients, config):
         # Decripta password
         smtp_password = config.get_decrypted_smtp_password()
 
+        # Contesto TLS: di default verifica piena (comportamento storico).
+        # smtp_skip_tls_verify è l'unico modo per accettare un certificato
+        # self-signed o emesso da una CA privata — senza, ssl.create_default_context()
+        # rifiuta la connessione con CERTIFICATE_VERIFY_FAILED e nessuna
+        # combinazione di impostazioni SMTP la farebbe funzionare.
+        if getattr(config, "smtp_skip_tls_verify", False):
+            tls_context = ssl.create_default_context()
+            tls_context.check_hostname = False
+            tls_context.verify_mode = ssl.CERT_NONE
+        else:
+            tls_context = ssl.create_default_context()
+
         # Connetti e invia
         if config.smtp_use_tls:
             # TLS/STARTTLS (porta 587)
             server = smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=10)
-            server.starttls()
+            server.starttls(context=tls_context)
         else:
             # Plain o SSL (porta 25 o 465)
             if config.smtp_port == 465:
                 server = smtplib.SMTP_SSL(
-                    config.smtp_host, config.smtp_port, timeout=10
+                    config.smtp_host,
+                    config.smtp_port,
+                    timeout=10,
+                    context=tls_context,
                 )
             else:
                 server = smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=10)
@@ -77,6 +93,21 @@ def send_email_notification(subject, message, recipients, config):
     except smtplib.SMTPAuthenticationError as e:
         logger.error(f"SMTP Authentication error: {str(e)}")
         return {"success": False, "error": f"Autenticazione SMTP fallita: {str(e)}"}
+
+    except ssl.SSLCertVerificationError as e:
+        # Non eredita da smtplib.SMTPException: senza questo except finirebbe
+        # nel generico sotto con un messaggio criptico invece di indicare la
+        # causa reale e la soluzione (il campo esiste apposta per questo).
+        logger.error(f"SMTP TLS certificate error: {str(e)}")
+        return {
+            "success": False,
+            "error": (
+                "Certificato TLS del server SMTP non verificabile "
+                "(self-signed o CA privata). Se ti fidi di questo server, "
+                "abilita 'Accetta certificati TLS non verificabili' nelle "
+                f"impostazioni email. Dettaglio: {e}"
+            ),
+        }
 
     except smtplib.SMTPException as e:
         logger.error(f"SMTP error: {str(e)}")
@@ -218,6 +249,7 @@ Se ricevi questo messaggio, la configurazione è corretta!
                 "smtp_port": config.smtp_port,
                 "smtp_user": config.smtp_user,
                 "smtp_use_tls": config.smtp_use_tls,
+                "smtp_skip_tls_verify": config.smtp_skip_tls_verify,
                 "recipients": recipients,
             }
 

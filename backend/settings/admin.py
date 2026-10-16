@@ -151,6 +151,7 @@ class NotificationConfigAdmin(admin.ModelAdmin):
                     "smtp_user",
                     "smtp_password_masked",
                     "smtp_use_tls",
+                    "smtp_skip_tls_verify",
                     "smtp_from_email",
                 )
             },
