@@ -866,6 +866,31 @@ class AgentConsumer(AsyncWebsocketConsumer):
             # intoccate: se la rule è scomparsa lato target, il loro
             # is_synced=True diventa "informazione storica" finché l'admin non
             # decide cosa farne — meglio non eliminarle silenziosamente.
+            #
+            # Guardia: uno snapshot con la chain presente ma a lista vuota
+            # mentre esistono già regole non-custom note per quella chain è
+            # quasi certamente una lettura fallita lato agent (es. race su
+            # iptables -L durante un refresh concorrente), non un admin che
+            # le ha rimosse tutte in un colpo — firewall-manager.py ormai
+            # omette la chain quando la lettura fallisce (vedi
+            # parse_iptables_rules), ma questa resta una seconda rete di
+            # sicurezza per payload non passati da lì (es. comando sync_rules
+            # con una versione agent più vecchia). Scartiamo il cleanup per
+            # questo giro e lasciamo che il prossimo snapshot buono risolva.
+            if not rules:
+                already_has_rules = FirewallRule.objects.filter(
+                    target=self.target, chain=chain, is_custom=False
+                ).exists()
+                if already_has_rules:
+                    logger.warning(
+                        "sync_firewall_rules: snapshot vuoto per chain %s su target %s "
+                        "con regole non-custom già note — scarto il cleanup, probabile "
+                        "lettura fallita lato agent.",
+                        chain,
+                        self.target.id,
+                    )
+                    continue
+
             FirewallRule.objects.filter(
                 target=self.target,
                 chain=chain,
