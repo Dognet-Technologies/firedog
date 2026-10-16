@@ -805,8 +805,18 @@ class FirewallManager:
 
         return threats
 
-    def parse_iptables_rules(self, chain: str) -> List[Dict]:
-        """Parsa regole iptables in formato strutturato"""
+    def parse_iptables_rules(self, chain: str) -> Optional[List[Dict]]:
+        """Parsa regole iptables in formato strutturato.
+
+        Ritorna None (non []) se il comando o il parsing falliscono: il
+        chiamante (export_json) deve poter distinguere "lettura fallita" da
+        "la chain è genuinamente vuota". Confondere le due è quello che
+        causava la sparizione intermittente delle regole in UI: un fallimento
+        transitorio produceva [], export_json lo scriveva nello status.json
+        come se la chain fosse vuota, e _sync_firewall_rules lato backend
+        interpretava "nessuna regola nello snapshot" come "l'admin le ha
+        tutte rimosse", cancellando le FirewallRule non-custom della chain.
+        """
 
         rules = []
 
@@ -848,8 +858,9 @@ class FirewallManager:
 
                 rules.append(rule)
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.error(f"Lettura regole chain {chain} fallita, snapshot scartato: {e}")
+            return None
 
         return rules
 
@@ -1212,10 +1223,18 @@ class FirewallManager:
                 # Peer remoti pubblici con cui il target sta dialogando.
                 # Alimenta la GeoMap server-side (geoip2 lookup).
                 'network_flows': self.get_network_flows(),
+                # Chain omesse (non incluse nel dict) se parse_iptables_rules
+                # ritorna None: una lettura fallita non deve mai apparire come
+                # "chain svuotata" al backend, altrimenti _sync_firewall_rules
+                # cancella le FirewallRule note per quella chain.
                 'rules': {
-                    'INPUT': self.parse_iptables_rules('INPUT'),
-                    'OUTPUT': self.parse_iptables_rules('OUTPUT'),
-                    'FORWARD': self.parse_iptables_rules('FORWARD')
+                    chain: parsed
+                    for chain, parsed in (
+                        ('INPUT', self.parse_iptables_rules('INPUT')),
+                        ('OUTPUT', self.parse_iptables_rules('OUTPUT')),
+                        ('FORWARD', self.parse_iptables_rules('FORWARD')),
+                    )
+                    if parsed is not None
                 },
                 'stats': {
                     'total_packets': {},
@@ -1233,13 +1252,15 @@ class FirewallManager:
                 'status': 'healthy'
             }
 
-            # Statistiche pacchetti per chain
+            # Statistiche pacchetti per chain. data['rules'] può non avere
+            # la chiave (lettura regole fallita, vedi sopra): .get(chain, [])
+            # evita un KeyError che farebbe fallire l'intero export.
             for chain in ['INPUT', 'OUTPUT', 'FORWARD']:
                 try:
                     result = self.run_command(['iptables', '-L', chain, '-n', '-v', '-x'], check=False)
                     if result.returncode == 0:
                         # Somma tutti i pacchetti
-                        total = sum(rule['pkts'] for rule in data['rules'][chain])
+                        total = sum(rule['pkts'] for rule in data['rules'].get(chain, []))
                         data['stats']['total_packets'][chain] = total
                 except Exception:
                     data['stats']['total_packets'][chain] = 0
