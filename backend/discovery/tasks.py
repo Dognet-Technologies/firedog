@@ -3,6 +3,7 @@ Celery Tasks per Network Discovery
 """
 
 from celery import shared_task
+import getpass
 import subprocess
 import re
 import logging
@@ -204,10 +205,12 @@ def scan_network_arp(network):
         ]
     """
     try:
-        # Execute arp-scan
-        # Note: richiede sudo, assicurati che sia configurato in sudoers
+        # Path assoluto (non "arp-scan" bare): deve combaciare esattamente
+        # con quello autorizzato in /etc/sudoers.d/ (vedi deploy/install.sh,
+        # step "arp-scan sudoers") — un bare command name lascerebbe NOPASSWD
+        # applicabile a qualunque binario risolto dalla PATH del momento.
         result = subprocess.run(
-            ["sudo", "arp-scan", "-l"],
+            ["sudo", "/usr/sbin/arp-scan", "-l"],
             capture_output=True,
             text=True,
             check=True,
@@ -248,7 +251,8 @@ def scan_network_arp(network):
         logger.error(f"arp-scan permission denied: {e}")
         raise Exception(
             "Permessi insufficienti per arp-scan. "
-            "Aggiungi una regola NOPASSWD a /etc/sudoers.d/ per microcyber."
+            f"Aggiungi una regola NOPASSWD a /etc/sudoers.d/ per l'utente "
+            f"'{getpass.getuser()}' (quello che esegue questo worker Celery)."
         ) from e
     except subprocess.CalledProcessError as e:
         stderr = (e.stderr or "").strip() or f"exit {e.returncode}"
@@ -257,7 +261,9 @@ def scan_network_arp(network):
         if "password" in stderr.lower():
             raise Exception(
                 "sudo richiede la password per arp-scan: configura NOPASSWD in "
-                "/etc/sudoers.d/ per l'utente microcyber."
+                f"/etc/sudoers.d/ per l'utente '{getpass.getuser()}' (quello che "
+                "esegue questo worker Celery — deploy/install.sh lo fa già per "
+                "installazioni nuove, vedi deploy/sudoers-arp-scan)."
             ) from e
         raise Exception(f"arp-scan failed: {stderr}") from e
     except subprocess.TimeoutExpired:

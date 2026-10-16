@@ -125,7 +125,7 @@ generate_tls_cert() {
 # ── 1/9 dipendenze ───────────────────────────────────────────────────────────
 log "1/9 Dipendenze di sistema"
 apt-get update -qq
-apt-get install -y -qq python3-venv build-essential libpq-dev postgresql redis-server nginx openssl >/dev/null
+apt-get install -y -qq python3-venv build-essential libpq-dev postgresql redis-server nginx openssl arp-scan >/dev/null
 
 # ── 2/9 utente di installazione ──────────────────────────────────────────────
 log "2/9 Utente di sistema ($INSTALL_USER)"
@@ -135,6 +135,19 @@ else
     warn "Utente $INSTALL_USER già esistente, riuso"
 fi
 chown -R "$INSTALL_USER:$INSTALL_USER" "$INSTALL_DIR"
+
+# Discovery (backend/discovery/tasks.py) lancia `sudo arp-scan` dal worker
+# Celery — arp-scan richiede privilegi raw-socket, il worker gira come
+# $INSTALL_USER non privilegiato. NOPASSWD limitato al solo binario
+# (path assoluto), validato con visudo prima di attivarlo.
+SUDOERS_TMP="$(mktemp)"
+sed "s#__FIREDOG_USER__#${INSTALL_USER}#g" "$REPO_ROOT/deploy/sudoers-arp-scan" > "$SUDOERS_TMP"
+if visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1; then
+    install -m 0440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/firedog-arp-scan
+else
+    warn "Sudoers per arp-scan non valido, salto l'installazione (Discovery andrà configurata a mano)"
+fi
+rm -f "$SUDOERS_TMP"
 
 # ── 3/9 PostgreSQL ────────────────────────────────────────────────────────────
 log "3/9 Database PostgreSQL"
