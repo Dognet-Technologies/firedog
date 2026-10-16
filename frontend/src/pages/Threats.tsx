@@ -118,6 +118,16 @@ const Threats: React.FC = () => {
     }
   };
 
+  // Stesse soglie di ThreatLog.severity_level (backend/threats/models.py) —
+  // top_attackers espone solo max_score (aggregato), non una severity già
+  // calcolata, quindi la derivo qui con la stessa formula.
+  const scoreToSeverity = (score: number): string => {
+    if (score >= 80) return 'critical';
+    if (score >= 60) return 'high';
+    if (score >= 30) return 'medium';
+    return 'low';
+  };
+
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleString('it-IT', {
@@ -185,64 +195,62 @@ const Threats: React.FC = () => {
       )}
 
       {/* Filtri */}
-      <div className="filters-section">
-        <h3>Filtri</h3>
-        <div className="filters-grid">
-          <div className="filter-group">
-            <label>Severity</label>
-            <select
-              value={filters.severity || ''}
-              onChange={(e) => handleFilterChange('severity', e.target.value || undefined)}
-              className="filter-select"
-            >
-              <option value="">Tutte</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
-
-          <div className="filter-group">
-            <label>Stato</label>
-            <select
-              value={filters.is_resolved === undefined ? '' : filters.is_resolved ? 'resolved' : 'unresolved'}
-              onChange={(e) => {
-                const value = e.target.value;
-                handleFilterChange('is_resolved', value === '' ? undefined : value === 'resolved');
-              }}
-              className="filter-select"
-            >
-              <option value="">Tutte</option>
-              <option value="unresolved">Non Risolte</option>
-              <option value="resolved">Risolte</option>
-            </select>
-          </div>
-
-          <div className="filter-group">
-            <label>IP Sorgente</label>
-            <input
-              type="text"
-              placeholder="es. 192.168.1.100"
-              value={filters.source_ip || ''}
-              onChange={(e) => handleFilterChange('source_ip', e.target.value || undefined)}
-              className="filter-input"
-            />
-          </div>
-
-          <div className="filter-group">
-            <label>Score Minimo</label>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              placeholder="0-100"
-              value={filters.min_score || ''}
-              onChange={(e) => handleFilterChange('min_score', e.target.value ? parseInt(e.target.value) : undefined)}
-              className="filter-input"
-            />
-          </div>
+      <div className="filters-toolbar">
+        <div className="filter-item">
+          <label>Severity</label>
+          <select
+            value={filters.severity || ''}
+            onChange={(e) => handleFilterChange('severity', e.target.value || undefined)}
+            className="filter-select"
+          >
+            <option value="">Tutte</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
         </div>
+
+        <div className="filter-item">
+          <label>Stato</label>
+          <select
+            value={filters.is_resolved === undefined ? '' : filters.is_resolved ? 'resolved' : 'unresolved'}
+            onChange={(e) => {
+              const value = e.target.value;
+              handleFilterChange('is_resolved', value === '' ? undefined : value === 'resolved');
+            }}
+            className="filter-select"
+          >
+            <option value="">Tutte</option>
+            <option value="unresolved">Non Risolte</option>
+            <option value="resolved">Risolte</option>
+          </select>
+        </div>
+
+        <div className="filter-item">
+          <label>IP Sorgente</label>
+          <input
+            type="text"
+            placeholder="es. 192.168.1.100"
+            value={filters.source_ip || ''}
+            onChange={(e) => handleFilterChange('source_ip', e.target.value || undefined)}
+            className="filter-input"
+          />
+        </div>
+
+        <div className="filter-item filter-item-narrow">
+          <label>Score Min.</label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            placeholder="0-100"
+            value={filters.min_score || ''}
+            onChange={(e) => handleFilterChange('min_score', e.target.value ? parseInt(e.target.value) : undefined)}
+            className="filter-input"
+          />
+        </div>
+
         <button className="btn-apply-filters" onClick={applyFilters} disabled={loading}>
           {loading ? 'Caricamento...' : 'Applica Filtri'}
         </button>
@@ -252,14 +260,37 @@ const Threats: React.FC = () => {
       {stats && stats.top_attackers.length > 0 && (
         <div className="top-attackers-section">
           <h3>Top Attackers</h3>
-          <div className="attackers-grid">
-            {stats.top_attackers.slice(0, 5).map((attacker, index) => (
-              <div key={index} className="attacker-card">
-                <div className="attacker-rank">#{index + 1}</div>
-                <div className="attacker-ip">{attacker.source_ip}</div>
-                <div className="attacker-count">{attacker.count} attacchi</div>
-              </div>
-            ))}
+          <div className="attackers-list">
+            {stats.top_attackers.slice(0, 5).map((attacker, index) => {
+              const maxCount = stats.top_attackers[0].count || 1;
+              const barPct = Math.max(6, Math.round((attacker.count / maxCount) * 100));
+              const color = getSeverityColor(scoreToSeverity(attacker.max_score));
+              return (
+                <div key={index} className="attacker-row">
+                  <div className="attacker-rank" style={{ color, borderColor: `${color}66` }}>
+                    {index + 1}
+                  </div>
+                  <div className="attacker-main">
+                    <div className="attacker-top-line">
+                      <span className="attacker-ip">{attacker.source_ip}</span>
+                      <span className="attacker-count">{attacker.count} {attacker.count === 1 ? 'evento' : 'eventi'}</span>
+                    </div>
+                    <div className="attacker-bar-track">
+                      <div
+                        className="attacker-bar-fill"
+                        style={{ width: `${barPct}%`, background: color }}
+                      />
+                    </div>
+                  </div>
+                  <div
+                    className="attacker-score-pill"
+                    style={{ background: `${color}22`, color, border: `1px solid ${color}66` }}
+                  >
+                    {attacker.max_score}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
