@@ -134,7 +134,7 @@ if [ "$ADMIN_STATUS" = "OK" ]; then
     Password: $SSH_PASS
 
   CAMBIA entrambe le password al primo accesso e conservale:
-  questa schermata non si aggiorna e mostra sempre quelle iniziali."
+  questa schermata sparira' dopo il cambio."
 else
     CRED_BLOCK="  Credenziali web admin: verifica non riuscita.
   Vedi: $LOG
@@ -175,6 +175,9 @@ echo ""
 # ── Forza il cambio password al primo login ──────────────────────────────────
 echo "Forzo il cambio password di $SSH_USER al prossimo login..."
 chage -d 0 "$SSH_USER"
+
+# Solo adesso: prima del chage il controllo vedrebbe una password gia' cambiata.
+systemctl enable --now firedog-clear-credentials.path
 
 systemctl disable firedog-first-boot.service
 echo "=== first-boot completato — servizio disabilitato. ==="

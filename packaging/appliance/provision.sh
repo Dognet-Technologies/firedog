@@ -53,6 +53,13 @@ chown firedog:firedog "$INSTALL_DIR/deploy/first-boot.sh"
 
 wget -q "$HTTP_BASE/packaging/appliance/firedog-first-boot.service" \
     -O /etc/systemd/system/firedog-first-boot.service
+wget -q "$HTTP_BASE/packaging/appliance/clear-credentials.sh" \
+    -O "$INSTALL_DIR/deploy/clear-credentials.sh"
+chmod 755 "$INSTALL_DIR/deploy/clear-credentials.sh"
+for unit in firedog-clear-credentials.path firedog-clear-credentials.service; do
+    wget -q "$HTTP_BASE/packaging/appliance/$unit" -O "/etc/systemd/system/$unit"
+done
+
 systemctl daemon-reload
 systemctl enable firedog-first-boot.service
 
