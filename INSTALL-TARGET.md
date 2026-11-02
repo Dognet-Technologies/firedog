@@ -155,7 +155,7 @@ firewall-manager --unban 203.0.113.5  # rimuove un ban, incluso uno permanente
 ## Installazione del dog-agent
 
 Il dog-agent è un componente **della suite Dognet** (serve FireDog,
-CyberSheppard e SentinelCore con un solo binario) e ha il proprio processo
+CyberShepherd e SentinelCore con un solo binario) e ha il proprio processo
 di installazione: un pacchetto **`.deb`** prodotto dal repo `dog_agent`.
 
 ```bash

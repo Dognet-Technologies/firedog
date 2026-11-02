@@ -46,7 +46,7 @@ FireDog è un sistema a **tre componenti**, ciascuno con un ruolo preciso:
 |---|---|---|
 | **Master** | un host/VM dedicato | Backend Django + frontend React: policy editor, dashboard di traffico in tempo reale, API REST, **server MCP** |
 | **Strumenti firewall** | ogni target, in `/opt/sentinelsuite/firedog` | `firewall-manager` (CLI regole), `traffic-analyzer` (threat scoring su PCAP), `firewall-init.sh` (policy DROP + protezioni) |
-| **dog-agent** | ogni target, `/usr/bin/dog-agent` | Binario Rust statico condiviso con CyberSheppard/SentinelCore: pairing a 2 fasi col master, poi push di heartbeat/statistiche/minacce via WebSocket ed esecuzione dei comandi regola |
+| **dog-agent** | ogni target, `/usr/bin/dog-agent` | Binario Rust statico condiviso con CyberShepherd/SentinelCore: pairing a 2 fasi col master, poi push di heartbeat/statistiche/minacce via WebSocket ed esecuzione dei comandi regola |
 
 Le regole create sul master vengono **dispatchate all'agent via WebSocket** in tempo reale; se l'agent non è connesso restano persistite (`is_synced=false`) e si riconciliano alla riconnessione — nessun accesso SSH è mai coinvolto in questo percorso.
 
