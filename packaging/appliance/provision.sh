@@ -83,14 +83,20 @@ systemctl enable systemd-resolved 2>/dev/null || true
 # garantito via rete (SSH/HTTPS).
 systemctl mask serial-getty@ttyS0.service
 
-# Password root fissa e documentata — first-boot.sh NON la ruota (rigenera
-# solo DB password/SECRET_KEY/certificato TLS), resta finché l'operatore
-# non la cambia. La scadenza forzata (chage -d 0) va impostata da
-# first-boot.sh stesso come ultimo passo, non qui — vedi il commento in
-# quello script per il motivo (deadlock PAM/sudo).
-echo 'root:FireDog1st!' | chpasswd
-sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+# Accesso amministrativo: solo l'utente `microcyber` con sudo. root e' bloccato
+# e non accede via SSH (hardening). La password iniziale e' fissa e documentata:
+# first-boot.sh la fa scadere come ultimo passo, quindi il primo login obbliga a
+# cambiarla. Bloccare root non tocca first-boot, che gira come root da systemd.
+useradd --create-home --shell /bin/bash --groups sudo microcyber
+echo 'microcyber:FireDog1st!' | chpasswd
+passwd --lock root
+
+# Drop-in e non sed su sshd_config: `Include` sta in cima al file, quindi vince
+# il primo valore letto, e un 50-cloud-init.conf rigenerato non deve prevalere.
+cat > /etc/ssh/sshd_config.d/10-firedog-hardening.conf << 'SSHD'
+PermitRootLogin no
+PasswordAuthentication yes
+SSHD
 
 # ── 6. Pulizia pre-export: generico per ogni clone ───────────────────────────
 echo "[provision] Pulizia per export..."

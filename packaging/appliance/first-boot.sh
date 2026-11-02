@@ -64,7 +64,8 @@ NEW_DB_PASS="$(openssl rand -hex 24)"
 NEW_SECRET_KEY="$(openssl rand -hex 32)"
 ADMIN_USER="admin"
 ADMIN_PASS="FireDog2026!!"
-ROOT_PASS="FireDog1st!"
+SSH_USER="microcyber"
+SSH_PASS="FireDog1st!"
 
 # ── 5. Aggiorna backend/.env ─────────────────────────────────────────────────
 echo "[5/9] Aggiornamento .env..."
@@ -129,17 +130,18 @@ if [ "$ADMIN_STATUS" = "OK" ]; then
     Password: $ADMIN_PASS
 
   SSH / Console:
-    Utente:   root
-    Password: $ROOT_PASS
+    Utente:   $SSH_USER (sudo; root non accede)
+    Password: $SSH_PASS
 
-  CAMBIA entrambe le password al primo accesso."
+  CAMBIA entrambe le password al primo accesso e conservale:
+  questa schermata non si aggiorna e mostra sempre quelle iniziali."
 else
     CRED_BLOCK="  Credenziali web admin: verifica non riuscita.
   Vedi: $LOG
 
   SSH / Console:
-    Utente:   root
-    Password: $ROOT_PASS"
+    Utente:   $SSH_USER (sudo; root non accede)
+    Password: $SSH_PASS"
 fi
 
 mkdir -p /etc/issue.d
@@ -170,14 +172,9 @@ echo ""
 cat /etc/motd
 echo ""
 
-# ── Forza il cambio password root al primo login ─────────────────────────────
-# Ultimo step, non prima: gira come root e usa `sudo -u postgres` allo step 6
-# — sudo rivalida sempre l'account CHIAMANTE (root) via PAM anche se sei già
-# root, e una password già scaduta fa fallire chauthtok in modo non
-# interattivo, interrompendo tutto il first-boot a metà (stesso motivo già
-# documentato nell'equivalente SentinelCore).
-echo "Forzo il cambio password di root al prossimo login..."
-chage -d 0 root
+# ── Forza il cambio password al primo login ──────────────────────────────────
+echo "Forzo il cambio password di $SSH_USER al prossimo login..."
+chage -d 0 "$SSH_USER"
 
 systemctl disable firedog-first-boot.service
 echo "=== first-boot completato — servizio disabilitato. ==="

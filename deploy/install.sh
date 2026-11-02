@@ -124,8 +124,11 @@ generate_tls_cert() {
 
 # ── 1/9 dipendenze ───────────────────────────────────────────────────────────
 log "1/9 Dipendenze di sistema"
-apt-get update -qq
-apt-get install -y -qq python3-venv build-essential libpq-dev postgresql redis-server nginx openssl arp-scan >/dev/null
+# FIREDOG_SKIP_APT: dal .deb le dipendenze arrivano da Depends (dpkg tiene il lock).
+if [ "${FIREDOG_SKIP_APT:-false}" != true ]; then
+    apt-get update -qq
+    apt-get install -y -qq python3-venv build-essential libpq-dev postgresql redis-server nginx openssl arp-scan >/dev/null
+fi
 
 # ── 2/9 utente di installazione ──────────────────────────────────────────────
 log "2/9 Utente di sistema ($INSTALL_USER)"

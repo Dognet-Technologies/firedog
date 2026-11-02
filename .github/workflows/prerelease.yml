@@ -1,0 +1,59 @@
+name: Prerelease
+
+# Ogni push su `prerelease` produce un solo artefatto: il .deb per Debian 13.
+# Nessun tag e nessuna GitHub Release: si scarica dagli artifact del run.
+# Su altre branch il workflow non parte, quindi il merge verso la stabile e'
+# innocuo; il flusso di release ufficiale resta release.yml.
+
+on:
+  push:
+    branches: [prerelease]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prerelease
+  cancel-in-progress: true
+
+jobs:
+  deb:
+    name: Build .deb
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '20'
+
+      # `~pre` ordina prima della versione finale: 1.4.0 aggiorna 1.4.0~pre.N.
+      - name: Calcola la versione
+        id: version
+        run: |
+          BASE="$(tr -d '[:space:]' < backend/VERSION)"
+          echo "tag=v${BASE}-pre.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "deb=${BASE}~pre.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Tarball di release
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: packaging/build-release.sh "$TAG"
+
+      - name: Pacchetto .deb
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          DEB: ${{ steps.version.outputs.deb }}
+        run: packaging/deb/build-deb.sh "$TAG" "$DEB"
+
+      - name: Upload .deb
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: firedog-deb
+          path: dist/firedog_*.deb
+          if-no-files-found: error
+          retention-days: 30

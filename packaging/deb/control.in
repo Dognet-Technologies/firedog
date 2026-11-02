@@ -1,0 +1,12 @@
+Package: firedog
+Version: __VERSION__
+Architecture: amd64
+Maintainer: Dognet Technologies <info@dognet.tech>
+Section: net
+Priority: optional
+Homepage: https://dognet.tech
+Depends: python3-venv, build-essential, libpq-dev, postgresql, redis-server, nginx, openssl, arp-scan, sudo, curl, iproute2
+Description: FireDog - Centralized Firewall Management
+ Master FireDog della SentinelSuite: backend Django, frontend React, Celery
+ e nginx. Il primo install crea database e utente admin, gli aggiornamenti
+ eseguono backup del database e migration.

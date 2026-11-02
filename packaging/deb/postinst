@@ -1,0 +1,17 @@
+#!/bin/bash
+# Primo install -> deploy/install.sh; pacchetto gia' presente -> deploy/upgrade.sh.
+# Le dipendenze arrivano dal campo Depends: dpkg tiene il lock e qui apt non puo' girare.
+set -euo pipefail
+
+[ "${1:-}" = "configure" ] || exit 0
+
+PAYLOAD=/usr/share/firedog/release
+BASE=/opt/firedog
+
+if [ -f "$BASE/backend/manage.py" ]; then
+    "$PAYLOAD/deploy/upgrade.sh"
+else
+    mkdir -p "$BASE"
+    cp -a "$PAYLOAD/." "$BASE/"
+    FIREDOG_INSTALL_DIR="$BASE" FIREDOG_SKIP_APT=true "$BASE/deploy/install.sh"
+fi
