@@ -27,3 +27,7 @@ dist/
 # Log ruotati del backend (celery.log.1, django.log.2, ...)
 backend/logs/*
 !backend/logs/.gitkeep
+
+# Dati locali di Claude Code
+.claude/
+instincts/
