@@ -15,6 +15,53 @@ Piattaforma di gestione centralizzata del firewall per flotte di host Linux — 
 > curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
 > ```
 
+## 🧪 Build settimanali
+
+La branch `prerelease` è il canale di test: ogni push produce un solo pacchetto `.deb` per Debian 13.
+Si scarica da **Actions → Prerelease → ultimo run → Artifacts** (`firedog-deb`, serve il login a GitHub; gli artefatti restano 30 giorni).
+
+```bash
+sudo apt install ./firedog_<versione>_amd64.deb
+```
+
+Usa `apt`, non `dpkg -i`, così installa anche le dipendenze. Il primo install configura master e database; sopra un'installazione esistente esegue backup del DB e migration. Le build settimanali servono per i test: per la produzione usa le release.
+
+## 🆕 Novità in v1.5.1
+
+- **Sicurezza**: aggiornate le dipendenze segnalate da Dependabot. Il backend passa a **Django 5.2 LTS**, con DRF, PyJWT, Celery e pacchetti collegati; sul frontend sono corrette le vulnerabilità con fix disponibile. Restano `react-router` (serve la migrazione alla v7) e alcune voci della toolchain `react-scripts`.
+
+## 🆕 Novità in v1.5.0
+
+- **Identità SentinelSuite** — nuova pagina di login condivisa fra i tool della suite, favicon ufficiale, titolo scheda `FireDog | SentinelSuite` e footer con i riferimenti Dognet Technologies.
+- **Pacchetto `.deb`** — vedi [Build settimanali](#-build-settimanali).
+- **Appliance: accesso con `microcyber`** — il login SSH passa dall'utente `microcyber` con sudo; root è bloccato e `PermitRootLogin` è disattivato. Le credenziali iniziali spariscono da console e motd appena cambi la password.
+- **Rimosso** "Ricordami" dal login: non aveva alcun effetto.
+
+## 🆕 Novità in v1.4.0
+
+- **Dettagli minaccia** — pannello con l'output tcpdump ricavato dal pcap.
+- **Supporto Fedora** (`dnf`) nell'installer, verificato su Fedora 44.
+
+## 🆕 Novità in v1.3.0
+
+- **Pagina Threats ridisegnata** — filtri orizzontali e Top Attackers come classifica.
+
+## 🆕 Novità in v1.2.2
+
+- **Sicurezza**: corretta una possibile esecuzione di comandi come root sui target tramite i filtri pcap custom. Aggiorna master e target.
+
+## 🆕 Novità in v1.2.1
+
+- **Fix**: la Discovery non funzionava perché il sudoers di `arp-scan` indicava un utente inesistente.
+
+## 🆕 Novità in v1.2.0
+
+- **Aggiornamento di tarball e appliance** — nuovo [`deploy/upgrade.sh`](deploy/upgrade.sh), con backup del DB e rollback se le migration falliscono.
+- **Target Detail** — totali dei pacchetti droppati in/out e legenda del traffico cliccabile.
+- **Fix**: le regole firewall sparivano dalla UI quando la lettura di iptables falliva.
+- **Fix**: le regole non si sincronizzavano in automatico per un `PATH` mancante in `/etc/cron.d/firedog`.
+- **Fix**: `upgrade.sh` poteva fermarsi lasciando i servizi spenti; ora ripristina lo stato precedente.
+
 ## 🆕 Novità in v1.1.0
 
 - **HTTPS di default sul master** — nuovo installer automatico [`deploy/install.sh`](deploy/install.sh) (prima l'installazione era interamente manuale, vedi [INSTALL.md](INSTALL.md)): genera un certificato TLS self-signed, configura nginx con redirect `:80`→`:443`, e imposta `SECRET_KEY`/password DB generate automaticamente. `--skip-tls` per restare su solo-HTTP.
