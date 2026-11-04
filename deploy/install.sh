@@ -64,6 +64,8 @@ done
 DB_NAME="firedog"
 DB_USER="firedog"
 TLS_DIR="/etc/ssl/firedog"
+CREDS_DIR="/etc/sentinelsuite/firedog"
+CREDS_TOOL="/usr/local/lib/sentinelsuite/initial-credentials.sh"
 
 # ── auto-detect server name (stesso metodo di sentinelcore, funziona offline) ─
 if [ -z "$SERVER_NAME" ]; then
@@ -183,11 +185,15 @@ write_env "$SECRET_KEY" "$DB_PASSWORD" "$TLS_ENABLED_VAL"
 [ -n "$ADMIN_PASSWORD" ] || ADMIN_PASSWORD="$(generate_secret)"
 sudo -u "$INSTALL_USER" venv/bin/python manage.py migrate --noinput
 sudo -u "$INSTALL_USER" venv/bin/python manage.py collectstatic --noinput -v0
-DJANGO_SUPERUSER_USERNAME="$ADMIN_USER" \
-DJANGO_SUPERUSER_EMAIL="$ADMIN_EMAIL" \
-DJANGO_SUPERUSER_PASSWORD="$ADMIN_PASSWORD" \
-    sudo -E -u "$INSTALL_USER" venv/bin/python manage.py createsuperuser --noinput || \
+ADMIN_CREATED=false
+if DJANGO_SUPERUSER_USERNAME="$ADMIN_USER" \
+   DJANGO_SUPERUSER_EMAIL="$ADMIN_EMAIL" \
+   DJANGO_SUPERUSER_PASSWORD="$ADMIN_PASSWORD" \
+       sudo -E -u "$INSTALL_USER" venv/bin/python manage.py createsuperuser --noinput; then
+    ADMIN_CREATED=true
+else
     warn "createsuperuser fallito (magari l'utente esiste già da un --force)"
+fi
 
 sudo -u "$INSTALL_USER" venv/bin/python manage.py check
 
@@ -214,12 +220,30 @@ fi
 
 # ── 7/9 systemd ───────────────────────────────────────────────────────────────
 log "7/9 Unit systemd"
-for unit in firedog-backend firedog-celery firedog-celerybeat; do
+for unit in firedog-backend.service firedog-celery.service firedog-celerybeat.service \
+            firedog-initial-credentials.service firedog-initial-credentials.timer; do
     sed -e "s#__FIREDOG_USER__#${INSTALL_USER}#g" -e "s#__FIREDOG_DIR__#${INSTALL_DIR}#g" \
-        "$REPO_ROOT/deploy/${unit}.service" > "/etc/systemd/system/${unit}.service"
+        "$REPO_ROOT/deploy/${unit}" > "/etc/systemd/system/${unit}"
 done
 systemctl daemon-reload
 systemctl enable --now firedog-backend firedog-celery firedog-celerybeat
+
+# Le credenziali admin vanno in un file solo root e mai a schermo: sotto apt
+# l'output finisce in /var/log/apt/term.log. Il timer cancella il file appena
+# la password viene cambiata.
+CREDS_FILE=""
+if [ "$ADMIN_CREATED" = true ]; then
+    # Fuori da $INSTALL_DIR: quella cartella e' dell'utente di servizio e lo
+    # script gira come root dal timer.
+    install -D -m 0755 -o root -g root "$REPO_ROOT/deploy/initial-credentials.sh" "$CREDS_TOOL"
+    if printf '%s\n' "$ADMIN_PASSWORD" | "$CREDS_TOOL" save \
+            "$CREDS_DIR" "$DB_NAME" auth_user password "$ADMIN_USER"; then
+        CREDS_FILE="$CREDS_DIR/initial-credentials"
+        systemctl enable --now firedog-initial-credentials.timer
+    else
+        warn "Salvataggio delle credenziali iniziali non riuscito"
+    fi
+fi
 
 # ── 8/9 nginx ─────────────────────────────────────────────────────────────────
 log "8/9 nginx"
@@ -258,6 +282,12 @@ fi
 echo -e "\n${GREEN}=== FireDog installato ===${NC}"
 [ "$SKIP_TLS" = false ] && echo -e "${YELLOW}Certificato self-signed: il browser avviserà 'connessione non sicura' al primo accesso — è atteso, accetta l'eccezione.${NC}"
 echo "URL:            $([ "$SKIP_TLS" = true ] && echo "http://${SERVER_NAME}/" || echo "https://${SERVER_NAME}/")"
-echo "Admin:          $ADMIN_USER / $ADMIN_PASSWORD"
-echo "DB password:    $DB_PASSWORD"
-echo -e "${YELLOW}Annota queste credenziali ora — non verranno ristampate.${NC}"
+if [ -n "$CREDS_FILE" ]; then
+    echo "Admin:          utente $ADMIN_USER, password in $CREDS_FILE"
+    echo "                (sudo cat $CREDS_FILE: leggibile solo da root)"
+    echo -e "${YELLOW}Cambia la password al primo accesso: il file si cancella da solo.${NC}"
+elif [ "$ADMIN_CREATED" = true ]; then
+    echo -e "${YELLOW}Admin $ADMIN_USER creato ma senza file credenziali: reimposta la password con${NC}"
+    echo "                sudo -u $INSTALL_USER $INSTALL_DIR/backend/venv/bin/python $INSTALL_DIR/backend/manage.py changepassword $ADMIN_USER"
+fi
+echo "Password DB:    in $INSTALL_DIR/backend/.env"

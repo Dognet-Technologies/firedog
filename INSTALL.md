@@ -19,8 +19,12 @@ Esegue tutti i passi manuali descritti sotto, più la generazione di un
 certificato TLS self-signed e la configurazione HTTPS di nginx (default —
 il browser avviserà "connessione non sicura" al primo accesso, è atteso).
 Genera automaticamente `SECRET_KEY`, password del database e password
-dell'utente admin se non passate esplicitamente, e le stampa a fine
-installazione — **annotale, non vengono ristampate**.
+dell'utente admin se non passate esplicitamente. Nessuna password viene
+stampata, perché con il `.deb` l'output finisce in `/var/log/apt/term.log`.
+La password admin è in `/etc/sentinelsuite/firedog/initial-credentials`,
+leggibile solo da root (`sudo cat …`). Il file si cancella da solo entro
+pochi minuti dal cambio password, che va fatto al primo accesso. La password
+del database resta solo in `backend/.env`.
 
 Opzioni principali: `--server-name <ip-o-host>`, `--install-user <utente>`
 (default: crea un utente di sistema dedicato `firedog`), `--skip-tls`
