@@ -85,8 +85,17 @@ class SystemUpdateCheckView(APIView):
         # branch effettivamente checkoutato solo se UPDATE_BRANCH non è impostata.
         branch = os.environ.get("UPDATE_BRANCH", "").strip()
         if not branch:
-            rc, branch, _ = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=REPO_ROOT)
-            branch = branch.strip() or "HEAD"
+            rc, branch, _ = _run(["git", "symbolic-ref", "--short", "-q", "HEAD"], cwd=REPO_ROOT)
+            branch = branch.strip()
+        if not branch:
+            # HEAD staccato: update.sh si fermerebbe, meglio dirlo subito.
+            return Response(
+                {
+                    "ok": False,
+                    "error": "Il clone non è su una branch (HEAD staccato): imposta UPDATE_BRANCH.",
+                },
+                status=200,
+            )
 
         rc, local_sha, _ = _run(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT)
         rc, remote_sha, _ = _run(["git", "rev-parse", f"origin/{branch}"], cwd=REPO_ROOT)
