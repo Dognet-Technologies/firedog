@@ -53,6 +53,15 @@ log() { echo -e "\n\033[1;36m▶ $*\033[0m"; }
   echo "ERRORE: $PKG_DIR non sembra un pacchetto di release valido (manca backend/manage.py)."
   exit 1
 }
+# Lanciato dall'installazione stessa (es. /opt/firedog/deploy/upgrade.sh)
+# copierebbe l'installazione su se stessa: al passo 4 cancella frontend/build
+# prima di ricopiarlo dalla stessa cartella.
+if [ "$(realpath "$PKG_DIR")" = "$(realpath "$BASE")" ]; then
+  echo "ERRORE: upgrade.sh va lanciato dal pacchetto della nuova versione, non da $BASE."
+  echo "        Con il .deb:     sudo apt install ./firedog_<versione>_amd64.deb"
+  echo "        Da tarball:      sudo ./deploy/upgrade.sh dalla cartella estratta"
+  exit 1
+fi
 
 CURRENT_VERSION="$(cat "$BASE/backend/VERSION" 2>/dev/null || echo sconosciuta)"
 NEW_VERSION="$(cat "$PKG_DIR/backend/VERSION" 2>/dev/null || echo sconosciuta)"
@@ -90,7 +99,7 @@ cp -a "$BASE/frontend/build" "$ROLLBACK_DIR/frontend-build"
 
 rollback() {
   echo ""
-  echo "❌ Migration fallite — ripristino il backend precedente e riavvio i servizi."
+  echo "❌ Aggiornamento fallito — ripristino backend e frontend precedenti e riavvio i servizi."
   rm -rf "${BASE:?}/backend"
   cp -a "$ROLLBACK_DIR/backend" "$BASE/backend"
   rm -rf "${BASE:?}/frontend/build"
@@ -99,8 +108,8 @@ rollback() {
   systemctl start firedog-backend firedog-celery firedog-celerybeat
   rm -rf "$ROLLBACK_DIR"
   echo "Servizio precedente ($CURRENT_VERSION) ripristinato e riavviato."
-  echo "Le migration girano in transazione: il DB non dovrebbe aver subito modifiche"
-  echo "parziali, ma il backup pre-upgrade resta disponibile per sicurezza:"
+  echo "Se l'errore era nelle migration, girano in transazione: il DB non dovrebbe"
+  echo "aver subito modifiche parziali. Il backup pre-upgrade resta comunque qui:"
   echo "  $DUMP_FILE"
   exit 1
 }
