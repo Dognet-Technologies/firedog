@@ -12,7 +12,7 @@ Piattaforma di gestione centralizzata del firewall per flotte di host Linux — 
 >
 > Installazione rapida di un target:
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
+> curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/main/firedog-package/get-firedog.sh | sudo bash
 > ```
 
 ## 🧪 Build settimanali
@@ -162,13 +162,13 @@ curl -sk -X POST https://<master>/api/mcp \
 
 **Master (server web):**
 ```bash
-git clone --branch stabile https://github.com/Dognet-Technologies/firedog.git
+git clone --branch main https://github.com/Dognet-Technologies/firedog.git
 cd firedog && cat INSTALL.md
 ```
 
 **Target (strumenti firewall — Debian/Ubuntu o openSUSE/SLES):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh -o get-firedog.sh
+curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/main/firedog-package/get-firedog.sh -o get-firedog.sh
 less get-firedog.sh              # ispeziona prima di eseguire
 sudo bash get-firedog.sh         # oppure: sudo bash get-firedog.sh --skip-init
 ```

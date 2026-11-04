@@ -37,7 +37,7 @@ CONFIG = {
     # '1.0.1' hardcoded e non si è mai più mosso da lì).
     'version_file': '/opt/sentinelsuite/firedog/VERSION',
     'update_check_state': '/opt/sentinelsuite/firedog/data/update_check.json',
-    'update_check_url': 'https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/VERSION',
+    'update_check_url': 'https://raw.githubusercontent.com/Dognet-Technologies/firedog/main/firedog-package/VERSION',
 }
 
 # Porte comuni e servizi
@@ -1257,7 +1257,7 @@ class FirewallManager:
         return stats
 
     def check_for_updates(self) -> Dict:
-        """Confronta la versione locale con quella pubblicata su `stabile`,
+        """Confronta la versione locale con quella pubblicata su `main`,
         al più una volta ogni UPDATE_CHECK_INTERVAL_DAYS (0 = disabilitato).
 
         Chiamato anche da export_json ad ogni invocazione (ogni 5 minuti via

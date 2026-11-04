@@ -43,7 +43,7 @@ sotto, via WebSocket e pairing a 2 fasi — nessuna credenziale SSH è mai
 condivisa tra i due).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/main/firedog-package/get-firedog.sh | sudo bash
 ```
 
 Con opzioni (es. senza attivare subito il firewall):
@@ -58,13 +58,13 @@ Lo stesso script si può anche scaricare su file, ispezionare e poi
 eseguire — consigliato se non vuoi eseguire codice remoto in pipe:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh -o get-firedog.sh
+curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/main/firedog-package/get-firedog.sh -o get-firedog.sh
 less get-firedog.sh                      # ispeziona prima di eseguire
 sudo bash get-firedog.sh                 # o: sudo bash get-firedog.sh --skip-init
 ```
 
 Lo script scarica il tarball del repo (branch/tag configurabile con
-`FIREDOG_REF`, default `stabile`), ne estrae `firedog-package/` ed
+`FIREDOG_REF`, default `main`), ne estrae `firedog-package/` ed
 esegue `install.sh`. Se lanciato in pipe senza tty, la conferma interattiva
 di attivazione firewall viene letta da `/dev/tty` oppure viene forzato
 `--skip-init` (mai policy DROP senza conferma esplicita).
@@ -128,7 +128,7 @@ SSH_PROTECT_BAN_DURATION="0"
 
 # Controllo periodico aggiornamenti del pacchetto target (giorni tra un
 # controllo e il successivo, "0" = disabilitato di default). Confronta il
-# file VERSION locale con quello pubblicato su stabile — solo
+# file VERSION locale con quello pubblicato su main — solo
 # segnalazione, non installa nulla da solo. Agganciato al già esistente
 # export ogni 5 minuti (firewall-manager --export-json via crontab): si
 # auto-limita all'intervallo configurato qui.

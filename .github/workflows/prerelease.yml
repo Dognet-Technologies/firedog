@@ -2,7 +2,7 @@ name: Prerelease
 
 # Ogni push su `prerelease` produce un solo artefatto: il .deb per Debian 13.
 # Nessun tag e nessuna GitHub Release: si scarica dagli artifact del run.
-# Su altre branch il workflow non parte, quindi il merge verso la stabile e'
+# Su altre branch il workflow non parte, quindi il merge verso main e'
 # innocuo; il flusso di release ufficiale resta release.yml.
 
 on:
