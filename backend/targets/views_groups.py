@@ -104,14 +104,14 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
             try:
                 AuditLog.log_action(
                     action="create",
-                    description=f"Failed to create target group",
+                    description="Failed to create target group",
                     user=request.user,
                     ip_address=request.META.get("REMOTE_ADDR"),
                     user_agent=request.META.get("HTTP_USER_AGENT", "")[:512],
                     success=False,
                     error_message=str(e),
                 )
-            except:
+            except Exception:
                 pass
 
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

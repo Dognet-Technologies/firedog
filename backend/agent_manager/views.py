@@ -133,7 +133,7 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
             return Response({"raw_key": raw_key, "key_id": api_key.id})
         except Exception as e:
             return Response(
-                {"error": f"Failed to decrypt key: {str(e)}"},
+                {"error": f"Failed to decrypt key: {e!s}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

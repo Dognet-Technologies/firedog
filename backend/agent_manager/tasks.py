@@ -149,7 +149,7 @@ def check_critical_threats():
             Alert.objects.create(
                 target=target,
                 severity="critical",
-                title=f"Multiple Critical Threats Detected",
+                title="Multiple Critical Threats Detected",
                 message=f"{len(threats)} critical threats detected in the last 10 minutes",
             )
 

@@ -318,5 +318,5 @@ def get_netmask_from_cidr(network):
     try:
         net = ipaddress.ip_network(network, strict=False)
         return str(net.netmask)
-    except:
+    except ValueError:
         return ""

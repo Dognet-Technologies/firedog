@@ -91,14 +91,14 @@ def send_email_notification(subject, message, recipients, config):
         return {"success": True}
 
     except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication error: {str(e)}")
-        return {"success": False, "error": f"Autenticazione SMTP fallita: {str(e)}"}
+        logger.error(f"SMTP Authentication error: {e!s}")
+        return {"success": False, "error": f"Autenticazione SMTP fallita: {e!s}"}
 
     except ssl.SSLCertVerificationError as e:
         # Non eredita da smtplib.SMTPException: senza questo except finirebbe
         # nel generico sotto con un messaggio criptico invece di indicare la
         # causa reale e la soluzione (il campo esiste apposta per questo).
-        logger.error(f"SMTP TLS certificate error: {str(e)}")
+        logger.error(f"SMTP TLS certificate error: {e!s}")
         return {
             "success": False,
             "error": (
@@ -110,11 +110,11 @@ def send_email_notification(subject, message, recipients, config):
         }
 
     except smtplib.SMTPException as e:
-        logger.error(f"SMTP error: {str(e)}")
-        return {"success": False, "error": f"Errore SMTP: {str(e)}"}
+        logger.error(f"SMTP error: {e!s}")
+        return {"success": False, "error": f"Errore SMTP: {e!s}"}
 
     except Exception as e:
-        logger.error(f"Email send error: {str(e)}", exc_info=True)
+        logger.error(f"Email send error: {e!s}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -150,11 +150,11 @@ def send_slack_notification(message, webhook_url):
             return {"success": False, "error": error_msg}
 
     except requests.RequestException as e:
-        logger.error(f"Slack request error: {str(e)}")
+        logger.error(f"Slack request error: {e!s}")
         return {"success": False, "error": str(e)}
 
     except Exception as e:
-        logger.error(f"Slack send error: {str(e)}", exc_info=True)
+        logger.error(f"Slack send error: {e!s}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -190,11 +190,11 @@ def send_discord_notification(message, webhook_url):
             return {"success": False, "error": error_msg}
 
     except requests.RequestException as e:
-        logger.error(f"Discord request error: {str(e)}")
+        logger.error(f"Discord request error: {e!s}")
         return {"success": False, "error": str(e)}
 
     except Exception as e:
-        logger.error(f"Discord send error: {str(e)}", exc_info=True)
+        logger.error(f"Discord send error: {e!s}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -300,7 +300,7 @@ Se ricevi questo messaggio, la configurazione è corretta!
         return result
 
     except Exception as e:
-        logger.error(f"Test notification error: {str(e)}", exc_info=True)
+        logger.error(f"Test notification error: {e!s}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -406,7 +406,7 @@ def send_alert_notification(self, alert_type, message, target_id=None):
         return results
 
     except Exception as e:
-        logger.error(f"Send alert error: {str(e)}", exc_info=True)
+        logger.error(f"Send alert error: {e!s}", exc_info=True)
 
         # Retry con backoff esponenziale
         raise self.retry(exc=e, countdown=60 * (2**self.request.retries))

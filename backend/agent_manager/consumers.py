@@ -76,7 +76,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             await self.send_error("Invalid JSON")
         except Exception as e:
             logger.error(f"Error in receive: {e}", exc_info=True)
-            await self.send_error(f"Internal error: {str(e)}")
+            await self.send_error(f"Internal error: {e!s}")
 
     async def handle_pair_request(self, data):
         """

@@ -91,7 +91,7 @@ class TargetViewSet(viewsets.ModelViewSet):
             )
 
         except Exception as e:
-            logger.error(f"Error deleting target {target_ip}: {str(e)}", exc_info=True)
+            logger.error(f"Error deleting target {target_ip}: {e!s}", exc_info=True)
             return Response(
                 {"success": False, "error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

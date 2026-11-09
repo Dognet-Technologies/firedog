@@ -216,7 +216,6 @@ class LogHistoryConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         """Chiude connessione"""
-        pass
 
     async def receive(self, text_data):
         """Riceve richieste di storico"""

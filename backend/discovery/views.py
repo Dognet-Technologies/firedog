@@ -368,9 +368,9 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
             )
 
         except Exception as e:
-            logger.error(f"Bulk delete error: {str(e)}")
+            logger.error(f"Bulk delete error: {e!s}")
             return Response(
-                {"error": f"Failed to delete hosts: {str(e)}"},
+                {"error": f"Failed to delete hosts: {e!s}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

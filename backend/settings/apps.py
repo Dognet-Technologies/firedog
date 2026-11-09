@@ -23,7 +23,6 @@ class SettingsConfig(AppConfig):
         # tabella system_settings esista, e romperebbe le migrazioni. Le
         # chiavi mancanti restano semplicemente assenti finché il frontend
         # non fa il primo salvataggio (usa i default locali fino ad allora).
-        pass
 
     def _initialize_default_settings(self):
         """Crea impostazioni default se non esistono"""

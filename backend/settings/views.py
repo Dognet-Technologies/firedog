@@ -353,7 +353,7 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
                 from targets.models import Statistics
 
                 statistics_count = Statistics.objects.count()
-            except:
+            except Exception:
                 statistics_count = 0
 
             stats_data = {
@@ -376,7 +376,7 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
         except Exception as e:
             logger.error(f"Failed to get database stats: {e}")
             return Response(
-                {"error": f"Errore recupero statistiche: {str(e)}"},
+                {"error": f"Errore recupero statistiche: {e!s}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -420,7 +420,7 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
             return Response(
                 {
                     "status": "error",
-                    "message": f"Errore connessione: {str(e)}",
+                    "message": f"Errore connessione: {e!s}",
                     "latency_ms": 0,
                     "database_name": "",
                     "database_version": "",
@@ -482,8 +482,8 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
                         if not dry_run:
                             queryset.delete()
                         records_deleted += count
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning("Pulizia Statistics fallita: %s", e)
 
                 if cleanup_type in ["discovered_hosts", "all"]:
                     from discovery.models import DiscoveredHost
@@ -544,7 +544,7 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
                 )
 
             return Response(
-                {"error": f"Errore pulizia database: {str(e)}"},
+                {"error": f"Errore pulizia database: {e!s}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -653,7 +653,7 @@ class NotificationViewSet(viewsets.ViewSet):
                 )
 
         except Exception as e:
-            logger.error(f"Test notification error: {str(e)}", exc_info=True)
+            logger.error(f"Test notification error: {e!s}", exc_info=True)
             return Response(
                 {"success": False, "error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

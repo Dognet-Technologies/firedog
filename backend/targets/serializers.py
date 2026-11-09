@@ -252,7 +252,7 @@ class WhitelistEntrySerializer(serializers.ModelSerializer):
                 # Singolo IP
                 ipaddress.ip_address(value)
         except ValueError as e:
-            raise serializers.ValidationError(f"IP o subnet non valido: {str(e)}")
+            raise serializers.ValidationError(f"IP o subnet non valido: {e!s}")
 
         return value
 
@@ -308,7 +308,7 @@ class WhitelistEntryCreateSerializer(serializers.ModelSerializer):
             else:
                 ipaddress.ip_address(value)
         except ValueError as e:
-            raise serializers.ValidationError(f"IP o subnet non valido: {str(e)}")
+            raise serializers.ValidationError(f"IP o subnet non valido: {e!s}")
 
         return value
 
@@ -363,7 +363,7 @@ class BlockedIPSerializer(serializers.ModelSerializer):
         try:
             ipaddress.ip_address(value)
         except ValueError as e:
-            raise serializers.ValidationError(f"IP address non valido: {str(e)}")
+            raise serializers.ValidationError(f"IP address non valido: {e!s}")
 
         return value
 
@@ -430,7 +430,7 @@ class BlockedIPCreateSerializer(serializers.ModelSerializer):
         try:
             ipaddress.ip_address(value)
         except ValueError as e:
-            raise serializers.ValidationError(f"IP address non valido: {str(e)}")
+            raise serializers.ValidationError(f"IP address non valido: {e!s}")
         return value
 
 
