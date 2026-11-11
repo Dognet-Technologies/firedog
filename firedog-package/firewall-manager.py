@@ -540,8 +540,13 @@ class FirewallManager:
         
         try:
             with open(CONFIG['rules_file'], 'r') as f:
-                self.run_command(['iptables-restore'], check=True)
-                # Passa il contenuto via stdin
+                # Prima di questo fix c'era anche una chiamata precedente
+                # a `iptables-restore` senza stdin (eredita quello del
+                # processo padre, tipicamente vuoto) con check=True: se
+                # quella falliva, l'eccezione interrompeva l'esecuzione
+                # PRIMA di arrivare qui, lasciando il vero ripristino (con
+                # il contenuto del file via stdin) mai eseguito (HIGH
+                # trovato in code review, 2026-11).
                 subprocess.run(
                     ['iptables-restore'],
                     input=f.read(),
@@ -891,8 +896,12 @@ class FirewallManager:
             # Ordina per score
             threats.sort(key=lambda x: x['score'], reverse=True)
 
-        except Exception:
-            pass
+        except Exception as e:
+            # Prima di questo fix un errore qui produceva silenziosamente
+            # una lista vuota/parziale indistinguibile da "nessuna
+            # minaccia", senza nulla nei log per capire perché (HIGH
+            # trovato in code review, 2026-11).
+            self.warning(f"get_threats_data: errore nell'estrazione minacce: {e}")
 
         return threats
 
@@ -1117,8 +1126,8 @@ class FirewallManager:
             result['udp']['out_packets'] = col('Udp', 'OutDatagrams')
             result['icmp']['in_packets'] = col('Icmp', 'InMsgs')
             result['icmp']['out_packets'] = col('Icmp', 'OutMsgs')
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"get_protocol_stats: errore lettura /proc/net/snmp: {e}")
         return result
 
     def get_system_info(self) -> Dict:
@@ -1148,8 +1157,8 @@ class FirewallManager:
             with open('/proc/uptime', 'r') as f:
                 info['uptime_seconds'] = int(float(f.read().split()[0]))
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"get_system_info: errore lettura informazioni di sistema: {e}")
 
         return info
 
@@ -1226,8 +1235,8 @@ class FirewallManager:
                     'rx_packets': stats.get('rx_packets', 0),
                     'tx_packets': stats.get('tx_packets', 0),
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"get_interfaces: errore enumerazione interfacce di rete: {e}")
 
         return interfaces
 
@@ -1252,8 +1261,8 @@ class FirewallManager:
                     'rx_packets': int(rx.get('packets', 0) or 0),
                     'tx_packets': int(tx.get('packets', 0) or 0),
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"_get_interface_stats: errore lettura contatori NIC: {e}")
         return stats
 
     def check_for_updates(self) -> Dict:
