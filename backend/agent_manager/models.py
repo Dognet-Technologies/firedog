@@ -4,20 +4,25 @@ Gestione dell'agent Dog Agent per comunicazione con i target
 """
 
 import hashlib
-from django.db import models
+import hmac
+import logging
+from django.db import models, transaction
 from django.utils import timezone
-from django.conf import settings
 from targets.models import Target
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 import uuid
-import base64
+
+from firedog.crypto_utils import derive_fernet_key, legacy_truncated_secret_key
+
+logger = logging.getLogger(__name__)
 
 
 def get_encryption_key():
-    """Ottiene la chiave di crittografia dal SECRET_KEY di Django"""
-    # Usa i primi 32 bytes del SECRET_KEY e codifica in base64 per Fernet
-    key = settings.SECRET_KEY.encode()[:32]
-    return base64.urlsafe_b64encode(key.ljust(32, b"0"))
+    """Chiave Fernet per cifrare/decifrare l'Agent API key, derivata via
+    HKDF da SECRET_KEY con un `info` dedicato (vedi firedog/crypto_utils.py
+    — CRITICAL corretto in code review, 2026-11: prima era SECRET_KEY
+    troncato senza KDF, lo stesso segreto della firma JWT)."""
+    return derive_fernet_key(b"agent-api-key-encryption-v1")
 
 
 class AgentAPIKey(models.Model):
@@ -52,6 +57,21 @@ class AgentAPIKey(models.Model):
         ordering = ["-created_at"]
         verbose_name = "Agent API Key"
         verbose_name_plural = "Agent API Keys"
+        constraints = [
+            # L'unicità della chiave attiva era garantita solo in save()
+            # (applicativo): due richieste concorrenti di generate()/
+            # activate() potevano entrambe superare il check prima che
+            # l'altra avesse committato, risultando in due righe
+            # is_active=True contemporaneamente (MEDIUM trovato in code
+            # review, 2026-11). Questo vincolo DB fa fallire con un
+            # IntegrityError pulito la transazione che perde la race,
+            # invece di corrompere silenziosamente l'invariante.
+            models.UniqueConstraint(
+                fields=["is_active"],
+                condition=models.Q(is_active=True),
+                name="agent_manager_only_one_active_apikey",
+            ),
+        ]
 
     def __str__(self):
         status = "Active" if self.is_active else "Inactive"
@@ -70,22 +90,46 @@ class AgentAPIKey(models.Model):
         return encrypted.decode()
 
     def decrypt_key(self) -> str:
-        """Decripta la chiave"""
-        fernet = Fernet(get_encryption_key())
-        decrypted = fernet.decrypt(self.encrypted_key.encode())
-        return decrypted.decode()
+        """Decripta la chiave. Prova prima lo schema attuale (HKDF); se il
+        dato è stato cifrato PRIMA del fix (SECRET_KEY troncato senza
+        KDF), ricade sullo schema legacy SOLO per la decifratura, poi
+        ri-cifra e salva subito col lo schema nuovo ("migrazione al primo
+        read") — così una chiave esistente su un'installazione già in
+        campo si aggiorna da sola la prima volta che viene recuperata,
+        senza alcun intervento manuale."""
+        try:
+            fernet = Fernet(get_encryption_key())
+            return fernet.decrypt(self.encrypted_key.encode()).decode()
+        except InvalidToken:
+            legacy_fernet = Fernet(legacy_truncated_secret_key())
+            decrypted = legacy_fernet.decrypt(self.encrypted_key.encode()).decode()
+            logger.warning(
+                "AgentAPIKey %s era cifrata con lo schema legacy (pre-HKDF) — ricifrata ora con lo schema nuovo",
+                self.pk,
+            )
+            self.encrypted_key = self.encrypt_key(decrypted)
+            self.save(update_fields=["encrypted_key"])
+            return decrypted
 
     def verify_key(self, raw_key: str) -> bool:
-        """Verifica se la chiave corrisponde"""
-        return self.key_hash == self.hash_key(raw_key)
+        """Verifica se la chiave corrisponde (confronto a tempo costante:
+        questo è l'unico segreto condiviso raggiungibile dall'endpoint
+        WebSocket di pairing, completamente non autenticato — un
+        confronto `==` qui è un side-channel di timing, MEDIUM trovato
+        in code review, 2026-11)."""
+        return hmac.compare_digest(self.key_hash, self.hash_key(raw_key))
 
     def save(self, *args, **kwargs):
-        # Se questa chiave viene attivata, disattiva tutte le altre
-        if self.is_active:
-            AgentAPIKey.objects.filter(is_active=True).exclude(pk=self.pk).update(
-                is_active=False
-            )
-        super().save(*args, **kwargs)
+        # Atomico: il deactivate-altre + il proprio save devono commitare
+        # insieme o non commitare affatto, per restringere al minimo la
+        # finestra di race con un'altra generate()/activate() concorrente
+        # (il vincolo DB sopra resta il backstop definitivo).
+        with transaction.atomic():
+            if self.is_active:
+                AgentAPIKey.objects.filter(is_active=True).exclude(pk=self.pk).update(
+                    is_active=False
+                )
+            super().save(*args, **kwargs)
 
 
 class PairingSession(models.Model):
