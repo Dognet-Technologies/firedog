@@ -448,13 +448,15 @@ const BlockedIPsTab: React.FC = () => {
       return;
     }
     try {
+      // blocked_by è impostato dal server con il vero utente autenticato
+      // (prima qui si inviava la stringa letterale 'current_user',
+      // vanificando la tracciabilità — MEDIUM, code review 2026-11).
       await apiService.createBlockedIP({
         target: selectedTarget.id,
         ip_address: newBlock.ip_address,
         block_reason: newBlock.block_reason,
         description: newBlock.description,
         threat_score: newBlock.threat_score,
-        blocked_by: 'current_user',
       });
       showToast({ type: 'success', title: 'IP blocked', message: `${newBlock.ip_address} added to blocklist` });
       setShowAddModal(false);
@@ -652,11 +654,12 @@ const WhitelistTab: React.FC = () => {
       return;
     }
     try {
+      // added_by è impostato dal server con il vero utente autenticato
+      // (MEDIUM, code review 2026-11 — vedi createBlockedIP sopra).
       await apiService.createWhitelistEntry({
         target: selectedTarget.id,
         ip_address: newEntry.ip_address,
         description: newEntry.description,
-        added_by: 'current_user',
       });
       showToast({ type: 'success', title: 'Added to whitelist', message: `${newEntry.ip_address} whitelisted` });
       setShowAddModal(false);

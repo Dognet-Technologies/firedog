@@ -10,6 +10,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 
+from accounts.permissions import IsAdminOrReadOnly
+
 from .models import Target, TargetGroup, GroupRuleTemplate
 from .serializers_groups import (
     TargetGroupListSerializer,
@@ -40,7 +42,10 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
     """
 
     queryset = TargetGroup.objects.all()
-    permission_classes = [IsAuthenticated]
+    # add-rule/remove-rule/apply-to-target propagano regole firewall a
+    # host reali — sola lettura per Reporter, scrittura solo Admin
+    # (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     def get_serializer_class(self):
         """Seleziona serializer in base all'azione"""
@@ -66,7 +71,7 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Error listing groups: {e}")
             return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": "Errore nel recupero dei gruppi"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     @transaction.atomic
@@ -114,7 +119,13 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
 
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # Il dettaglio dell'eccezione resta solo nel log (logger.error
+            # poco sopra), non nella risposta al client (HIGH trovato in
+            # code review, 2026-11).
+            return Response(
+                {"error": "Operazione non riuscita, vedi i log server-side"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     def retrieve(self, request, pk=None):
         """Dettagli gruppo con target e rule templates"""
@@ -126,7 +137,7 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error retrieving group {pk}: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Gruppo non trovato"}, status=status.HTTP_404_NOT_FOUND)
 
     @transaction.atomic
     def update(self, request, pk=None):
@@ -170,7 +181,13 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error updating group {pk}: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # Il dettaglio dell'eccezione resta solo nel log (logger.error
+            # poco sopra), non nella risposta al client (HIGH trovato in
+            # code review, 2026-11).
+            return Response(
+                {"error": "Operazione non riuscita, vedi i log server-side"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     @transaction.atomic
     def destroy(self, request, pk=None):
@@ -202,7 +219,13 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error deleting group {pk}: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # Il dettaglio dell'eccezione resta solo nel log (logger.error
+            # poco sopra), non nella risposta al client (HIGH trovato in
+            # code review, 2026-11).
+            return Response(
+                {"error": "Operazione non riuscita, vedi i log server-side"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     @action(detail=True, methods=["post"])
     @transaction.atomic
@@ -253,7 +276,13 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error adding targets to group {pk}: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # Il dettaglio dell'eccezione resta solo nel log (logger.error
+            # poco sopra), non nella risposta al client (HIGH trovato in
+            # code review, 2026-11).
+            return Response(
+                {"error": "Operazione non riuscita, vedi i log server-side"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     @action(detail=True, methods=["post"])
     @transaction.atomic
@@ -304,7 +333,13 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error removing targets from group {pk}: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # Il dettaglio dell'eccezione resta solo nel log (logger.error
+            # poco sopra), non nella risposta al client (HIGH trovato in
+            # code review, 2026-11).
+            return Response(
+                {"error": "Operazione non riuscita, vedi i log server-side"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     @action(detail=True, methods=["get"])
     def available_targets(self, request, pk=None):
@@ -333,7 +368,13 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error getting available targets for group {pk}: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # Il dettaglio dell'eccezione resta solo nel log (logger.error
+            # poco sopra), non nella risposta al client (HIGH trovato in
+            # code review, 2026-11).
+            return Response(
+                {"error": "Operazione non riuscita, vedi i log server-side"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     # ─── Group-level firewall rules ─────────────────────────────────────────
     # Una "group rule" è una FirewallRule replicata su ogni target membro,
@@ -698,7 +739,10 @@ class GroupRuleTemplateViewSet(viewsets.ModelViewSet):
 
     queryset = GroupRuleTemplate.objects.all()
     serializer_class = GroupRuleTemplateSerializer
-    permission_classes = [IsAuthenticated]
+    # create/update/destroy modificano i template applicati ai target del
+    # gruppo — sola lettura per Reporter, scrittura solo Admin (CRITICAL
+    # trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     def get_queryset(self):
         """Filtra per gruppo se specificato"""
@@ -745,7 +789,13 @@ class GroupRuleTemplateViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error creating rule template: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # Il dettaglio dell'eccezione resta solo nel log (logger.error
+            # poco sopra), non nella risposta al client (HIGH trovato in
+            # code review, 2026-11).
+            return Response(
+                {"error": "Operazione non riuscita, vedi i log server-side"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     @transaction.atomic
     def destroy(self, request, pk=None):
@@ -782,4 +832,10 @@ class GroupRuleTemplateViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Error deleting rule template {pk}: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            # Il dettaglio dell'eccezione resta solo nel log (logger.error
+            # poco sopra), non nella risposta al client (HIGH trovato in
+            # code review, 2026-11).
+            return Response(
+                {"error": "Operazione non riuscita, vedi i log server-side"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

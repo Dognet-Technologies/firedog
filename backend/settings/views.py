@@ -6,7 +6,8 @@ Gestione configurazioni e database
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
+from accounts.permissions import IsAdminOrReadOnly, IsAdminUser
 from django.db import connection, transaction
 from django.utils import timezone
 from django.contrib.auth import update_session_auth_hash
@@ -185,7 +186,10 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
 
     queryset = SystemSettings.objects.all()
     serializer_class = SystemSettingsSerializer
-    permission_classes = [IsAuthenticated]
+    # bulk_update/reset (e create/update/destroy) modificano la
+    # configurazione di sistema — sola lettura per Reporter, scrittura
+    # solo Admin (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     def get_queryset(self):
         """Filtra impostazioni in base a categoria"""
@@ -305,7 +309,11 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
     - GET /api/settings/database/cleanup-logs/ - Log pulizie
     """
 
-    permission_classes = [IsAuthenticated]
+    # cleanup/test-connection sono azioni distruttive/operative (cleanup
+    # può cancellare l'audit trail) — sola lettura (stats/cleanup-logs)
+    # per Reporter, scrittura solo Admin (CRITICAL trovato in code
+    # review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     @action(detail=False, methods=["get"])
     def stats(self, request):
@@ -374,9 +382,13 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
             return Response(serializer.data)
 
         except Exception as e:
+            # Il dettaglio dell'eccezione va solo nel log server-side, non
+            # nella risposta al client (poteva esporre dettagli interni
+            # come nomi tabella/connessione — HIGH trovato in code
+            # review, 2026-11).
             logger.error(f"Failed to get database stats: {e}")
             return Response(
-                {"error": f"Errore recupero statistiche: {e!s}"},
+                {"error": "Errore recupero statistiche database"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -456,7 +468,12 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
                 if cleanup_type in ["audit_logs", "all"]:
                     from audit.models import AuditLog
 
-                    queryset = AuditLog.objects.filter(timestamp__lt=cutoff_date)
+                    # AuditLog non ha un campo `timestamp`: il campo reale è
+                    # `created_at` — con quello sbagliato questo ramo falliva
+                    # sempre con un'eccezione (bug trovato scrivendo i test
+                    # di regressione per il fix di controllo accessi,
+                    # 2026-11), rendendo "audit_logs"/"all" sempre rotti.
+                    queryset = AuditLog.objects.filter(created_at__lt=cutoff_date)
                     count = queryset.count()
                     if not dry_run:
                         queryset.delete()
@@ -544,7 +561,7 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
                 )
 
             return Response(
-                {"error": f"Errore pulizia database: {e!s}"},
+                {"error": "Errore durante la pulizia del database, vedi i log server-side"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -575,6 +592,13 @@ class NotificationViewSet(viewsets.ViewSet):
     - GET    /api/settings/notifications/smtp-info/
     """
 
+    # Nota: importava rest_framework.permissions.IsAdminUser (check su
+    # is_staff) invece di accounts.permissions.IsAdminUser (check sul
+    # gruppo "Admin" usato ovunque altrove in questo progetto) — con
+    # utenti is_staff=False che pure appartengono al gruppo Admin,
+    # questa view li rifiutava mentre le altre li accettavano
+    # correttamente. Corretto import, trovato durante la stessa review
+    # di code review, 2026-11.
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     @action(detail=False, methods=["get", "put"])
