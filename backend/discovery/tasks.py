@@ -209,8 +209,16 @@ def scan_network_arp(network):
         # con quello autorizzato in /etc/sudoers.d/ (vedi deploy/install.sh,
         # step "arp-scan sudoers") — un bare command name lascerebbe NOPASSWD
         # applicabile a qualunque binario risolto dalla PATH del momento.
+        #
+        # `network` (non `-l`): prima di questo fix il parametro veniva
+        # accettato ma mai usato — ogni chiamata scansionava sempre e solo
+        # la subnet locale auto-rilevata (`-l`), quindi su un host
+        # multi-NIC ogni iterazione del loop chiamante ripeteva la stessa
+        # scan locale invece di scansionare la rete richiesta (MEDIUM
+        # trovato in code review, 2026-11). `network` è generato da
+        # get_local_networks() (regex su `ip route`), mai input utente.
         result = subprocess.run(
-            ["sudo", "/usr/sbin/arp-scan", "-l"],
+            ["sudo", "/usr/sbin/arp-scan", network],
             capture_output=True,
             text=True,
             check=True,

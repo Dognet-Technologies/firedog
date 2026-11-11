@@ -7,14 +7,56 @@ Tasks asincroni per invio notifiche email/Slack/Discord
 
 from celery import shared_task
 from django.utils import timezone
+import ipaddress
 import logging
 import smtplib
+import socket
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from urllib.parse import urlparse
 import requests
 
 logger = logging.getLogger("firedog.notifications")
+
+
+class WebhookUrlError(ValueError):
+    """URL webhook non valido o che risolve a un indirizzo non consentito."""
+
+
+def _validate_webhook_url(url: str) -> None:
+    """Difesa SSRF sui webhook Slack/Discord configurabili dall'admin:
+    richiede https, rifiuta userinfo nell'URL, risolve l'host e rifiuta
+    indirizzi privati/loopback/link-local/riservati (es. 169.254.169.254,
+    i metadata cloud). L'endpoint che configura questi URL è già
+    Admin-only, ma un admin compromesso/ingannato non deve poter usare
+    questo campo come oracolo SSRF verso la rete interna (MEDIUM trovato
+    in code review, 2026-11)."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise WebhookUrlError("il webhook deve usare https://")
+    if parsed.username or parsed.password:
+        raise WebhookUrlError("userinfo non consentito nell'URL del webhook")
+    hostname = parsed.hostname
+    if not hostname:
+        raise WebhookUrlError("host del webhook mancante")
+
+    try:
+        addrinfo = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as e:
+        raise WebhookUrlError(f"impossibile risolvere l'host del webhook: {e}")
+
+    for _family, _type, _proto, _canonname, sockaddr in addrinfo:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise WebhookUrlError(f"l'host del webhook risolve a un IP non consentito: {ip}")
 
 
 # ==================== EMAIL TASKS ====================
@@ -133,13 +175,15 @@ def send_slack_notification(message, webhook_url):
         dict: {'success': bool, 'error': str}
     """
     try:
+        _validate_webhook_url(webhook_url)
+
         payload = {
             "text": f":fire: *FireDog Alert*\n{message}",
             "username": "FireDog Security",
             "icon_emoji": ":dog:",
         }
 
-        response = requests.post(webhook_url, json=payload, timeout=10)
+        response = requests.post(webhook_url, json=payload, timeout=10, allow_redirects=False)
 
         if response.status_code == 200:
             logger.info("Slack notification sent successfully")
@@ -148,6 +192,10 @@ def send_slack_notification(message, webhook_url):
             error_msg = f"Status {response.status_code}: {response.text}"
             logger.error(f"Slack webhook error: {error_msg}")
             return {"success": False, "error": error_msg}
+
+    except WebhookUrlError as e:
+        logger.error(f"Slack webhook URL non valido: {e}")
+        return {"success": False, "error": str(e)}
 
     except requests.RequestException as e:
         logger.error(f"Slack request error: {e!s}")
@@ -173,13 +221,15 @@ def send_discord_notification(message, webhook_url):
         dict: {'success': bool, 'error': str}
     """
     try:
+        _validate_webhook_url(webhook_url)
+
         payload = {
             "content": f"🔥 **FireDog Alert**\n{message}",
             "username": "FireDog Security",
             "avatar_url": "https://via.placeholder.com/128/FF6B35/FFFFFF?text=FD",
         }
 
-        response = requests.post(webhook_url, json=payload, timeout=10)
+        response = requests.post(webhook_url, json=payload, timeout=10, allow_redirects=False)
 
         if response.status_code in [200, 204]:
             logger.info("Discord notification sent successfully")
@@ -188,6 +238,10 @@ def send_discord_notification(message, webhook_url):
             error_msg = f"Status {response.status_code}: {response.text}"
             logger.error(f"Discord webhook error: {error_msg}")
             return {"success": False, "error": error_msg}
+
+    except WebhookUrlError as e:
+        logger.error(f"Discord webhook URL non valido: {e}")
+        return {"success": False, "error": str(e)}
 
     except requests.RequestException as e:
         logger.error(f"Discord request error: {e!s}")
