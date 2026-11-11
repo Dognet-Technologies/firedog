@@ -8,8 +8,21 @@ from django.core.validators import (
     validate_ipv46_address,
     MinValueValidator,
     MaxValueValidator,
+    RegexValidator,
 )
 from targets.models import Target
+
+# Nomi interfaccia Linux validi: alfanumerici + `.`/`:`/`-`/`_` (VLAN
+# sub-interface, alias legacy, nomi bridge/custom), mai vuoto, mai un
+# leading `-` (verrebbe letto come opzione da iptables sul lato agent —
+# stesso principio di validate_fw_word in dog_agent/src/firewall/mod.rs,
+# applicato qui anche a monte, al boundary dell'API). A differenza di
+# port/source_ip/dest_ip/protocol/action/chain, `interface` non aveva
+# alcuna validazione (HIGH trovato in code review, 2026-11).
+validate_interface_name = RegexValidator(
+    regex=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,49}$",
+    message="Nome interfaccia non valido: solo alfanumerici, '.', ':', '-', '_', senza leading '-'.",
+)
 
 
 class FirewallRule(models.Model):
@@ -96,6 +109,7 @@ class FirewallRule(models.Model):
     interface = models.CharField(
         max_length=50,
         blank=True,
+        validators=[validate_interface_name],
         help_text=(
             "NIC specifica su cui applicare la regola (es. eth0). Vuoto = "
             "tutto l'host (comportamento storico, invariato per le regole "
