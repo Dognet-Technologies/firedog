@@ -15,6 +15,11 @@ from .models import (
     AgentCommand,
     AgentHeartbeat,
 )
+from .pairing_rate_limit import (
+    is_pairing_blocked,
+    record_failed_pairing_attempt,
+    reset_pairing_attempts,
+)
 from targets.models import Target, Alert, FirewallStats, BlockedIP
 from threats.models import ThreatLog
 from rules.models import FirewallRule
@@ -96,6 +101,25 @@ class AgentConsumer(AsyncWebsocketConsumer):
         mac_address = data.get("mac")
         group = data.get("group", "default")
 
+        # Rate limit sui tentativi: l'endpoint ws/agent/ non richiede
+        # alcuna autenticazione Django al connect, quindi senza questo
+        # chiunque può tentare in loop combinazioni ip/hostname/mac contro
+        # l'unica chiave fleet-wide (vedi agent_manager/pairing_rate_limit.py,
+        # CRITICAL mitigato in code review, 2026-11).
+        source_ip = self.scope.get("client", (None,))[0] or "unknown"
+        if is_pairing_blocked(source_ip):
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "pairing_status",
+                        "status": "failed",
+                        "phase": 1,
+                        "error": "Too many failed pairing attempts, retry later",
+                    }
+                )
+            )
+            return
+
         if not all([api_key, ip_address, hostname, mac_address]):
             await self.send_error("Missing required fields for pairing")
             return
@@ -103,6 +127,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
         # FASE 1: Verifica API key
         api_verified = await self.verify_api_key(api_key)
         if not api_verified:
+            record_failed_pairing_attempt(source_ip)
             await self.send(
                 text_data=json.dumps(
                     {
@@ -133,6 +158,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
         if pairing_session:
             # Pairing success!
+            reset_pairing_attempts(source_ip)
             self.target = await self.get_target_by_session(pairing_session)
 
             # Crea/Aggiorna connessione
@@ -156,6 +182,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             logger.info(f"Pairing successful for target {self.target}")
 
         else:
+            record_failed_pairing_attempt(source_ip)
             await self.send(
                 text_data=json.dumps(
                     {

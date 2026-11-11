@@ -154,6 +154,29 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
     ),
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
+    # ScopedRateThrottle non limita nulla di default: si applica solo alle
+    # view con un `throttle_scope` esplicito (vedi accounts/views.py per il
+    # login). Nessun rate limit esisteva prima su /api/token/, un vettore
+    # di brute-force su username+password (HIGH trovato in code review,
+    # 2026-11) — a differenza del pairing WS degli agent, già limitato
+    # separatamente in agent_manager/pairing_rate_limit.py.
+    "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "10/min",
+    },
+}
+
+# Backend Redis condiviso con CHANNEL_LAYERS (db diverso per non
+# sovrapporre le chiavi) — necessario perché le throttle class di DRF
+# usano la cache di Django, che di default è LocMemCache: per-processo,
+# non condivisa tra i worker ASGI/WSGI (stesso motivo per cui
+# agent_manager/pairing_rate_limit.py usa Redis direttamente invece
+# della cache di Django).
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/2",
+    }
 }
 
 # JWT Settings
