@@ -426,15 +426,32 @@ setup_output_rules() {
 load_custom_rules() {
     log "Caricamento regole personalizzate..."
     
+    # Niente eval: ogni riga deve essere "iptables <token semplici>"
+    # eventualmente seguita da un commento finale tra apici singoli (formato
+    # scritto da firewall-manager.py con shlex.join). Le righe che non
+    # rispettano il formato vengono saltate, non eseguite.
+    local token_re="[A-Za-z0-9._:/,=!+-]+"
+    local rule_re="^iptables(( ${token_re})+)( '([^'\\\\\`\$[:cntrl:]]*)')?$"
+
     if [[ -f "$CUSTOM_RULES" ]] && [[ -s "$CUSTOM_RULES" ]]; then
         local count=0
+        local -a args
         while IFS= read -r line; do
             # Ignora commenti e righe vuote
             [[ "$line" =~ ^#.*$ ]] && continue
             [[ -z "$line" ]] && continue
-            
-            # Esegui regola
-            if eval "$line" 2>/dev/null; then
+
+            if ! [[ "$line" =~ $rule_re ]]; then
+                warning "Regola ignorata (formato non ammesso): $line"
+                continue
+            fi
+            read -r -a args <<< "${BASH_REMATCH[1]}"
+            if [[ -n "${BASH_REMATCH[3]}" ]]; then
+                args+=("${BASH_REMATCH[4]}")
+            fi
+
+            # Esegui regola come array di argomenti
+            if iptables "${args[@]}" 2>/dev/null; then
                 # NON usare ((count++)): con count=0 il post-incremento
                 # restituisce l'exit status del vecchio valore (0 = falso),
                 # e sotto `set -e` questo termina lo script alla prima

@@ -326,14 +326,15 @@ class FirewallManager:
         
         rule_parts.extend(['-j', 'ACCEPT'])
         
+        comment = self.sanitize_comment(comment)
         if comment:
-            rule_parts.extend(['-m', 'comment', '--comment', comment[:256]])
+            rule_parts.extend(['-m', 'comment', '--comment', comment])
         
         try:
             self.run_command(rule_parts)
             
             # Salva regola personalizzata
-            self.save_custom_rule(' '.join(rule_parts), comment)
+            self.save_custom_rule(rule_parts, comment)
             
             # Persisti regole
             self.save_rules()
@@ -374,12 +375,13 @@ class FirewallManager:
         
         rule_parts.extend(['-j', 'ACCEPT'])
         
+        comment = self.sanitize_comment(comment)
         if comment:
-            rule_parts.extend(['-m', 'comment', '--comment', comment[:256]])
+            rule_parts.extend(['-m', 'comment', '--comment', comment])
         
         try:
             self.run_command(rule_parts)
-            self.save_custom_rule(' '.join(rule_parts), comment)
+            self.save_custom_rule(rule_parts, comment)
             self.save_rules()
             
             dest_info = f" verso {dest_ip}" if dest_ip else ""
@@ -390,12 +392,29 @@ class FirewallManager:
             self.error("Impossibile aggiungere regola")
             return False
     
-    def save_custom_rule(self, rule: str, comment: str):
-        """Salva regola personalizzata nel file di configurazione"""
+    @staticmethod
+    def sanitize_comment(comment: str) -> str:
+        """Commento sicuro da salvare in custom_rules.conf.
+
+        firewall-init.sh rilegge il file al boot come root: niente newline
+        (spezzerebbe la riga), niente apici/backslash/$/backtick (il loader
+        accetta solo un commento finale tra apici singoli). Limite in byte:
+        xt_comment accetta al massimo 255 caratteri.
+        """
+        cleaned = ''.join(ch for ch in comment if ch.isprintable())
+        cleaned = re.sub(r"['\"\\`$]", '', cleaned).strip()
+        return cleaned.encode('utf-8')[:255].decode('utf-8', 'ignore')
+
+    def save_custom_rule(self, rule_parts: List[str], comment: str):
+        """Salva regola personalizzata nel file di configurazione.
+
+        La riga e' quotata con shlex.join: firewall-init.sh la valida e la
+        esegue come array di argomenti, mai con eval.
+        """
         with open(CONFIG['custom_rules'], 'a') as f:
             if comment:
                 f.write(f"# {comment}\n")
-            f.write(f"{rule}\n")
+            f.write(f"{shlex.join(rule_parts)}\n")
     
     def remove_rule(self, chain: str, rule_num: int):
         """Rimuove regola per numero"""
