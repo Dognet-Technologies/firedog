@@ -45,6 +45,10 @@ app.conf.beat_schedule = {
         "task": "agent_manager.tasks.check_critical_threats",
         "schedule": crontab(minute="*/10"),  # Every 10 minutes
     },
+    "flush-expired-jwt": {
+        "task": "accounts.tasks.flush_expired_tokens",
+        "schedule": crontab(minute="30", hour="3"),  # Daily
+    },
 }
 
 

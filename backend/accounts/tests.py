@@ -92,3 +92,29 @@ class LoginThrottleClientIpTests(TestCase):
             self._post(REMOTE_ADDR="192.0.2.50", HTTP_X_REAL_IP=f"203.0.113.{i}")
         response = self._post(REMOTE_ADDR="192.0.2.50", HTTP_X_REAL_IP="203.0.113.99")
         self.assertEqual(response.status_code, 429)
+
+
+@override_settings(CACHES=TEST_CACHES)
+class RefreshTokenRotationTests(TestCase):
+    """Regressione (seconda review, 2026-11): BLACKLIST_AFTER_ROTATION era
+    attivo ma l'app token_blacklist non era installata, quindi il refresh
+    token appena ruotato restava riutilizzabile fino alla scadenza."""
+
+    def setUp(self):
+        caches["default"].clear()
+        self.client = APIClient()
+        User.objects.create_user("bob", password="correct-password")
+
+    def test_refresh_token_ruotato_non_e_piu_valido(self):
+        tokens = self.client.post(
+            "/api/token/", {"username": "bob", "password": "correct-password"}
+        ).json()
+        first = self.client.post("/api/token/refresh/", {"refresh": tokens["refresh"]})
+        self.assertEqual(first.status_code, 200)
+        reused = self.client.post("/api/token/refresh/", {"refresh": tokens["refresh"]})
+        self.assertEqual(reused.status_code, 401)
+
+    def test_flush_dei_token_scaduti(self):
+        from accounts.tasks import flush_expired_tokens
+
+        flush_expired_tokens()

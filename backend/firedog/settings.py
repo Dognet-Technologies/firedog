@@ -41,6 +41,9 @@ INSTALLED_APPS = [
     # Third party apps
     "rest_framework",
     "rest_framework_simplejwt",
+    # Senza questa app BLACKLIST_AFTER_ROTATION non fa nulla: il refresh
+    # token appena ruotato restava valido fino alla scadenza.
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "django_filters",
     "django_celery_beat",
