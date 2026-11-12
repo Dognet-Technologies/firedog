@@ -52,7 +52,8 @@ class SystemVersionView(APIView):
 class SystemUpdateCheckView(APIView):
     """GET /api/system/update/check/ — versione corrente vs disponibile su GitHub."""
 
-    permission_classes = [IsAuthenticated]
+    # Admin: esegue git fetch e mostra il path di installazione.
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
         if not (REPO_ROOT / ".git").exists():

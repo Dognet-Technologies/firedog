@@ -16,6 +16,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from urllib.parse import urlparse
 import requests
+from requests.adapters import HTTPAdapter
 
 logger = logging.getLogger("firedog.notifications")
 
@@ -24,14 +25,31 @@ class WebhookUrlError(ValueError):
     """URL webhook non valido o che risolve a un indirizzo non consentito."""
 
 
-def _validate_webhook_url(url: str) -> None:
+def _is_forbidden_ip(ip) -> bool:
+    if getattr(ip, "ipv4_mapped", None) is not None:
+        ip = ip.ipv4_mapped
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def _validate_webhook_url(url: str):
     """Difesa SSRF sui webhook Slack/Discord configurabili dall'admin:
     richiede https, rifiuta userinfo nell'URL, risolve l'host e rifiuta
     indirizzi privati/loopback/link-local/riservati (es. 169.254.169.254,
     i metadata cloud). L'endpoint che configura questi URL è già
     Admin-only, ma un admin compromesso/ingannato non deve poter usare
     questo campo come oracolo SSRF verso la rete interna (MEDIUM trovato
-    in code review, 2026-11)."""
+    in code review, 2026-11).
+
+    Ritorna l'IP validato: _post_webhook si connette a QUELLO, senza una
+    seconda risoluzione DNS che un DNS malevolo potrebbe far puntare a un
+    indirizzo interno (DNS rebinding, seconda review 2026-11)."""
     parsed = urlparse(url)
     if parsed.scheme != "https":
         raise WebhookUrlError("il webhook deve usare https://")
@@ -42,21 +60,58 @@ def _validate_webhook_url(url: str) -> None:
         raise WebhookUrlError("host del webhook mancante")
 
     try:
-        addrinfo = socket.getaddrinfo(hostname, None)
+        addrinfo = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
     except socket.gaierror as e:
         raise WebhookUrlError(f"impossibile risolvere l'host del webhook: {e}")
 
-    for _family, _type, _proto, _canonname, sockaddr in addrinfo:
-        ip = ipaddress.ip_address(sockaddr[0])
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
+    ips = [ipaddress.ip_address(sockaddr[0]) for *_rest, sockaddr in addrinfo]
+    for ip in ips:
+        if _is_forbidden_ip(ip):
             raise WebhookUrlError(f"l'host del webhook risolve a un IP non consentito: {ip}")
+    if not ips:
+        raise WebhookUrlError("l'host del webhook non risolve a nessun indirizzo")
+    return ips[0]
+
+
+class _PinnedHostAdapter(HTTPAdapter):
+    """Connessione all'IP gia' validato, con SNI e verifica del certificato
+    sull'hostname originale."""
+
+    def __init__(self, hostname, **kwargs):
+        self._hostname = hostname
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs["server_hostname"] = self._hostname
+        kwargs["assert_hostname"] = self._hostname
+        super().init_poolmanager(*args, **kwargs)
+
+
+def _post_webhook(url: str, payload: dict):
+    """POST JSON al webhook verso l'IP validato da _validate_webhook_url."""
+    ip = _validate_webhook_url(url)
+    parsed = urlparse(url)
+    host = f"[{ip}]" if ip.version == 6 else str(ip)
+    port = f":{parsed.port}" if parsed.port else ""
+    pinned_url = parsed._replace(netloc=f"{host}{port}").geturl()
+    with requests.Session() as session:
+        session.trust_env = False  # niente proxy da variabili d'ambiente
+        session.mount("https://", _PinnedHostAdapter(parsed.hostname))
+        return session.post(
+            pinned_url,
+            json=payload,
+            timeout=10,
+            allow_redirects=False,
+            headers={"Host": f"{parsed.hostname}{port}"},
+        )
+
+
+def _webhook_error(response) -> str:
+    """Solo lo status al chiamante: il corpo della risposta di un host
+    arbitrario non deve tornare indietro (oracolo SSRF). Un estratto va nel
+    log."""
+    logger.error("webhook HTTP %s: %s", response.status_code, response.text[:200])
+    return f"Status {response.status_code}"
 
 
 # ==================== EMAIL TASKS ====================
@@ -175,21 +230,19 @@ def send_slack_notification(message, webhook_url):
         dict: {'success': bool, 'error': str}
     """
     try:
-        _validate_webhook_url(webhook_url)
-
         payload = {
             "text": f":fire: *FireDog Alert*\n{message}",
             "username": "FireDog Security",
             "icon_emoji": ":dog:",
         }
 
-        response = requests.post(webhook_url, json=payload, timeout=10, allow_redirects=False)
+        response = _post_webhook(webhook_url, payload)
 
         if response.status_code == 200:
             logger.info("Slack notification sent successfully")
             return {"success": True}
         else:
-            error_msg = f"Status {response.status_code}: {response.text}"
+            error_msg = _webhook_error(response)
             logger.error(f"Slack webhook error: {error_msg}")
             return {"success": False, "error": error_msg}
 
@@ -221,21 +274,19 @@ def send_discord_notification(message, webhook_url):
         dict: {'success': bool, 'error': str}
     """
     try:
-        _validate_webhook_url(webhook_url)
-
         payload = {
             "content": f"🔥 **FireDog Alert**\n{message}",
             "username": "FireDog Security",
             "avatar_url": "https://via.placeholder.com/128/FF6B35/FFFFFF?text=FD",
         }
 
-        response = requests.post(webhook_url, json=payload, timeout=10, allow_redirects=False)
+        response = _post_webhook(webhook_url, payload)
 
         if response.status_code in [200, 204]:
             logger.info("Discord notification sent successfully")
             return {"success": True}
         else:
-            error_msg = f"Status {response.status_code}: {response.text}"
+            error_msg = _webhook_error(response)
             logger.error(f"Discord webhook error: {error_msg}")
             return {"success": False, "error": error_msg}
 

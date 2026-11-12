@@ -3,6 +3,7 @@ Models per Settings App
 Gestione configurazioni sistema
 """
 
+import logging
 from datetime import timedelta
 
 from django.db import models
@@ -10,6 +11,11 @@ from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 
+logger = logging.getLogger(__name__)
+
+# Ogni token Fernet inizia con il byte di versione 0x80 seguito dal
+# timestamp: in base64 urlsafe "gAAAAA".
+FERNET_TOKEN_PREFIX = "gAAAAA"
 
 class SystemSettings(models.Model):
     """
@@ -361,6 +367,14 @@ class NotificationConfig(models.Model):
         try:
             decrypted = self._decrypt_with_legacy_key(self.smtp_password)
         except Exception:
+            if self.smtp_password.startswith(FERNET_TOKEN_PREFIX):
+                # Token Fernet che non decifra (SECRET_KEY cambiata): prima
+                # veniva mandato al server SMTP come se fosse la password.
+                logger.error(
+                    "Password SMTP cifrata con una chiave non piu' valida "
+                    "(SECRET_KEY cambiata?): reinserirla nelle impostazioni."
+                )
+                return ""
             return self.smtp_password
 
         self.smtp_password = self._encrypt_password(decrypted)
