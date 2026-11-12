@@ -4,7 +4,9 @@ WebSocket Consumer per comunicazione con dog-agent
 
 import json
 import logging
+import uuid
 from channels.generic.websocket import AsyncWebsocketConsumer
+from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from django.db import models
 from django.utils import timezone
@@ -20,6 +22,7 @@ from .pairing_rate_limit import (
     record_failed_pairing_attempt,
     reset_pairing_attempts,
 )
+from firedog.client_ip import client_ip_from_scope
 from targets.models import Target, Alert, FirewallStats, BlockedIP
 from threats.models import ThreatLog
 from rules.models import FirewallRule
@@ -81,7 +84,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             await self.send_error("Invalid JSON")
         except Exception as e:
             logger.error(f"Error in receive: {e}", exc_info=True)
-            await self.send_error(f"Internal error: {e!s}")
+            await self.send_error("Internal error")
 
     async def handle_pair_request(self, data):
         """
@@ -106,8 +109,8 @@ class AgentConsumer(AsyncWebsocketConsumer):
         # chiunque può tentare in loop combinazioni ip/hostname/mac contro
         # l'unica chiave fleet-wide (vedi agent_manager/pairing_rate_limit.py,
         # CRITICAL mitigato in code review, 2026-11).
-        source_ip = self.scope.get("client", (None,))[0] or "unknown"
-        if is_pairing_blocked(source_ip):
+        source_ip = client_ip_from_scope(self.scope)
+        if await sync_to_async(is_pairing_blocked)(source_ip):
             await self.send(
                 text_data=json.dumps(
                     {
@@ -127,7 +130,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
         # FASE 1: Verifica API key
         api_verified = await self.verify_api_key(api_key)
         if not api_verified:
-            record_failed_pairing_attempt(source_ip)
+            await sync_to_async(record_failed_pairing_attempt)(source_ip)
             await self.send(
                 text_data=json.dumps(
                     {
@@ -158,7 +161,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
         if pairing_session:
             # Pairing success!
-            reset_pairing_attempts(source_ip)
+            await sync_to_async(reset_pairing_attempts)(source_ip)
             self.target = await self.get_target_by_session(pairing_session)
 
             # Crea/Aggiorna connessione
@@ -182,7 +185,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             logger.info(f"Pairing successful for target {self.target}")
 
         else:
-            record_failed_pairing_attempt(source_ip)
+            await sync_to_async(record_failed_pairing_attempt)(source_ip)
             await self.send(
                 text_data=json.dumps(
                     {
@@ -286,6 +289,18 @@ class AgentConsumer(AsyncWebsocketConsumer):
         if not command_id:
             await self.send_error("Missing command_id")
             return
+        # Solo un agent autenticato puo' rispondere, e solo ai comandi del
+        # PROPRIO target: senza questo controllo qualunque socket poteva
+        # marcare come riuscito un comando altrui (add/remove_rule → modifica
+        # del DB, update_config → config_overrides).
+        if self.target is None:
+            await self.send_error("Not paired")
+            return
+        try:
+            command_id = str(uuid.UUID(str(command_id)))
+        except ValueError:
+            await self.send_error("Invalid command_id")
+            return
 
         # Side-effect: se la risposta di sync_rules contiene il JSON snapshot
         # di firewall-manager --export-json, ingestialo nelle tabelle come
@@ -327,7 +342,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def _get_command(self, command_id):
         from .models import AgentCommand as _AC
-        return _AC.objects.filter(command_id=command_id).first()
+        return _AC.objects.filter(command_id=command_id, target_id=self.target.pk).first()
 
     async def _maybe_apply_threat_config(self, command_id):
         """Se il comando era 'update_config', fonde il payload dispatchato
@@ -1070,7 +1085,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
     def update_command_status(self, command_id, command_status, result, error):
         """Aggiorna status comando + riconcilia oggetti DB tramite payload._meta."""
         try:
-            command = AgentCommand.objects.get(command_id=command_id)
+            command = AgentCommand.objects.get(command_id=command_id, target_id=self.target.pk)
 
             if command_status == "success":
                 command.mark_success(result)
@@ -1081,7 +1096,11 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 command.mark_executing()
 
         except AgentCommand.DoesNotExist:
-            logger.error(f"Command not found: {command_id}")
+            logger.warning(
+                "command_response per comando inesistente o di un altro target: %s (target %s)",
+                command_id,
+                self.target.pk,
+            )
 
     def _reconcile_command_meta(self, command):
         """Mark referenced DB objects as synced when the agent confirms success.

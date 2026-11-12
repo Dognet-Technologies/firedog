@@ -62,6 +62,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Primo: tutto cio' che segue (throttle DRF, audit) vede l'IP reale del
+    # client invece di 127.0.0.1 di nginx (vedi firedog/client_ip.py).
+    "firedog.client_ip.RealIPMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -164,7 +167,15 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "login": "10/min",
     },
+    # 0 = il throttle identifica il client da REMOTE_ADDR (gia' riscritto da
+    # RealIPMiddleware). Con il default None DRF usava l'intero header
+    # X-Forwarded-For, che il client controlla: throttle aggirabile.
+    "NUM_PROXIES": 0,
 }
+
+# Peer da cui accettare X-Real-IP (nginx locale). Aggiungere qui l'IP di un
+# reverse proxy esterno se FireDog non e' dietro l'nginx installato.
+TRUSTED_PROXY_IPS = ("127.0.0.1", "::1")
 
 # Backend Redis condiviso con CHANNEL_LAYERS (db diverso per non
 # sovrapporre le chiavi) — necessario perché le throttle class di DRF
