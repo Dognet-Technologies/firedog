@@ -22,7 +22,7 @@ from django.db import IntegrityError
 from django.db.models import Count, Max
 
 from audit.models import AuditLog
-from rules.models import FirewallRule
+from rules.models import FirewallRule, validate_interface_name, validate_rule_comment
 from rules.services import dispatch_add_rule, dispatch_remove_rule
 from targets.models import (
     Alert,
@@ -619,9 +619,20 @@ def create_rule(user, arguments):
     if dest_ip:
         _validate_ip("dest_ip", dest_ip)
 
-    comment = str(arguments.get("comment", ""))[:256]
+    comment = str(arguments.get("comment", ""))
+    try:
+        validate_rule_comment(comment)
+    except DjangoValidationError as e:
+        raise ToolParamError(f"comment non valido: {e.messages[0]}")
 
-    interface = str(arguments.get("interface", "")).strip()[:50]
+    # Niente troncamento silenzioso: prima `[:50]` e nessun controllo di
+    # formato, la stessa validazione del modello che usa la UI.
+    interface = str(arguments.get("interface", "")).strip()
+    if interface:
+        try:
+            validate_interface_name(interface)
+        except DjangoValidationError:
+            raise ToolParamError(f"interface non valida: {interface!r}")
     if interface and chain == "FORWARD":
         raise ToolParamError(
             "interface non è supportata su chain FORWARD (richiede sia -i che -o, "

@@ -180,3 +180,33 @@ class RetrieveKeyErrorDoesNotLeakExceptionTextTests(RoleBasedAccessTestCase):
         )
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json()["error"], "Impossibile decifrare la chiave")
+
+
+class DispatchValidatesPayloadTests(RoleBasedAccessTestCase):
+    """dispatch_command_to_agent valida il payload per ogni chiamante."""
+
+    def test_commento_con_newline_rifiutato(self):
+        from .services import InvalidCommandPayload, dispatch_command_to_agent
+
+        with self.assertRaises(InvalidCommandPayload):
+            dispatch_command_to_agent(
+                self.target, "add_rule", {"chain": "INPUT", "comment": "a\nb"}
+            )
+        self.assertEqual(AgentCommand.objects.count(), 0)
+
+    def test_azione_sconosciuta_rifiutata(self):
+        from .services import InvalidCommandPayload, dispatch_command_to_agent
+
+        with self.assertRaises(InvalidCommandPayload):
+            dispatch_command_to_agent(self.target, "rm_rf", {})
+
+    def test_send_to_group_rifiuta_timeout_non_valido(self):
+        self.target.gruppo = "web"
+        self.target.save()
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            "/api/agent/commands/send_to_group/",
+            {"group": "web", "action": "sync_rules", "payload": {}, "timeout_seconds": 10**9},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)

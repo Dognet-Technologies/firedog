@@ -8,6 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 
 from accounts.permissions import IsAdminOrReadOnly
@@ -398,7 +399,7 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
 
         Body: {chain, protocol, port?, source_ip?, dest_ip?, action, comment?}
         """
-        from rules.models import FirewallRule
+        from rules.models import FirewallRule, sanitize_rule_comment, validate_rule_comment
         from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
 
         group = get_object_or_404(TargetGroup, pk=pk)
@@ -416,22 +417,38 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
         if not members:
             return Response({"error": "Il gruppo non ha membri"}, status=400)
 
-        marker = f"[group:{group.name}]"
         user_comment = (data.get("comment") or "").strip()
-        full_comment = f"{marker} {user_comment}".strip()[:256]
+        try:
+            validate_rule_comment(user_comment)
+        except DjangoValidationError as e:
+            return Response({"comment": e.messages}, status=400)
+        full_comment = sanitize_rule_comment(f"[group:{group.name}] {user_comment}")
+
+        rule_fields = {
+            "chain": chain,
+            "protocol": (data.get("protocol") or "tcp"),
+            "port": data.get("port") or None,
+            "source_ip": data.get("source_ip") or None,
+            "dest_ip": data.get("dest_ip") or None,
+            "action": action_str,
+            "comment": full_comment,
+        }
+        # Prima protocol/port/IP finivano nel DB e nel payload dell'agent
+        # senza alcuna validazione: stessa validazione del modello usata
+        # dall'endpoint per singolo target, fatta una volta sola.
+        try:
+            FirewallRule(target=members[0], **rule_fields).full_clean(
+                exclude=["target", "group_origin"], validate_unique=False
+            )
+        except DjangoValidationError as e:
+            return Response(e.message_dict, status=400)
 
         created_rules: list[dict] = []
         dispatch_errors: dict[str, str] = {}
         for t in members:
             rule = FirewallRule.objects.create(
                 target=t,
-                chain=chain,
-                protocol=(data.get("protocol") or "tcp"),
-                port=data.get("port") or None,
-                source_ip=data.get("source_ip") or None,
-                dest_ip=data.get("dest_ip") or None,
-                action=action_str,
-                comment=full_comment,
+                **rule_fields,
                 is_custom=True,
                 is_synced=False,
                 group_origin=group,
@@ -550,7 +567,7 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
           rimuove (delete da DB + dispatch RemoveRule all'agent per le synced),
           poi dispatcha tutte le canonical rule del gruppo.
         """
-        from rules.models import FirewallRule, FirewallRuleBackup
+        from rules.models import FirewallRule, FirewallRuleBackup, sanitize_rule_comment
         from agent_manager.services import dispatch_command_to_agent, AgentNotConnected
 
         group = get_object_or_404(TargetGroup, pk=pk)
@@ -629,7 +646,7 @@ class TargetGroupViewSet(viewsets.ModelViewSet):
             comment = seed.comment if seed.comment else f"{marker}"
             if marker not in comment:
                 comment = f"{marker} {comment}".strip()
-            comment = comment[:256]
+            comment = sanitize_rule_comment(comment)
 
             new_rule = FirewallRule.objects.create(
                 target=target, chain=chain, protocol=proto, port=port,

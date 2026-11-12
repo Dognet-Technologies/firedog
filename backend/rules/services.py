@@ -9,7 +9,11 @@ is_synced=False in attesa della prossima riconciliazione.
 
 import logging
 
-from agent_manager.services import AgentNotConnected, dispatch_command_to_agent
+from agent_manager.services import (
+    AgentNotConnected,
+    InvalidCommandPayload,
+    dispatch_command_to_agent,
+)
 
 logger = logging.getLogger("firedog.rules_api")
 
@@ -37,6 +41,11 @@ def dispatch_add_rule(rule) -> bool:
         return True
     except AgentNotConnected as e:
         logger.warning("rule %s saved DB-only: %s", rule.id, e)
+        return False
+    except InvalidCommandPayload as e:
+        # Regole salvate prima della validazione del commento (es. con
+        # apici): restano nel DB ma non partono finche' non si corregge.
+        logger.error("rule %s non inviata, payload non valido: %s", rule.id, e)
         return False
 
 

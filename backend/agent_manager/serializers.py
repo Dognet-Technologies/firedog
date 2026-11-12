@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_ipv46_address
 from rest_framework import serializers
 
-from rules.models import FirewallRule, validate_interface_name
+from rules.models import FirewallRule, validate_interface_name, validate_rule_comment
 
 from .models import (
     AgentAPIKey,
@@ -19,6 +19,7 @@ from .models import (
 _VALID_CHAINS = {c for c, _ in FirewallRule.CHAIN_CHOICES}
 _VALID_PROTOCOLS = {c for c, _ in FirewallRule.PROTOCOL_CHOICES}
 _VALID_RULE_ACTIONS = {c for c, _ in FirewallRule.ACTION_CHOICES}
+_VALID_COMMAND_ACTIONS = {c for c, _ in AgentCommand.ACTION_CHOICES}
 
 # Campi ammessi per i payload di update_config/update_pcap_config inviati
 # tramite questo endpoint generico — stessi nomi già validati su
@@ -63,6 +64,12 @@ def _validate_rule_payload(payload):
             validate_interface_name(str(interface))
         except DjangoValidationError:
             raise ValueError(f"interface non valida: {interface!r}")
+    comment = payload.get("comment")
+    if comment:
+        try:
+            validate_rule_comment(comment)
+        except DjangoValidationError as e:
+            raise ValueError(f"comment non valido: {e.messages[0]}")
     for ip_field in ("src_ip", "dst_ip"):
         if payload.get(ip_field):
             _validate_ip_value(payload[ip_field], ip_field)
@@ -105,6 +112,8 @@ def validate_command_payload(action, payload):
     send_to_group, che altrimenti costruiva AgentCommand direttamente
     bypassando ogni validazione (HIGH trovato in code review, 2026-11).
     Solleva ValueError con un messaggio leggibile se non valido."""
+    if action not in _VALID_COMMAND_ACTIONS:
+        raise ValueError(f"azione sconosciuta: {action!r}")
     if payload is None:
         payload = {}
     if not isinstance(payload, dict):

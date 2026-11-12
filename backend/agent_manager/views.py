@@ -34,6 +34,9 @@ from targets.models import Target
 
 logger = logging.getLogger("firedog.agent_manager")
 
+# Limite per timeout_seconds dei comandi inviati a un gruppo.
+MAX_COMMAND_TIMEOUT_SECONDS = 3600
+
 
 class AgentAPIKeyViewSet(viewsets.ModelViewSet):
     """
@@ -471,6 +474,15 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
             validate_command_payload(action, payload)
         except ValueError as e:
             return Response({"error": f"payload non valido: {e}"}, status=status.HTTP_400_BAD_REQUEST)
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, int)
+            or not 1 <= timeout_seconds <= MAX_COMMAND_TIMEOUT_SECONDS
+        ):
+            return Response(
+                {"error": f"timeout_seconds deve essere un intero tra 1 e {MAX_COMMAND_TIMEOUT_SECONDS}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Trova tutti i target online del gruppo
         targets = Target.objects.filter(gruppo=group, status="online")
