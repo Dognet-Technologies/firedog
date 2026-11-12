@@ -3,8 +3,9 @@
 # default "firedog" — vedi INSTALL_USER in install.sh).
 #
 # La Discovery (backend/discovery/tasks.py, scan_network_arp) lancia
-# `sudo /usr/sbin/arp-scan -l` dal worker Celery: arp-scan richiede
-# privilegi raw-socket per costruire/leggere pacchetti ARP, il worker gira
-# come utente di servizio non privilegiato. NOPASSWD limitato al solo
-# binario arp-scan (path assoluto, non un wildcard) — non sudo generico.
-__FIREDOG_USER__ ALL=(root) NOPASSWD: /usr/sbin/arp-scan
+# arp-scan dal worker Celery: arp-scan richiede privilegi raw-socket, il
+# worker gira come utente di servizio non privilegiato. NOPASSWD solo per
+# il wrapper root-owned, che accetta un unico argomento (rete IPv4 CIDR):
+# arp-scan diretto con argomenti liberi permetteva di leggere/scrivere
+# file come root (vedi deploy/arp-scan-wrapper.sh).
+__FIREDOG_USER__ ALL=(root) NOPASSWD: /usr/local/lib/firedog/arp-scan-wrapper

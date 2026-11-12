@@ -143,8 +143,10 @@ chown -R "$INSTALL_USER:$INSTALL_USER" "$INSTALL_DIR"
 
 # Discovery (backend/discovery/tasks.py) lancia `sudo arp-scan` dal worker
 # Celery — arp-scan richiede privilegi raw-socket, il worker gira come
-# $INSTALL_USER non privilegiato. NOPASSWD limitato al solo binario
-# (path assoluto), validato con visudo prima di attivarlo.
+# $INSTALL_USER non privilegiato. NOPASSWD limitato al wrapper root-owned
+# che accetta solo una rete CIDR, validato con visudo prima di attivarlo.
+install -d -m 0755 -o root -g root /usr/local/lib/firedog
+install -m 0755 -o root -g root "$REPO_ROOT/deploy/arp-scan-wrapper.sh" /usr/local/lib/firedog/arp-scan-wrapper
 SUDOERS_TMP="$(mktemp)"
 sed "s#__FIREDOG_USER__#${INSTALL_USER}#g" "$REPO_ROOT/deploy/sudoers-arp-scan" > "$SUDOERS_TMP"
 if visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1; then

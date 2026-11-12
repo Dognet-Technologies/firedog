@@ -14,6 +14,9 @@ from targets.models import Target
 
 logger = logging.getLogger("firedog.discovery")
 
+# Wrapper root-owned installato da deploy/install.sh (vedi deploy/arp-scan-wrapper.sh).
+ARP_SCAN_WRAPPER = "/usr/local/lib/firedog/arp-scan-wrapper"
+
 
 @shared_task(bind=True)
 def discover_network_task(self):
@@ -217,8 +220,11 @@ def scan_network_arp(network):
         # scan locale invece di scansionare la rete richiesta (MEDIUM
         # trovato in code review, 2026-11). `network` è generato da
         # get_local_networks() (regex su `ip route`), mai input utente.
+        #
+        # Via wrapper root-owned (deploy/arp-scan-wrapper.sh): sudoers non
+        # autorizza piu' arp-scan con argomenti liberi.
         result = subprocess.run(
-            ["sudo", "/usr/sbin/arp-scan", network],
+            ["sudo", "-n", ARP_SCAN_WRAPPER, network],
             capture_output=True,
             text=True,
             check=True,

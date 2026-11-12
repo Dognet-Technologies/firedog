@@ -150,7 +150,13 @@ chown -R "$SVC_USER:$SVC_USER" "$BASE/backend" "$BASE/frontend"
 if ! command -v arp-scan >/dev/null 2>&1; then
   apt-get install -y -qq arp-scan >/dev/null 2>&1 || true
 fi
-if [ -f "$PKG_DIR/deploy/sudoers-arp-scan" ] && [ ! -f /etc/sudoers.d/firedog-arp-scan ]; then
+# Sudoers riscritto a ogni upgrade (non solo se assente): dalla seconda code
+# review autorizza solo il wrapper, non piu' arp-scan con argomenti liberi.
+if [ -f "$PKG_DIR/deploy/arp-scan-wrapper.sh" ]; then
+  install -d -m 0755 -o root -g root /usr/local/lib/firedog
+  install -m 0755 -o root -g root "$PKG_DIR/deploy/arp-scan-wrapper.sh" /usr/local/lib/firedog/arp-scan-wrapper
+fi
+if [ -f "$PKG_DIR/deploy/sudoers-arp-scan" ]; then
   SUDOERS_TMP="$(mktemp)"
   sed "s#__FIREDOG_USER__#${SVC_USER}#g" "$PKG_DIR/deploy/sudoers-arp-scan" > "$SUDOERS_TMP"
   visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1 && \
