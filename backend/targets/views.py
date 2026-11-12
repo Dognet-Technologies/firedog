@@ -32,7 +32,7 @@ from .serializers import (
     FirewallStatsSerializer,
     NetworkInterfaceSerializer,
 )
-from .services import record_blocked_ip, unblock_ip as unblock_ip_service
+from .services import dispatch_unblock, record_blocked_ip, unblock_ip as unblock_ip_service
 
 logger = logging.getLogger("firedog.targets")
 
@@ -401,6 +401,9 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
             old_values={"ip_address": ip_address, "target": target_id},
         )
 
+        if instance.is_active:
+            # Eliminare un blocco attivo deve toglierlo anche dal firewall.
+            dispatch_unblock(instance)
         instance.delete()
         logger.info(f"IP block removed: {ip_address} on target {target_id}")
 
@@ -495,6 +498,7 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
 
         for block in expired_blocks:
             block.unblock(unblocked_by="system")
+            dispatch_unblock(block)
 
         # Log audit
         AuditLog.log_action(

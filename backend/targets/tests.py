@@ -127,3 +127,50 @@ class BlockedIPAccessControlTests(RoleBasedAccessTestCase):
         self.client.force_authenticate(user=self.reporter)
         response = self.client.get("/api/blocked-ips/stats/")
         self.assertEqual(response.status_code, 200)
+
+
+class BlockedIPDispatchTests(RoleBasedAccessTestCase):
+    """Regressione (seconda review, 2026-11): "Blocca IP" scriveva solo il
+    DB, il comando block_ip non partiva mai verso l'agent."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(user=self.admin)
+
+    def test_blocco_inviato_all_agent(self):
+        from unittest import mock
+
+        with mock.patch("agent_manager.services.dispatch_command_to_agent") as dispatch:
+            response = self.client.post(
+                "/api/blocked-ips/",
+                {"target": self.target.id, "ip_address": "203.0.113.9", "block_reason": "manual"},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 201, response.content)
+        block = BlockedIP.objects.get(ip_address="203.0.113.9")
+        dispatch.assert_called_once_with(
+            self.target,
+            "block_ip",
+            {"ip": "203.0.113.9", "direction": "INPUT"},
+            meta={"blocked_ip_id": block.id},
+        )
+
+    def test_agent_offline_blocco_resta_nel_db(self):
+        response = self.client.post(
+            "/api/blocked-ips/",
+            {"target": self.target.id, "ip_address": "203.0.113.10", "block_reason": "manual"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertTrue(BlockedIP.objects.filter(ip_address="203.0.113.10").exists())
+
+    def test_sblocco_inviato_all_agent(self):
+        from unittest import mock
+
+        block = BlockedIP.objects.create(target=self.target, ip_address="203.0.113.11")
+        with mock.patch("agent_manager.services.dispatch_command_to_agent") as dispatch:
+            response = self.client.post(f"/api/blocked-ips/{block.id}/unblock/")
+        self.assertEqual(response.status_code, 200, response.content)
+        dispatch.assert_called_once_with(
+            self.target, "unblock_ip", {"ip": "203.0.113.11", "direction": "INPUT"}, meta={}
+        )

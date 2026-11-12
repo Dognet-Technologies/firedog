@@ -746,11 +746,11 @@ def block_ip(user, arguments):
             f"{ip_address} è già bloccato su questo target (record esistente)."
         )
 
-    record_blocked_ip(block, user=user)
+    dispatched = record_blocked_ip(block, user=user)
     logger.info(
         "MCP block_ip: %s bloccato su target %s da %s", ip_address, target.id, user
     )
-    return {"blocked_ip": _blocked_ip_dict(block)}
+    return {"blocked_ip": _blocked_ip_dict(block), "dispatched_to_agent": dispatched}
 
 
 def unblock_ip(user, arguments):
