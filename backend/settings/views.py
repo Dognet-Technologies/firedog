@@ -788,6 +788,8 @@ class UserManagementViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [IsAuthenticated]
+    # Nessun limite di default; change_password lo imposta per la sua action.
+    throttle_scope = None
 
     @action(detail=False, methods=["get"])
     def profile(self, request):
@@ -844,7 +846,9 @@ class UserManagementViewSet(viewsets.ViewSet):
             }
         )
 
-    @action(detail=False, methods=["put"])
+    # throttle_scope: la password attuale verificata qui era un secondo
+    # oracolo di brute-force senza limiti (il login e' gia' limitato).
+    @action(detail=False, methods=["put"], throttle_scope="password_change")
     def change_password(self, request):
         """
         PUT /api/settings/user/change-password/

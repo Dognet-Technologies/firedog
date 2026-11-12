@@ -169,6 +169,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
     "DEFAULT_THROTTLE_RATES": {
         "login": "10/min",
+        "password_change": "5/min",
     },
     # 0 = il throttle identifica il client da REMOTE_ADDR (gia' riscritto da
     # RealIPMiddleware). Con il default None DRF usava l'intero header

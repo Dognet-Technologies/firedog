@@ -118,3 +118,22 @@ class RefreshTokenRotationTests(TestCase):
         from accounts.tasks import flush_expired_tokens
 
         flush_expired_tokens()
+
+
+@override_settings(CACHES=TEST_CACHES)
+class ChangePasswordThrottleTests(TestCase):
+    """La verifica della password attuale nel cambio password non aveva
+    limiti: brute-force con un token rubato."""
+
+    def setUp(self):
+        caches["default"].clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user("bob", password="correct-password")
+        self.client.force_authenticate(user=self.user)
+
+    def test_oltre_la_soglia_viene_limitato(self):
+        body = {"current_password": "wrong", "new_password": "N3w-Passw0rd!x", "confirm_password": "N3w-Passw0rd!x"}
+        for _ in range(5):
+            self.client.put("/api/settings/user/change_password/", body, format="json")
+        response = self.client.put("/api/settings/user/change_password/", body, format="json")
+        self.assertEqual(response.status_code, 429)
