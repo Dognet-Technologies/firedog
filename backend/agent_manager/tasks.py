@@ -145,6 +145,10 @@ def timeout_stale_commands():
     return f"Marked {count} commands as timeout"
 
 
+AGGREGATED_ALERT_TITLE = "Multiple Critical Threats Detected"
+AGGREGATED_ALERT_EVERY = timedelta(hours=1)
+
+
 @shared_task
 def check_critical_threats():
     """
@@ -177,10 +181,21 @@ def check_critical_threats():
             # Almeno 3 minacce critiche
             target = threats[0].target
 
+            # Un attacco in corso resta "recente" a ogni reinvio dell'agent:
+            # un alert aggregato per target finché non viene preso in carico,
+            # non uno ogni 10 minuti.
+            if Alert.objects.filter(
+                target=target,
+                title=AGGREGATED_ALERT_TITLE,
+                acknowledged=False,
+                created_at__gte=timezone.now() - AGGREGATED_ALERT_EVERY,
+            ).exists():
+                continue
+
             Alert.objects.create(
                 target=target,
                 severity="critical",
-                title="Multiple Critical Threats Detected",
+                title=AGGREGATED_ALERT_TITLE,
                 message=f"{len(threats)} critical threats detected in the last 10 minutes",
             )
 

@@ -189,3 +189,22 @@ class CriticalThreatsTaskTests(TransactionTestCase):
         self.assertTrue(
             Alert.objects.filter(target=target, title="Multiple Critical Threats Detected").exists()
         )
+
+    def test_un_solo_alert_aggregato_mentre_l_attacco_continua(self):
+        # L'agent rinvia le stesse minacce ogni minuto: senza questo controllo
+        # il task (ogni 10 minuti) creava un nuovo alert a ogni giro.
+        from .tasks import check_critical_threats
+
+        target = Target.objects.create(ip_address="10.10.0.19", hostname="lab-client2")
+        for i in range(3):
+            ThreatLog.objects.create(
+                target=target, source_ip=f"198.51.100.{i}", threat_score=90, severity="critical"
+            )
+        check_critical_threats()
+        check_critical_threats()
+        title = "Multiple Critical Threats Detected"
+        self.assertEqual(Alert.objects.filter(target=target, title=title).count(), 1)
+        # Preso in carico: al giro dopo, se l'attacco continua, se ne crea uno nuovo.
+        Alert.objects.filter(target=target, title=title).update(acknowledged=True)
+        check_critical_threats()
+        self.assertEqual(Alert.objects.filter(target=target, title=title).count(), 2)

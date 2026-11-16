@@ -165,6 +165,20 @@ branch configurata, rebuild del frontend, `pip install` + `migrate` e riavvia
 i servizi. Richiede NOPASSWD sudo per i soli restart (vedi commento in testa
 allo script).
 
+> `update.sh` gira senza root e non tocca il certificato HTTPS. Su
+> un'installazione da clone con il vecchio certificato self-signed
+> (`/etc/ssl/firedog`, rifiutato da dog_agent 1.3+), dopo l'aggiornamento
+> installa una volta lo strumento e il timer di rinnovo e migra il
+> certificato (aggiungi `--name <ip-o-nome>` se il master ha cambiato
+> indirizzo). Vedi [Certificato HTTPS e agent](#certificato-https-e-agent).
+>
+> ```bash
+> sudo install -m 0755 deploy/firedog-tls /usr/local/sbin/firedog-tls
+> sudo install -m 0644 deploy/firedog-tls-renew.service deploy/firedog-tls-renew.timer /etc/systemd/system/
+> sudo systemctl daemon-reload && sudo systemctl enable --now firedog-tls-renew.timer
+> sudo firedog-tls ensure
+> ```
+
 **Installazione da tarball di release o appliance OVA/qcow2** (nessuna
 directory `.git` — `update.sh` non è applicabile, e il bottone "Verifica/
 Installa aggiornamenti" del frontend risponde con un errore esplicito per lo
