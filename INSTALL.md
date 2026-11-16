@@ -15,9 +15,10 @@ cd firedog
 sudo ./deploy/install.sh
 ```
 
-Esegue tutti i passi manuali descritti sotto, più la generazione di un
-certificato TLS self-signed e la configurazione HTTPS di nginx (default —
-il browser avviserà "connessione non sicura" al primo accesso, è atteso).
+Esegue tutti i passi manuali descritti sotto, più la CA locale
+dell'installazione, il certificato server firmato da lei e la configurazione
+HTTPS di nginx (default — il browser avvisa "connessione non sicura" finché
+non importi la CA, vedi [Certificato HTTPS e agent](#certificato-https-e-agent)).
 Genera automaticamente `SECRET_KEY`, password del database e password
 dell'utente admin se non passate esplicitamente. Nessuna password viene
 stampata, perché con il `.deb` l'output finisce in `/var/log/apt/term.log`.
@@ -28,7 +29,9 @@ del database resta solo in `backend/.env`.
 
 Opzioni principali: `--server-name <ip-o-host>`, `--install-user <utente>`
 (default: crea un utente di sistema dedicato `firedog`), `--skip-tls`
-(nginx solo HTTP), `--force` (procede anche se DB/utente esistono già).
+(nginx solo HTTP), `--tls-profile testing` (solo sviluppo e test interni:
+certificati marcati TESTING, CA 12 mesi, server 6 mesi), `--force` (procede
+anche se DB/utente esistono già).
 `./deploy/install.sh --help` per l'elenco completo.
 
 I passi manuali sotto restano come riferimento — utile per capire cosa fa
@@ -175,3 +178,31 @@ tar xzf firedog-<tag>-linux-x86_64.tar.gz
 cd firedog-<tag>-linux-x86_64
 sudo ./deploy/upgrade.sh
 ```
+
+## Certificato HTTPS e agent
+
+Ogni installazione ha la propria CA, creata da `deploy/firedog-tls`
+(installato in `/usr/local/sbin/firedog-tls`). La chiave della CA resta solo
+sul master; la CA firma il certificato server (il solo IP o nome del master,
+mai wildcard), che un timer giornaliero rinnova prima della scadenza senza
+toccare agent e browser.
+
+- Configurazione: `/etc/sentinelsuite/firedog/tls.conf` (`PROFILE`,
+  `SERVER_NAME`, `MANAGED=no` per un certificato della propria PKI aziendale).
+- Certificati: `/etc/sentinelsuite/firedog/tls/`, chiavi in `tls/private/`.
+- Impronta e scadenze: Impostazioni > API Keys Agent > "Certificato del
+  master", oppure `sudo firedog-tls info`.
+- **dog_agent 1.3 e successivi** verificano il certificato del master:
+  scarica la CA (`https://<master>/api/tls/ca.pem`), confronta l'impronta e
+  impostala in `ca_cert` nella sezione `[agent]` di `agent.conf`. Se l'agent
+  parla anche con altri prodotti della suite, metti le loro CA nello stesso
+  file.
+- **Browser**: importa la stessa CA come autorità per i siti web, oppure
+  accetta l'avviso.
+
+**Aggiornando da una versione precedente** (certificato self-signed in
+`/etc/ssl/firedog`), `upgrade.sh` crea la CA e il nuovo certificato e ripunta
+nginx. Dopo l'aggiornamento il certificato è diverso: il browser chiede di
+nuovo di accettarlo (una pagina già aperta va ricaricata, altrimenti i
+salvataggi falliscono con un errore di connessione) e gli agent 1.3 vanno
+configurati con la nuova CA.

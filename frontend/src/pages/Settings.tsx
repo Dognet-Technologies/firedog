@@ -86,7 +86,14 @@ const PCAP_THREAT_COMMAND_OPTIONS: Array<{ key: string; label: string; hint: str
 // bulk_update risponde 400 con {"settings": {campo: motivo}} per i valori
 // fuori intervallo (backend/settings/views.py::_validate_monitoring_settings).
 function settingsErrorDetail(error: unknown): string | null {
-  const data = (error as { response?: { data?: { settings?: unknown } } })?.response?.data;
+  const err = error as { request?: unknown; response?: { data?: { settings?: unknown } } };
+  // Nessuna risposta: la richiesta non è arrivata al master (rete, o
+  // certificato HTTPS cambiato mentre la pagina era aperta: il browser
+  // rifiuta la connessione senza mostrare l'avviso).
+  if (err?.request && !err.response) {
+    return 'Connessione al master non riuscita: controlla la rete o ricarica la pagina (il certificato HTTPS potrebbe essere cambiato).';
+  }
+  const data = err?.response?.data;
   const fields = data?.settings;
   if (!fields || typeof fields !== 'object') return null;
   const parts = Object.entries(fields as Record<string, unknown>)

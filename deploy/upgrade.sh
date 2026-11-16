@@ -198,6 +198,7 @@ trap - ERR
 TLS_TOOL=/usr/local/sbin/firedog-tls
 ETC_DIR=/etc/sentinelsuite/firedog
 NGINX_SITE=/etc/nginx/sites-available/firedog
+TLS_NOTE=no
 if [ -f "$PKG_DIR/deploy/firedog-tls" ] && grep -q "ssl_certificate" "$NGINX_SITE" 2>/dev/null; then
   install -m 0755 -o root -g root "$PKG_DIR/deploy/firedog-tls" "$TLS_TOOL"
   install -m 0644 -o root -g root "$PKG_DIR/deploy/firedog-tls-renew.service" \
@@ -219,7 +220,10 @@ MANAGED=yes
 CONF
     chmod 0644 "$ETC_DIR/tls.conf"
   fi
-  if ! "$TLS_TOOL" ensure; then
+  [ -f "$ETC_DIR/tls/ca.crt" ] && HAD_CA=yes || HAD_CA=no
+  if "$TLS_TOOL" ensure; then
+    [ "$HAD_CA" = no ] && TLS_NOTE=yes
+  else
     echo "ATTENZIONE: certificato TLS non aggiornato, nginx usa quello precedente." >&2
     echo "Verifica con: sudo $TLS_TOOL ensure" >&2
   fi
@@ -249,6 +253,17 @@ if [ "$CODE" = "405" ]; then
    Servizi: systemctl status firedog-backend firedog-celery firedog-celerybeat
 ────────────────────────────────────────────────────────────────────
 EOF
+  if [ "$TLS_NOTE" = yes ]; then
+    cat <<EOF
+ Certificato HTTPS nuovo, firmato dalla CA locale di questa installazione
+ ($TLS_TOOL info per l'impronta):
+   - browser: ricarica la pagina e accetta il nuovo certificato, o importa
+     la CA da Impostazioni > API Keys Agent > "Certificato del master";
+   - dog_agent 1.3+: imposta la CA (https://<master>/api/tls/ca.pem) in
+     ca_cert, sezione [agent] di agent.conf.
+────────────────────────────────────────────────────────────────────
+EOF
+  fi
 else
   cat <<EOF
 
