@@ -35,9 +35,9 @@ interface SettingsData {
   enableMFA: boolean;
   
   // Monitoring Settings
-  scanInterval: number;
+  // Giorni di storico (minacce, alert, notifiche, comandi, statistiche)
+  // conservati dal task notturno settings.tasks.apply_log_retention.
   logRetention: number;
-  enableAutoBlock: boolean;
   // Soglia minima di score per l'invio di un alert (SystemSettings key
   // "alertNotificationMinScore") — NON è la soglia di auto-block per-target
   // lato agent (quella vive in agent.conf sul target, vedi dog_agent).
@@ -82,6 +82,17 @@ const PCAP_THREAT_COMMAND_OPTIONS: Array<{ key: string; label: string; hint: str
   { key: 'icmp', label: 'Attività ICMP', hint: 'Rileva ping sweep' },
 ];
 
+// bulk_update risponde 400 con {"settings": {campo: motivo}} per i valori
+// fuori intervallo (backend/settings/views.py::_validate_monitoring_settings).
+function settingsErrorDetail(error: unknown): string | null {
+  const data = (error as { response?: { data?: { settings?: unknown } } })?.response?.data;
+  const fields = data?.settings;
+  if (!fields || typeof fields !== 'object') return null;
+  const parts = Object.entries(fields as Record<string, unknown>)
+    .map(([key, msg]) => `${key}: ${String(msg)}`);
+  return parts.length ? `Valori non validi — ${parts.join('; ')}` : null;
+}
+
 const SETTINGS_CATEGORY: Record<keyof SettingsData, string> = {
   systemName: 'general', timezone: 'general', language: 'general',
   theme: 'appearance', fontFamily: 'appearance', fontSize: 'appearance',
@@ -90,7 +101,7 @@ const SETTINGS_CATEGORY: Record<keyof SettingsData, string> = {
   discordNotifications: 'notifications', notificationEmail: 'notifications',
   notificationWebhook: 'notifications',
   sessionTimeout: 'security', maxLoginAttempts: 'security', enableMFA: 'security',
-  scanInterval: 'monitoring', logRetention: 'monitoring', enableAutoBlock: 'monitoring',
+  logRetention: 'monitoring',
   alertNotificationMinScore: 'monitoring', pcapSavePath: 'monitoring',
   pcapAnalysisTool: 'monitoring', pcapCustomFilters: 'monitoring',
   pcapThreatCommands: 'monitoring',
@@ -301,9 +312,7 @@ const Settings: React.FC = () => {
     sessionTimeout: 30,
     maxLoginAttempts: 5,
     enableMFA: false,
-    scanInterval: 60,
     logRetention: 30,
-    enableAutoBlock: true,
     alertNotificationMinScore: 8,
     pcapSavePath: '/var/log/ulogd',
     pcapAnalysisTool: 'tcpdump',
@@ -534,8 +543,9 @@ const Settings: React.FC = () => {
         }
       }
     } catch (error) {
-      setSaveMessage({ type: 'error', text: 'Errore nel salvataggio delle impostazioni.' });
-      showToast({ type: 'error', title: 'Errore', message: 'Errore salvataggio impostazioni' });
+      const detail = settingsErrorDetail(error);
+      setSaveMessage({ type: 'error', text: detail ?? 'Errore nel salvataggio delle impostazioni.' });
+      showToast({ type: 'error', title: 'Errore', message: detail ?? 'Errore salvataggio impostazioni' });
     } finally {
       setIsSaving(false);
       setTimeout(() => setSaveMessage(null), 3000);
@@ -1982,21 +1992,6 @@ const Settings: React.FC = () => {
 
       <div className="settings-grid">
         <div className="form-group">
-          <label htmlFor="scanInterval">Intervallo Scansione (secondi)</label>
-          <input
-            id="scanInterval"
-            type="number"
-            className="input"
-            min="30"
-            max="600"
-            step="30"
-            value={settings.scanInterval}
-            onChange={(e) => handleInputChange('scanInterval', parseInt(e.target.value))}
-          />
-          <span className="form-hint">Frequenza di scansione del traffico di rete</span>
-        </div>
-
-        <div className="form-group">
           <label htmlFor="logRetention">Conservazione Log (giorni)</label>
           <input
             id="logRetention"
@@ -2007,19 +2002,7 @@ const Settings: React.FC = () => {
             value={settings.logRetention}
             onChange={(e) => handleInputChange('logRetention', parseInt(e.target.value))}
           />
-          <span className="form-hint">Tempo di conservazione dei log di sistema</span>
-        </div>
-
-        <div className="form-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={settings.enableAutoBlock}
-              onChange={(e) => handleInputChange('enableAutoBlock', e.target.checked)}
-            />
-            <span>Blocco Automatico Minacce</span>
-          </label>
-          <span className="form-hint">Blocca automaticamente gli IP identificati come minaccia</span>
+          <span className="form-hint">Ogni notte vengono cancellati minacce, alert, notifiche inviate, comandi conclusi e statistiche più vecchi di così. L'audit log non viene toccato.</span>
         </div>
 
         <div className="form-group">
@@ -2038,7 +2021,7 @@ const Settings: React.FC = () => {
             <span>1 (Bassa)</span>
             <span>10 (Alta)</span>
           </div>
-          <span className="form-hint">Score minimo di una minaccia sotto il quale non viene inviato nessun alert (email/Slack/Discord). Non è la soglia di auto-block dell'agent sul target.</span>
+          <span className="form-hint">Le minacce high/critical con score almeno pari a questo valore × 10 (es. 8 = score 80/100) inviano un alert email/Slack/Discord, una volta al rilevamento o quando si aggravano. Non è la soglia di auto-block dell'agent sul target.</span>
         </div>
 
         <div className="form-group">

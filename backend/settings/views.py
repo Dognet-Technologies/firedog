@@ -14,7 +14,7 @@ from django.contrib.auth import update_session_auth_hash
 from datetime import timedelta
 import logging
 import shlex
-from .tasks import send_test_notification
+from .tasks import ALERT_MIN_SCORE_RANGE, LOG_RETENTION_RANGE, send_test_notification
 from .models import (
     SystemSettings,
     DatabaseCleanupLog,
@@ -138,6 +138,33 @@ def _build_pcap_sync_payload(settings_data: dict) -> tuple[dict, dict]:
     return payload, errors
 
 
+# Impostazioni > Monitoraggio con un intervallo valido (stessi limiti della
+# UI e di settings.tasks): validate PRIMA di salvare, un valore fuori
+# intervallo è un 400 e non viene scritto.
+MONITORING_INT_RANGES = {
+    "logRetention": LOG_RETENTION_RANGE,
+    "alertNotificationMinScore": ALERT_MIN_SCORE_RANGE,
+}
+# Tolte (review 2026-11-16): salvate ma mai lette da nessuna parte.
+# "Blocco automatico" vive per target (agentThreatScoring.autoBlockEnabled),
+# l'intervallo di scansione è quello dell'agent.
+REMOVED_SETTINGS_KEYS = {"scanInterval", "enableAutoBlock"}
+
+
+def _validate_monitoring_settings(settings_data: dict) -> dict[str, str]:
+    errors: dict[str, str] = {}
+    for key in REMOVED_SETTINGS_KEYS & settings_data.keys():
+        errors[key] = "impostazione rimossa: non ha effetto"
+    for key, (low, high) in MONITORING_INT_RANGES.items():
+        if key not in settings_data:
+            continue
+        value = settings_data[key]
+        # bool è un int in Python: True/False non sono numeri validi qui.
+        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+            errors[key] = f"deve essere un intero tra {low} e {high}"
+    return errors
+
+
 def _sync_pcap_settings_to_targets(settings_data: dict) -> dict | None:
     """Pusha le pcap settings cambiate a tutti i target FireDog connessi.
 
@@ -233,6 +260,10 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
 
         settings_data = serializer.validated_data["settings"]
         category = serializer.validated_data.get("category", "general")
+
+        invalid = _validate_monitoring_settings(settings_data)
+        if invalid:
+            return Response({"settings": invalid}, status=status.HTTP_400_BAD_REQUEST)
 
         updated_settings = []
 

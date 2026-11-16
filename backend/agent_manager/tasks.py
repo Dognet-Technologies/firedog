@@ -3,6 +3,7 @@ Celery tasks per agent_manager
 """
 
 from celery import shared_task
+from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 import logging
@@ -13,37 +14,65 @@ from targets.models import Alert
 logger = logging.getLogger(__name__)
 
 
+OFFLINE_AFTER_MINUTES = 2
+OFFLINE_ALERT_TITLE = "Agent Offline"
+# Disconnessioni più vecchie di così non vengono segnalate: al primo avvio
+# dopo l'aggiornamento non devono partire alert per target spenti da mesi.
+OFFLINE_ALERT_LOOKBACK = timedelta(days=1)
+
+
 @shared_task
 def check_agent_health():
     """
-    Verifica salute degli agent ogni 2 minuti
-    Marca come offline agent senza heartbeat da 2+ minuti
-    """
-    threshold = timezone.now() - timedelta(minutes=2)
+    Ogni 2 minuti: marca offline gli agent senza heartbeat da 2+ minuti e
+    segnala (Alert in app + notifica) quelli offline da 2+ minuti.
 
-    offline_agents = AgentConnection.objects.filter(
-        is_online=True, last_heartbeat__lt=threshold
-    )
+    Due casi: heartbeat scaduto con connessione ancora "online" (host
+    spento di colpo) e WebSocket chiusa (consumer.disconnect → is_online
+    False). Il secondo prima non veniva mai segnalato. Un riavvio
+    dell'agent (si ricollega in pochi secondi) non genera alert; ogni
+    disconnessione viene segnalata una volta sola.
+    """
+    from settings.tasks import trigger_target_offline_alert
+
+    now = timezone.now()
+    threshold = now - timedelta(minutes=OFFLINE_AFTER_MINUTES)
+
+    stale = AgentConnection.objects.filter(
+        Q(is_online=True, last_heartbeat__lt=threshold)
+        | Q(is_online=False, disconnected_at__lt=threshold, disconnected_at__gte=now - OFFLINE_ALERT_LOOKBACK)
+    ).select_related("target")
 
     count = 0
-    for connection in offline_agents:
-        connection.mark_offline()
+    for connection in stale:
+        if connection.is_online:
+            connection.mark_offline()
+            logger.warning("Agent offline (heartbeat scaduto): %s", connection.target)
 
-        # Crea alert
+        since = connection.disconnected_at or threshold
+        if Alert.objects.filter(
+            target=connection.target, title=OFFLINE_ALERT_TITLE, created_at__gte=since
+        ).exists():
+            continue
+
         Alert.objects.create(
             target=connection.target,
             severity="high",
-            title="Agent Offline",
-            message=f"Agent {connection.target.hostname} has not sent heartbeat for more than 2 minutes",
+            title=OFFLINE_ALERT_TITLE,
+            message=(
+                f"L'agent di {connection.target.hostname} non risponde da più di "
+                f"{OFFLINE_AFTER_MINUTES} minuti"
+            ),
         )
-
+        try:
+            trigger_target_offline_alert(connection.target, OFFLINE_AFTER_MINUTES)
+        except Exception:
+            logger.exception("Notifica offline per %s fallita", connection.target)
         count += 1
-        logger.warning(f"Marked agent offline: {connection.target}")
 
-    if count > 0:
-        logger.info(f"Health check: Marked {count} agents offline")
-
-    return f"Checked agent health, marked {count} offline"
+    if count:
+        logger.info("Health check: %d agent segnalati offline", count)
+    return f"Checked agent health, {count} segnalati offline"
 
 
 @shared_task
@@ -127,8 +156,10 @@ def check_critical_threats():
     threshold = timezone.now() - timedelta(minutes=10)
 
     # Trova threat critici recenti
+    # Campo reale updated_at (le minacce ancora attive vengono aggiornate a
+    # ogni reinvio); "timestamp" non esiste: il task falliva sempre.
     critical_threats = ThreatLog.objects.filter(
-        timestamp__gte=threshold, threat_score__gte=80
+        updated_at__gte=threshold, threat_score__gte=80, is_resolved=False
     ).select_related("target")
 
     # Raggruppa per target

@@ -23,8 +23,8 @@ from .pairing_rate_limit import (
     reset_pairing_attempts,
 )
 from firedog.client_ip import client_ip_from_scope
-from targets.models import Target, Alert, FirewallStats, BlockedIP
-from threats.models import ThreatLog
+from targets.models import Target, FirewallStats, BlockedIP
+from threats.ingest import ingest_agent_threats, notify_threat, severity_for_score, upsert_threat
 from rules.models import FirewallRule
 
 logger = logging.getLogger(__name__)
@@ -235,38 +235,27 @@ class AgentConsumer(AsyncWebsocketConsumer):
 
     async def handle_threat_log(self, data):
         """
-        Gestisce log minacce dall'agent
-        Messaggio: {
-            "type": "threat_log",
-            "threats": [
-                {
-                    "source_ip": "1.2.3.4",
-                    "threat_score": 85,
-                    "classification": "CRITICAL",
-                    "attack_type": "port_scan",
-                    "details": {...}
-                }
-            ]
-        }
+        Minacce rilevate dall'agent (dog_agent ThreatEntry, vedi
+        dog_agent/src/protocol/firedog.rs):
+        {"type": "threat_log", "threats": [{"src_ip": "1.2.3.4",
+          "score": 84, "threat_type": "BRUTE_FORCE", "dst_port": 22,
+          "protocol": "tcp", "description": "...", "auto_blocked": false}]}
+
+        Prima leggeva source_ip/threat_score/attack_type e creava ThreatLog
+        con campi inesistenti: ogni minaccia dell'agent andava persa
+        (review 2026-11-16).
         """
         if not self.target:
             await self.send_error("Not paired")
             return
 
-        threats = data.get("threats", [])
+        saved = await self.ingest_threats(data.get("threats"))
 
-        for threat in threats:
-            # Salva ThreatLog
-            await self.save_threat_log(threat)
+        await self.send(text_data=json.dumps({"type": "threat_ack", "count": saved}))
 
-            # Crea alert se score >= 80
-            if threat.get("threat_score", 0) >= 80:
-                await self.create_threat_alert(threat)
-
-        # Invia ACK
-        await self.send(
-            text_data=json.dumps({"type": "threat_ack", "count": len(threats)})
-        )
+    @database_sync_to_async
+    def ingest_threats(self, threats):
+        return ingest_agent_threats(self.target, threats)
 
     async def handle_command_response(self, data):
         """
@@ -1005,14 +994,7 @@ class AgentConsumer(AsyncWebsocketConsumer):
             except (TypeError, ValueError):
                 continue
 
-            if score >= 80:
-                severity = "critical"
-            elif score >= 60:
-                severity = "high"
-            elif score >= 40:
-                severity = "medium"
-            else:
-                severity = "low"
+            severity = severity_for_score(score)
 
             reasons = t.get("reasons") or []
             if not isinstance(reasons, list):
@@ -1050,36 +1032,9 @@ class AgentConsumer(AsyncWebsocketConsumer):
                 defaults["pcap_detail"] = pcap_detail
                 defaults["pcap_detail_updated_at"] = timezone.now()
 
-            ThreatLog.objects.update_or_create(
-                target=self.target,
-                source_ip=ip,
-                is_resolved=False,
-                defaults=defaults,
-            )
-
-    @database_sync_to_async
-    def save_threat_log(self, threat):
-        """Salva threat log"""
-        if self.target:
-            ThreatLog.objects.create(
-                target=self.target,
-                source_ip=threat.get("source_ip"),
-                threat_score=threat.get("threat_score", 0),
-                classification=threat.get("classification", "MEDIUM"),
-                attack_type=threat.get("attack_type", "unknown"),
-                details=threat.get("details", {}),
-            )
-
-    @database_sync_to_async
-    def create_threat_alert(self, threat):
-        """Crea alert per minaccia critica"""
-        if self.target:
-            Alert.objects.create(
-                target=self.target,
-                severity="critical",
-                title=f"Critical Threat Detected: {threat.get('attack_type', 'Unknown')}",
-                message=f"Source IP: {threat.get('source_ip')} - Threat Score: {threat.get('threat_score')}",
-            )
+            threat, escalated = upsert_threat(self.target, ip, defaults)
+            if escalated:
+                notify_threat(threat)
 
     @database_sync_to_async
     def update_command_status(self, command_id, command_status, result, error):

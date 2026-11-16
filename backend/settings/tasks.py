@@ -5,6 +5,8 @@ File: backend/settings/tasks.py
 Tasks asincroni per invio notifiche email/Slack/Discord
 """
 
+from datetime import timedelta
+
 from celery import shared_task
 from django.utils import timezone
 import ipaddress
@@ -520,64 +522,142 @@ def send_alert_notification(self, alert_type, message, target_id=None):
 # ==================== HELPER FUNCTIONS ====================
 
 
-def trigger_threat_alert(threat, severity):
-    """
-    Helper per triggerare alert da minaccia rilevata
+# Impostazioni > Monitoraggio > "Soglia invio alert" è su scala 1-10 nella UI,
+# gli score delle minacce su 0-100: 8/10 = score >= 80.
+ALERT_MIN_SCORE_DEFAULT = 8
+ALERT_MIN_SCORE_RANGE = (1, 10)
 
-    Args:
-        threat: Istanza ThreatLog
-        severity: 'CRITICAL' o 'HIGH'
-    """
+
+def alert_min_threat_score():
+    """Score minimo (0-100) sotto il quale una minaccia non genera notifiche."""
     from settings.models import SystemSettings
 
-    # Verifica soglia minaccia (soglia GLOBALE di invio alert — non va
-    # confusa con agentThreatScoring.autoBlockThreshold, la soglia di
-    # auto-block per-target lato agent, o col vecchio nome "threatThreshold"
-    # mai davvero seedato/usato altrove).
-    threat_threshold = SystemSettings.get_setting("alertNotificationMinScore", 8)
+    raw = SystemSettings.get_setting("alertNotificationMinScore", ALERT_MIN_SCORE_DEFAULT)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = ALERT_MIN_SCORE_DEFAULT
+    low, high = ALERT_MIN_SCORE_RANGE
+    return max(low, min(high, value)) * 10
 
-    if threat.threat_score < threat_threshold:
-        return  # Sotto soglia, non inviare alert
 
-    alert_type = f"threat_{severity.lower()}"
+def trigger_threat_alert(threat):
+    """
+    Notifica (email/Slack/Discord) per una minaccia high/critical sopra la
+    soglia di Impostazioni > Monitoraggio. Chiamata da threats.ingest al
+    primo rilevamento o quando la severità sale. Ritorna True se accodata.
+    """
+    if threat.severity not in ("high", "critical"):
+        return False
+    if threat.threat_score < alert_min_threat_score():
+        return False
 
+    reasons = ", ".join(threat.reasons or []) or "n/d"
     message = f"""
-⚠️ THREAT DETECTED ⚠️
+⚠️ MINACCIA RILEVATA
 
 Target: {threat.target.hostname} ({threat.target.ip_address})
-Severity: {severity}
-Score: {threat.threat_score}/10
-Type: {threat.threat_type}
-Source IP: {threat.source_ip}
-Timestamp: {threat.detected_at.strftime('%Y-%m-%d %H:%M:%S')}
+Severità: {threat.severity.upper()}
+Score: {threat.threat_score}/100
+Tipo: {reasons}
+IP sorgente: {threat.source_ip}
+Rilevata: {threat.detected_at.strftime('%Y-%m-%d %H:%M:%S')}
 
-Details:
 {threat.description}
     """.strip()
 
-    # Invia alert asincrono
     send_alert_notification.delay(
-        alert_type=alert_type, message=message, target_id=threat.target.id
+        alert_type=f"threat_{threat.severity}", message=message, target_id=threat.target.id
     )
+    return True
 
 
-def trigger_target_offline_alert(target):
-    """
-    Helper per triggerare alert target offline
-
-    Args:
-        target: Istanza Target
-    """
+def trigger_target_offline_alert(target, minutes):
+    """Notifica target offline (chiamata da agent_manager.tasks.check_agent_health)."""
+    last_seen = target.last_seen.strftime('%Y-%m-%d %H:%M:%S') if target.last_seen else "mai"
     message = f"""
 🔴 TARGET OFFLINE
 
 Hostname: {target.hostname}
 IP: {target.ip_address}
-Last seen: {target.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') if target.last_heartbeat else 'Never'}
+Ultimo contatto: {last_seen}
 
-Il target non risponde da più di {target.heartbeat_interval} minuti.
+L'agent non risponde da più di {minutes} minuti.
     """.strip()
 
     send_alert_notification.delay(
         alert_type="target_offline", message=message, target_id=target.id
     )
+
+
+# ==================== CONSERVAZIONE LOG ====================
+
+# Impostazioni > Monitoraggio > "Conservazione log (giorni)". Stesso
+# intervallo accettato dalla UI e da bulk_update.
+LOG_RETENTION_DEFAULT_DAYS = 30
+LOG_RETENTION_RANGE = (7, 365)
+# Comandi conclusi: quelli pending/sent/executing restano finché finiscono.
+FINISHED_COMMAND_STATUSES = ("success", "failed", "timeout")
+
+
+def log_retention_days():
+    from settings.models import SystemSettings
+
+    raw = SystemSettings.get_setting("logRetention", LOG_RETENTION_DEFAULT_DAYS)
+    low, high = LOG_RETENTION_RANGE
+    # bool è un int in Python: True non deve diventare "1 giorno".
+    if isinstance(raw, bool):
+        return LOG_RETENTION_DEFAULT_DAYS
+    try:
+        days = int(raw)
+    except (TypeError, ValueError):
+        return LOG_RETENTION_DEFAULT_DAYS
+    return max(low, min(high, days))
+
+
+def _retention_querysets(cutoff):
+    """Storico che cresce nel tempo. Restano: audit log, IP bloccati, regole,
+    target, host scoperti (stato, non storico)."""
+    from agent_manager.models import AgentCommand
+    from settings.models import DatabaseCleanupLog, NotificationLog
+    from targets.models import Alert, FirewallStats, NetworkFlow, Statistics
+    from threats.models import ThreatLog
+
+    return [
+        # updated_at: una minaccia ancora attiva viene aggiornata a ogni reinvio.
+        ThreatLog.objects.filter(updated_at__lt=cutoff),
+        Alert.objects.filter(created_at__lt=cutoff),
+        NotificationLog.objects.filter(sent_at__lt=cutoff),
+        AgentCommand.objects.filter(created_at__lt=cutoff, status__in=FINISHED_COMMAND_STATUSES),
+        Statistics.objects.filter(collected_at__lt=cutoff),
+        FirewallStats.objects.filter(collected_at__lt=cutoff),
+        NetworkFlow.objects.filter(last_seen__lt=cutoff),
+        DatabaseCleanupLog.objects.filter(executed_at__lt=cutoff),
+    ]
+
+
+@shared_task
+def apply_log_retention():
+    """Ogni notte: cancella lo storico più vecchio di logRetention giorni.
+    Ritorna il numero di righe cancellate (cascade escluse)."""
+    from settings.models import DatabaseCleanupLog
+
+    days = log_retention_days()
+    cutoff = timezone.now() - timedelta(days=days)
+    deleted = 0
+    try:
+        for queryset in _retention_querysets(cutoff):
+            _, per_model = queryset.delete()
+            deleted += per_model.get(queryset.model._meta.label, 0)
+    except Exception as e:
+        logger.exception("Conservazione log fallita")
+        DatabaseCleanupLog.objects.create(
+            cleanup_type="all", records_deleted=deleted, retention_days=days,
+            success=False, error_message=str(e)[:500],
+        )
+        raise
+    DatabaseCleanupLog.objects.create(
+        cleanup_type="all", records_deleted=deleted, retention_days=days, success=True
+    )
+    logger.info("Conservazione log: %d righe più vecchie di %d giorni cancellate", deleted, days)
+    return deleted
