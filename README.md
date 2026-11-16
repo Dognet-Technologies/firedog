@@ -3,7 +3,7 @@
 Piattaforma di gestione centralizzata del firewall per flotte di host Linux — policy DROP di default, regole distribuite in tempo reale, analisi del traffico con threat scoring, e un **server MCP** che espone tutto ad agenti AI autorizzati.
 
 [![Release](https://img.shields.io/github/v/release/Dognet-Technologies/firedog)](https://github.com/Dognet-Technologies/firedog/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#-licenza)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](#-licenza)
 
 > **Guide di installazione:**
 > - Master (backend Django + frontend React + Celery + nginx): [INSTALL.md](INSTALL.md)
@@ -371,7 +371,7 @@ Apri una [issue](https://github.com/Dognet-Technologies/firedog/issues) con: des
 
 ## 📄 Licenza
 
-Questo progetto è rilasciato sotto licenza MIT.
+Questo progetto è rilasciato sotto licenza **AGPL-3.0** — vedi [LICENSE](LICENSE).
 
 ## ⚠️ Disclaimer
 

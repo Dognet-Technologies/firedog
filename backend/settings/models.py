@@ -3,11 +3,19 @@ Models per Settings App
 Gestione configurazioni sistema
 """
 
+import logging
+from datetime import timedelta
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 
+logger = logging.getLogger(__name__)
+
+# Ogni token Fernet inizia con il byte di versione 0x80 seguito dal
+# timestamp: in base64 urlsafe "gAAAAA".
+FERNET_TOKEN_PREFIX = "gAAAAA"
 
 class SystemSettings(models.Model):
     """
@@ -282,50 +290,96 @@ class NotificationConfig(models.Model):
         """Forza pk=1 (singleton) e encrypta password"""
         self.pk = 1
 
-        # Encrypta password SMTP se presente
-        if self.smtp_password and not self.smtp_password.startswith("gAAAAAB"):
+        # Encrypta password SMTP se presente e non già cifrata (verificato
+        # provando a decifrare, non indovinando dal prefisso della
+        # stringa — vedi _is_encrypted_smtp_value, MEDIUM corretto in
+        # code review 2026-11).
+        if self.smtp_password and not self._is_encrypted_smtp_value(self.smtp_password):
             self.smtp_password = self._encrypt_password(self.smtp_password)
 
         super().save(*args, **kwargs)
 
     def _encrypt_password(self, password):
-        """Encrypta password usando Fernet (symmetric encryption)"""
+        """Encrypta password usando Fernet, chiave derivata via HKDF da
+        SECRET_KEY con un `info` dedicato (vedi firedog/crypto_utils.py —
+        CRITICAL corretto in code review, 2026-11: prima era SECRET_KEY
+        troncato senza KDF, lo stesso segreto della firma JWT e della
+        chiave agent)."""
         from cryptography.fernet import Fernet
-        from django.conf import settings
 
-        # Usa SECRET_KEY come base per encryption key
-        key = settings.SECRET_KEY[:32].encode().ljust(32, b"0")
-        from base64 import urlsafe_b64encode
+        from firedog.crypto_utils import derive_fernet_key
 
-        fernet_key = urlsafe_b64encode(key)
-
-        cipher = Fernet(fernet_key)
+        cipher = Fernet(derive_fernet_key(b"smtp-password-encryption-v1"))
         encrypted = cipher.encrypt(password.encode())
         return encrypted.decode()
 
+    @staticmethod
+    def _decrypt_with_current_key(value):
+        from cryptography.fernet import Fernet
+
+        from firedog.crypto_utils import derive_fernet_key
+
+        cipher = Fernet(derive_fernet_key(b"smtp-password-encryption-v1"))
+        return cipher.decrypt(value.encode()).decode()
+
+    @staticmethod
+    def _decrypt_with_legacy_key(value):
+        from cryptography.fernet import Fernet
+
+        from firedog.crypto_utils import legacy_truncated_secret_key
+
+        cipher = Fernet(legacy_truncated_secret_key())
+        return cipher.decrypt(value.encode()).decode()
+
+    def _is_encrypted_smtp_value(self, value):
+        """True se `value` è un token Fernet valido sotto lo schema
+        attuale o quello legacy. Prima controllava se la stringa iniziasse
+        per "gAAAAAB": un'euristica che avrebbe potuto per coincidenza non
+        cifrare una password in chiaro che iniziasse con quella stessa
+        sequenza di caratteri (MEDIUM trovato in code review, 2026-11).
+        Qui invece si verifica provando a decifrare per davvero."""
+        try:
+            self._decrypt_with_current_key(value)
+            return True
+        except Exception:
+            pass
+        try:
+            self._decrypt_with_legacy_key(value)
+            return True
+        except Exception:
+            return False
+
     def get_decrypted_smtp_password(self):
-        """Decripta password SMTP per uso"""
+        """Decripta password SMTP per uso. Prova prima lo schema attuale
+        (HKDF); se la password era cifrata PRIMA del fix, ricade sullo
+        schema legacy solo per la decifratura, poi ri-cifra e salva subito
+        col lo schema nuovo (migrazione al primo read, come
+        AgentAPIKey.decrypt_key). Se non decifra con nessuno dei due
+        schemi, non è un token Fernet: è già in chiaro, ritorna com'è."""
         if not self.smtp_password:
             return ""
 
-        # Se non è encrypted, ritorna così com'è
-        if not self.smtp_password.startswith("gAAAAAB"):
-            return self.smtp_password
+        try:
+            return self._decrypt_with_current_key(self.smtp_password)
+        except Exception:
+            pass
 
         try:
-            from cryptography.fernet import Fernet
-            from django.conf import settings
-
-            key = settings.SECRET_KEY[:32].encode().ljust(32, b"0")
-            from base64 import urlsafe_b64encode
-
-            fernet_key = urlsafe_b64encode(key)
-
-            cipher = Fernet(fernet_key)
-            decrypted = cipher.decrypt(self.smtp_password.encode())
-            return decrypted.decode()
+            decrypted = self._decrypt_with_legacy_key(self.smtp_password)
         except Exception:
-            return ""
+            if self.smtp_password.startswith(FERNET_TOKEN_PREFIX):
+                # Token Fernet che non decifra (SECRET_KEY cambiata): prima
+                # veniva mandato al server SMTP come se fosse la password.
+                logger.error(
+                    "Password SMTP cifrata con una chiave non piu' valida "
+                    "(SECRET_KEY cambiata?): reinserirla nelle impostazioni."
+                )
+                return ""
+            return self.smtp_password
+
+        self.smtp_password = self._encrypt_password(decrypted)
+        type(self).objects.filter(pk=self.pk).update(smtp_password=self.smtp_password)
+        return decrypted
 
 
 class NotificationLog(models.Model):

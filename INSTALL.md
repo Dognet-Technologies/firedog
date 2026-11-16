@@ -15,9 +15,10 @@ cd firedog
 sudo ./deploy/install.sh
 ```
 
-Esegue tutti i passi manuali descritti sotto, più la generazione di un
-certificato TLS self-signed e la configurazione HTTPS di nginx (default —
-il browser avviserà "connessione non sicura" al primo accesso, è atteso).
+Esegue tutti i passi manuali descritti sotto, più la CA locale
+dell'installazione, il certificato server firmato da lei e la configurazione
+HTTPS di nginx (default — il browser avvisa "connessione non sicura" finché
+non importi la CA, vedi [Certificato HTTPS e agent](#certificato-https-e-agent)).
 Genera automaticamente `SECRET_KEY`, password del database e password
 dell'utente admin se non passate esplicitamente. Nessuna password viene
 stampata, perché con il `.deb` l'output finisce in `/var/log/apt/term.log`.
@@ -28,7 +29,9 @@ del database resta solo in `backend/.env`.
 
 Opzioni principali: `--server-name <ip-o-host>`, `--install-user <utente>`
 (default: crea un utente di sistema dedicato `firedog`), `--skip-tls`
-(nginx solo HTTP), `--force` (procede anche se DB/utente esistono già).
+(nginx solo HTTP), `--tls-profile testing` (solo sviluppo e test interni:
+certificati marcati TESTING, CA 12 mesi, server 6 mesi), `--force` (procede
+anche se DB/utente esistono già).
 `./deploy/install.sh --help` per l'elenco completo.
 
 I passi manuali sotto restano come riferimento — utile per capire cosa fa
@@ -162,6 +165,20 @@ branch configurata, rebuild del frontend, `pip install` + `migrate` e riavvia
 i servizi. Richiede NOPASSWD sudo per i soli restart (vedi commento in testa
 allo script).
 
+> `update.sh` gira senza root e non tocca il certificato HTTPS. Su
+> un'installazione da clone con il vecchio certificato self-signed
+> (`/etc/ssl/firedog`, rifiutato da dog_agent 1.3+), dopo l'aggiornamento
+> installa una volta lo strumento e il timer di rinnovo e migra il
+> certificato (aggiungi `--name <ip-o-nome>` se il master ha cambiato
+> indirizzo). Vedi [Certificato HTTPS e agent](#certificato-https-e-agent).
+>
+> ```bash
+> sudo install -m 0755 deploy/firedog-tls /usr/local/sbin/firedog-tls
+> sudo install -m 0644 deploy/firedog-tls-renew.service deploy/firedog-tls-renew.timer /etc/systemd/system/
+> sudo systemctl daemon-reload && sudo systemctl enable --now firedog-tls-renew.timer
+> sudo firedog-tls ensure
+> ```
+
 **Installazione da tarball di release o appliance OVA/qcow2** (nessuna
 directory `.git` — `update.sh` non è applicabile, e il bottone "Verifica/
 Installa aggiornamenti" del frontend risponde con un errore esplicito per lo
@@ -175,3 +192,74 @@ tar xzf firedog-<tag>-linux-x86_64.tar.gz
 cd firedog-<tag>-linux-x86_64
 sudo ./deploy/upgrade.sh
 ```
+
+## Certificato HTTPS e agent
+
+Ogni installazione ha la propria CA, creata da `deploy/firedog-tls`
+(installato in `/usr/local/sbin/firedog-tls`). La chiave della CA resta solo
+sul master; la CA firma il certificato server (il solo IP o nome del master,
+mai wildcard), che un timer giornaliero rinnova prima della scadenza senza
+toccare agent e browser.
+
+- Configurazione: `/etc/sentinelsuite/firedog/tls.conf` (`PROFILE`,
+  `SERVER_NAME`, `MANAGED=no` per un certificato della propria PKI aziendale).
+- Certificati: `/etc/sentinelsuite/firedog/tls/`, chiavi in `tls/private/`.
+- Impronta e scadenze: Impostazioni > API Keys Agent > "Certificato del
+  master", oppure `sudo firedog-tls info`.
+- **dog_agent 1.3 e successivi** verificano il certificato del master:
+  scarica la CA (`https://<master>/api/tls/ca.pem`), confronta l'impronta e
+  impostala in `ca_cert` nella sezione `[agent]` di `agent.conf`. Se l'agent
+  parla anche con altri prodotti della suite, metti le loro CA nello stesso
+  file.
+- **Browser**: importa la stessa CA come autorità per i siti web, oppure
+  accetta l'avviso.
+- **Il master ha cambiato IP**: `sudo firedog-tls ensure --name <nuovo-ip>`
+  (stessa CA, nuovo certificato server; `SERVER_NAME` in `tls.conf` viene
+  aggiornato da solo, così il rinnovo resta sul nuovo indirizzo). Negli agent va
+  aggiornato solo `url`; aggiungi il nuovo IP a `ALLOWED_HOSTS` in
+  `backend/.env`.
+- **Nuova CA** (es. chiave compromessa): `sudo firedog-tls renew --force-ca`;
+  la vecchia resta in `tls/private/legacy-*`, gli agent vanno riconfigurati.
+
+**Aggiornando da una versione precedente** (certificato self-signed in
+`/etc/ssl/firedog`), `upgrade.sh` crea la CA e il nuovo certificato e ripunta
+nginx. Dopo l'aggiornamento il certificato è diverso: il browser chiede di
+nuovo di accettarlo (una pagina già aperta va ricaricata, altrimenti i
+salvataggi falliscono con un errore di connessione) e gli agent 1.3 vanno
+configurati con la nuova CA.
+
+## Domande frequenti
+
+**Il browser dice "connessione non sicura".**
+Il certificato è firmato dalla CA locale di questa installazione, che il
+browser non conosce. Importa la CA (Impostazioni > API Keys Agent >
+"Certificato del master", dopo aver confrontato l'impronta) oppure accetta
+l'avviso.
+
+**Dopo l'aggiornamento il salvataggio delle impostazioni fallisce con
+"Connessione al master non riuscita".**
+Il certificato è cambiato mentre la pagina era aperta e il browser rifiuta
+le richieste senza mostrare l'avviso. Ricarica la pagina e accetta il nuovo
+certificato.
+
+**L'agent non si collega e nel log c'è `invalid peer certificate`.**
+- `UnknownIssuer`: in `ca_cert` dell'agent manca la CA di questo master (o
+  il master ha creato una CA nuova). Riscaricala da `/api/tls/ca.pem`.
+- `Other(OtherError(CaUsedAsEndEntity))`: il master usa ancora il vecchio
+  certificato self-signed; aggiorna FireDog (o, da clone git, migra a mano,
+  vedi [Aggiornamenti](#aggiornamenti)).
+- `NotValidForName`: `url` dell'agent usa un indirizzo diverso da quello del
+  certificato; usa lo stesso, o rifai il certificato con `--name`.
+
+Il manuale di dog_agent (`docs/MANUALE.md` nel suo repository) spiega
+`ca_cert` e i messaggi dell'agent nel dettaglio.
+
+**Il master ha cambiato IP e né browser né agent si collegano.**
+`sudo firedog-tls ensure --name <nuovo-ip>`, nuovo IP in `ALLOWED_HOSTS` di
+`backend/.env` (`sudo systemctl restart firedog-backend`), poi `url` negli
+agent. La CA non cambia: gli agent non vanno riconfigurati.
+
+**Voglio usare un certificato della mia PKI aziendale.**
+In `/etc/sentinelsuite/firedog/tls.conf` metti `MANAGED=no` e punta nginx ai
+tuoi file (`/etc/nginx/sites-available/firedog`). `firedog-tls` non toccherà
+più nulla; negli agent `ca_cert` è la CA che ha firmato il tuo certificato.

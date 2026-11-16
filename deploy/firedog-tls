@@ -1,0 +1,384 @@
+#!/bin/bash
+#
+# CA locale dell'installazione e certificato del server FireDog.
+#
+# Ogni installazione ha la propria CA: la chiave resta solo su questo server.
+# La CA firma il certificato server (non CA, con il solo nome del master, mai
+# wildcard); gli agent e i browser si fidano della CA, quindi il certificato
+# server si rinnova senza toccarli. Prima install.sh generava un unico
+# certificato self-signed, marcato CA:TRUE da OpenSSL 3, che dog_agent >= 1.3
+# (rustls) rifiuta come certificato server (CaUsedAsEndEntity): nessun agent
+# aggiornato riusciva a collegarsi. Stesso schema di CyberShepherd 0.37.
+#
+# Percorsi (convenzione della suite, /etc/sentinelsuite/<prodotto>/):
+#   tls.conf            profilo e opzioni (letti come dati, non eseguiti)
+#   tls/ca.crt          CA
+#   tls/firedog.crt, tls/tls-info.json
+#   tls/private/        chiavi della CA e del server (0700, solo root)
+# /etc/sentinelsuite/firedog è 0700 (ci sono anche le credenziali iniziali):
+# la parte pubblica (ca.crt, tls-info.json) viene copiata in
+# /var/lib/firedog/tls, da cui il backend la serve agli agent.
+# Prima il certificato stava in /etc/ssl/firedog: alla prima esecuzione viene
+# copiato da parte e la configurazione nginx ripuntata, solo dopo aver emesso
+# i certificati nuovi e con nginx -t.
+#
+# Profili (tls.conf, PROFILE=):
+#   production  (default)  CA 10 anni, certificato server 397 giorni
+#   testing                sviluppo e test interni: soggetti marcati TESTING,
+#                          solo uso interno; CA 12 mesi, server 6 mesi
+# MANAGED=no nello stesso file: il certificato lo fornisce l'amministratore
+# (PKI aziendale) e questo script non tocca nulla.
+#
+# Uso: firedog-tls ensure [--name <ip-o-nome>]
+#      firedog-tls renew [--force]      rinnova il certificato server
+#      firedog-tls renew --force-ca     nuova CA: gli agent vanno
+#                                       riconfigurati (la vecchia è
+#                                       conservata in tls/private/legacy-*)
+#      firedog-tls info
+set -euo pipefail
+
+ETC_DIR="${FIREDOG_ETC_DIR:-/etc/sentinelsuite/firedog}"
+TLS_DIR="$ETC_DIR/tls"
+PRIVATE_DIR="$TLS_DIR/private"
+TLS_CONF="$ETC_DIR/tls.conf"
+PUBLIC_DIR="${FIREDOG_TLS_PUBLIC_DIR:-/var/lib/firedog/tls}"
+LEGACY_TLS_DIR="${FIREDOG_LEGACY_TLS_DIR:-/etc/ssl/firedog}"
+NGINX_SITE="${FIREDOG_NGINX_SITE:-/etc/nginx/sites-available/firedog}"
+# Solo per le prove in una cartella temporanea: niente controllo dei permessi
+# di tls.conf (non di root), niente nginx -t/reload, cartella storica lasciata.
+TEST_MODE="${FIREDOG_TLS_TEST_MODE:-no}"
+
+CA_KEY="$PRIVATE_DIR/ca.key"
+CA_CRT="$TLS_DIR/ca.crt"
+SRV_KEY="$PRIVATE_DIR/firedog.key"
+SRV_CRT="$TLS_DIR/firedog.crt"
+INFO="$TLS_DIR/tls-info.json"
+
+RENEW_BEFORE_DAYS=30
+CA_WARN_DAYS=60
+TESTING_LABEL="Dognet Technologies - TESTING solo uso interno"
+TESTING_OU="TESTING - NON PER PRODUZIONE"
+
+WORK=""
+trap '[ -n "$WORK" ] && rm -rf "$WORK"' EXIT
+
+die() { echo "firedog-tls: $*" >&2; exit 1; }
+
+# tls.conf letto come dati: solo PROFILE, MANAGED, SERVER_NAME, e solo se il
+# file è di root e non scrivibile da altri (girando come root, un file
+# eseguito con "." sarebbe codice root per chiunque potesse modificarlo).
+conf_value() {
+    sed -n "s/^[[:space:]]*$1=[\"']\{0,1\}\([^\"'[:space:]]*\)[\"']\{0,1\}[[:space:]]*\$/\1/p" "$TLS_CONF" | tail -1
+}
+
+load_conf() {
+    PROFILE=production
+    MANAGED=yes
+    SERVER_NAME=""
+    if [ -f "$TLS_CONF" ]; then
+        local owner mode
+        owner=$(stat -c %u "$TLS_CONF"); mode=$(stat -c %a "$TLS_CONF")
+        if [ "$TEST_MODE" = no ] && { [ "$owner" != 0 ] || [ $(( 8#$mode & 8#022 )) -ne 0 ]; }; then
+            die "$TLS_CONF deve essere di root e non scrivibile da gruppo o altri"
+        fi
+        PROFILE=$(conf_value PROFILE); PROFILE=${PROFILE:-production}
+        MANAGED=$(conf_value MANAGED); MANAGED=${MANAGED:-yes}
+        SERVER_NAME=$(conf_value SERVER_NAME)
+    fi
+    case "$PROFILE" in
+        production) CA_DAYS=3650; SRV_DAYS=397 ;;
+        testing)    CA_DAYS=365;  SRV_DAYS=180 ;;
+        *) die "PROFILE non valido in $TLS_CONF: $PROFILE (production o testing)" ;;
+    esac
+}
+
+# Solo un IP o un nome host esatto: niente wildcard, niente spazi.
+validate_name() {
+    local name="$1"
+    [ -n "$name" ] || die "nome del server mancante (usa --name o SERVER_NAME in $TLS_CONF)"
+    case "$name" in *'*'*) die "wildcard non ammesse: $name" ;; esac
+    if [[ "$name" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || [[ "$name" =~ ^[0-9a-fA-F:]+$ ]]; then
+        return 0
+    fi
+    [[ "$name" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,62})(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}))*$ ]] \
+        || die "nome del server non valido: $name"
+}
+
+san_for() {
+    if [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || [[ "$1" =~ ^[0-9a-fA-F:]+$ ]]; then
+        echo "IP:$1"
+    else
+        echo "DNS:$1"
+    fi
+}
+
+subject_ca() {
+    if [ "$PROFILE" = testing ]; then
+        echo "/O=$TESTING_LABEL/OU=$TESTING_OU/CN=FireDog TESTING CA $1"
+    else
+        echo "/O=FireDog/OU=CA locale dell'installazione/CN=FireDog CA $1"
+    fi
+}
+
+subject_server() {
+    if [ "$PROFILE" = testing ]; then
+        echo "/O=$TESTING_LABEL/OU=$TESTING_OU/CN=$1"
+    else
+        echo "/O=FireDog/CN=$1"
+    fi
+}
+
+# Nome del server dal certificato attuale (rinnovi e migrazioni).
+current_name() {
+    local crt="$SRV_CRT"
+    # Primo aggiornamento: il certificato è ancora nel percorso storico.
+    [ -f "$crt" ] || crt="$LEGACY_TLS_DIR/firedog.crt"
+    [ -f "$crt" ] || return 0
+    openssl x509 -in "$crt" -noout -ext subjectAltName 2>/dev/null \
+        | sed -n 's/.*\(IP Address\|DNS\):\([^,[:space:]]*\).*/\2/p' | head -1
+}
+
+days_left() {
+    local end
+    end=$(openssl x509 -in "$1" -noout -enddate | cut -d= -f2)
+    echo $(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
+}
+
+is_ca() {
+    openssl x509 -in "$1" -noout -ext basicConstraints 2>/dev/null | grep -q "CA:TRUE"
+}
+
+issued_by_our_ca() {
+    [ -f "$CA_CRT" ] && [ -f "$SRV_CRT" ] && openssl verify -CAfile "$CA_CRT" "$SRV_CRT" >/dev/null 2>&1
+}
+
+prepare_dirs() {
+    # Se esiste già (credenziali iniziali) i permessi non si toccano.
+    [ -d "$ETC_DIR" ] || install -d -m 0700 "$ETC_DIR"
+    install -d -m 0755 "$TLS_DIR"
+    install -d -m 0700 "$PRIVATE_DIR"
+}
+
+new_ca() {
+    local name="$1"
+    WORK=$(mktemp -d)
+    ( umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$WORK/ca.key" 2>/dev/null )
+    openssl req -new -x509 -sha256 -key "$WORK/ca.key" -days "$CA_DAYS" \
+        -subj "$(subject_ca "$name")" \
+        -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+        -addext "keyUsage=critical,keyCertSign,cRLSign" \
+        -addext "subjectKeyIdentifier=hash" \
+        -out "$WORK/ca.crt"
+    install -m 0600 "$WORK/ca.key" "$CA_KEY.new"
+    install -m 0644 "$WORK/ca.crt" "$CA_CRT.new"
+    mv "$CA_KEY.new" "$CA_KEY"
+    mv "$CA_CRT.new" "$CA_CRT"
+    rm -rf "$WORK"; WORK=""
+    echo "CA creata: $(openssl x509 -in "$CA_CRT" -noout -subject)"
+}
+
+new_server_cert() {
+    local name="$1" days="$SRV_DAYS" ca_left
+    # Mai oltre la scadenza della CA (in testing la CA dura 12 mesi).
+    ca_left=$(days_left "$CA_CRT")
+    [ "$ca_left" -lt "$days" ] && days=$ca_left
+    [ "$days" -ge 1 ] || die "la CA è scaduta: 'renew --force-ca' (gli agent andranno riconfigurati)"
+
+    WORK=$(mktemp -d)
+    ( umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$WORK/server.key" 2>/dev/null )
+    openssl req -new -sha256 -key "$WORK/server.key" -subj "$(subject_server "$name")" -out "$WORK/server.csr"
+    cat > "$WORK/ext.cnf" <<EOF
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=$(san_for "$name")
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid
+EOF
+    openssl x509 -req -sha256 -in "$WORK/server.csr" -CA "$CA_CRT" -CAkey "$CA_KEY" \
+        -set_serial "0x$(openssl rand -hex 16)" -days "$days" -extfile "$WORK/ext.cnf" \
+        -out "$WORK/server.crt" 2>/dev/null
+    # Chiave e certificato devono corrispondere prima di sostituire quelli in
+    # uso: nginx con una coppia spaiata non riparte.
+    [ "$(openssl pkey -in "$WORK/server.key" -pubout | sha256sum)" = \
+      "$(openssl x509 -in "$WORK/server.crt" -noout -pubkey | sha256sum)" ] \
+        || die "chiave e certificato server non corrispondono"
+    install -m 0600 "$WORK/server.key" "$SRV_KEY.new"
+    install -m 0644 "$WORK/server.crt" "$SRV_CRT.new"
+    mv "$SRV_KEY.new" "$SRV_KEY"
+    mv "$SRV_CRT.new" "$SRV_CRT"
+    rm -rf "$WORK"; WORK=""
+    echo "Certificato server emesso per $name, valido $days giorni"
+}
+
+json_escape() { sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+write_info() {
+    local fp subject name
+    fp=$(openssl x509 -in "$CA_CRT" -noout -fingerprint -sha256 | cut -d= -f2)
+    subject=$(openssl x509 -in "$CA_CRT" -noout -subject -nameopt RFC2253 | sed 's/^subject=//' | json_escape)
+    name=$(current_name | json_escape)
+    cat > "$INFO.tmp" <<EOF
+{
+  "profile": "$PROFILE",
+  "managed": true,
+  "server_name": "$name",
+  "server_not_after": "$(openssl x509 -in "$SRV_CRT" -noout -enddate | cut -d= -f2)",
+  "ca_subject": "$subject",
+  "ca_not_after": "$(openssl x509 -in "$CA_CRT" -noout -enddate | cut -d= -f2)",
+  "ca_fingerprint_sha256": "$fp"
+}
+EOF
+    chmod 0644 "$INFO.tmp"; mv "$INFO.tmp" "$INFO"
+    publish_public
+}
+
+# Solo dati pubblici (la CA e il riepilogo), mai una chiave: il backend li
+# legge da qui perché /etc/sentinelsuite/firedog è 0700.
+publish_public() {
+    case "$PUBLIC_DIR" in /?*/*) ;; *) die "percorso pubblico non valido: $PUBLIC_DIR" ;; esac
+    install -d -m 0755 "$PUBLIC_DIR"
+    install -m 0644 "$CA_CRT" "$PUBLIC_DIR/ca.crt.new"
+    install -m 0644 "$INFO" "$PUBLIC_DIR/tls-info.json.new"
+    mv "$PUBLIC_DIR/ca.crt.new" "$PUBLIC_DIR/ca.crt"
+    mv "$PUBLIC_DIR/tls-info.json.new" "$PUBLIC_DIR/tls-info.json"
+}
+
+nginx_ok() {
+    [ "$TEST_MODE" = no ] || return 0
+    command -v nginx >/dev/null || return 0
+    nginx -t 2>/dev/null
+}
+
+reload_nginx() {
+    [ "$TEST_MODE" = no ] || return 0
+    if systemctl is-active --quiet nginx; then
+        nginx -t 2>/dev/null && systemctl reload nginx
+    fi
+}
+
+# Installazioni precedenti: certificato self-signed (CA:TRUE) in
+# /etc/ssl/firedog. Copia verificata nella cartella nuova, poi (solo a
+# certificati nuovi già emessi) nginx ripuntato e controllato con nginx -t:
+# se fallisce si rimette la configurazione di prima, che punta ancora ai file
+# storici, intatti. La cartella storica si rimuove solo alla fine.
+legacy_present() {
+    [ -f "$LEGACY_TLS_DIR/firedog.crt" ]
+}
+
+copy_legacy_aside() {
+    legacy_present || return 0
+    case "$LEGACY_TLS_DIR" in /?*/*) ;; *) die "percorso storico non valido: $LEGACY_TLS_DIR" ;; esac
+    local dest
+    dest="$PRIVATE_DIR/legacy-$(date +%Y%m%d-%H%M%S)"
+    install -d -m 0700 "$dest"
+    cp -a "$LEGACY_TLS_DIR/." "$dest/"
+    diff -r "$LEGACY_TLS_DIR" "$dest" >/dev/null || die "copia del certificato storico incompleta"
+    # cp -a riporta sulla cartella i permessi di quella storica (di solito
+    # 0755): dentro c'è la vecchia chiave privata.
+    chmod 0700 "$dest"
+    echo "Certificato precedente copiato in $dest"
+}
+
+# Idempotente: completa anche una migrazione interrotta in un giro precedente.
+repoint_nginx() {
+    [ -f "$NGINX_SITE" ] && grep -q "$LEGACY_TLS_DIR/" "$NGINX_SITE" || return 0
+    local backup="$NGINX_SITE.pre-ca-locale"
+    cp -a "$NGINX_SITE" "$backup"
+    sed -i -e "s#$LEGACY_TLS_DIR/firedog.crt#$SRV_CRT#g" \
+           -e "s#$LEGACY_TLS_DIR/firedog.key#$SRV_KEY#g" "$NGINX_SITE"
+    if ! nginx_ok; then
+        cp -a "$backup" "$NGINX_SITE"
+        die "nginx non accetta i nuovi percorsi: ripristinata la configurazione precedente"
+    fi
+    echo "nginx ripuntato su $TLS_DIR (configurazione precedente: $backup)"
+    NGINX_CHANGED=yes
+}
+
+remove_legacy_dir() {
+    legacy_present || return 0
+    [ "$TEST_MODE" = no ] || return 0
+    grep -q "$LEGACY_TLS_DIR/" "$NGINX_SITE" 2>/dev/null && return 0
+    case "$LEGACY_TLS_DIR" in /?*/*) rm -rf "$LEGACY_TLS_DIR" ;; esac
+    echo "$LEGACY_TLS_DIR rimossa (copia in $PRIVATE_DIR/legacy-*)"
+}
+
+# Un --name esplicito diverso da SERVER_NAME in tls.conf (es. il master ha
+# cambiato IP) va ricordato: il rinnovo automatico usa SERVER_NAME, e senza
+# questo tornerebbe a emettere il certificato per il vecchio indirizzo.
+remember_name() {
+    [ -f "$TLS_CONF" ] && [ -n "$SERVER_NAME" ] && [ "$SERVER_NAME" != "$1" ] || return 0
+    sed -i "s/^\([[:space:]]*SERVER_NAME=\).*/\1$1/" "$TLS_CONF"
+    SERVER_NAME="$1"
+    echo "SERVER_NAME aggiornato a $1 in $TLS_CONF"
+}
+
+cmd_ensure() {
+    local name="${1:-}"
+    load_conf
+    if [ "$MANAGED" = no ]; then
+        echo "MANAGED=no: certificato gestito dall'amministratore, nessuna modifica"
+        return 0
+    fi
+    [ -n "$name" ] || name="${SERVER_NAME:-$(current_name)}"
+    validate_name "$name"
+    remember_name "$name"
+    prepare_dirs
+
+    NGINX_CHANGED=no
+    if [ ! -f "$CA_CRT" ] || [ ! -f "$CA_KEY" ]; then
+        copy_legacy_aside
+        new_ca "$name"
+        NGINX_CHANGED=yes
+    fi
+    if [ ! -f "$SRV_CRT" ] || [ ! -f "$SRV_KEY" ] || is_ca "$SRV_CRT" || ! issued_by_our_ca \
+        || [ "$(current_name)" != "$name" ] || [ "$(days_left "$SRV_CRT")" -lt "$RENEW_BEFORE_DAYS" ]; then
+        new_server_cert "$name"
+        NGINX_CHANGED=yes
+    fi
+    repoint_nginx
+    write_info
+    [ "$NGINX_CHANGED" = yes ] && reload_nginx
+    remove_legacy_dir
+    return 0
+}
+
+cmd_renew() {
+    local force="${1:-}" name
+    load_conf
+    [ "$MANAGED" = no ] && return 0
+    [ -f "$CA_CRT" ] || { cmd_ensure; return; }
+    name="${SERVER_NAME:-$(current_name)}"
+    validate_name "$name"
+    if [ "$force" = --force-ca ]; then
+        local keep
+        keep="$PRIVATE_DIR/legacy-$(date +%Y%m%d-%H%M%S)-ca"
+        install -d -m 0700 "$keep"
+        mv "$CA_CRT" "$CA_KEY" "$keep/"
+        echo "CA precedente conservata in $keep"
+        cmd_ensure "$name"
+        echo "ATTENZIONE: nuova CA, gli agent vanno riconfigurati con il nuovo ca.crt" >&2
+        return 0
+    fi
+    if [ "$(days_left "$CA_CRT")" -lt "$CA_WARN_DAYS" ]; then
+        echo "ATTENZIONE: la CA scade tra $(days_left "$CA_CRT") giorni ($PROFILE): 'renew --force-ca'" >&2
+    fi
+    if [ "$force" = --force ] || [ "$(days_left "$SRV_CRT")" -lt "$RENEW_BEFORE_DAYS" ]; then
+        new_server_cert "$name"
+        write_info
+        reload_nginx
+    fi
+}
+
+case "${1:-}" in
+    ensure)
+        shift
+        name=""
+        [ "${1:-}" = --name ] && name="${2:-}"
+        cmd_ensure "$name" ;;
+    renew) shift; cmd_renew "${1:-}" ;;
+    info)
+        [ -f "$INFO" ] || die "nessun certificato gestito ($INFO assente)"
+        cat "$INFO" ;;
+    *) die "uso: firedog-tls ensure [--name <ip-o-nome>] | renew [--force|--force-ca] | info" ;;
+esac

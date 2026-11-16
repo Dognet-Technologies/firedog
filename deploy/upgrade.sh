@@ -150,7 +150,13 @@ chown -R "$SVC_USER:$SVC_USER" "$BASE/backend" "$BASE/frontend"
 if ! command -v arp-scan >/dev/null 2>&1; then
   apt-get install -y -qq arp-scan >/dev/null 2>&1 || true
 fi
-if [ -f "$PKG_DIR/deploy/sudoers-arp-scan" ] && [ ! -f /etc/sudoers.d/firedog-arp-scan ]; then
+# Sudoers riscritto a ogni upgrade (non solo se assente): dalla seconda code
+# review autorizza solo il wrapper, non piu' arp-scan con argomenti liberi.
+if [ -f "$PKG_DIR/deploy/arp-scan-wrapper.sh" ]; then
+  install -d -m 0755 -o root -g root /usr/local/lib/firedog
+  install -m 0755 -o root -g root "$PKG_DIR/deploy/arp-scan-wrapper.sh" /usr/local/lib/firedog/arp-scan-wrapper
+fi
+if [ -f "$PKG_DIR/deploy/sudoers-arp-scan" ]; then
   SUDOERS_TMP="$(mktemp)"
   sed "s#__FIREDOG_USER__#${SVC_USER}#g" "$PKG_DIR/deploy/sudoers-arp-scan" > "$SUDOERS_TMP"
   visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1 && \
@@ -183,6 +189,48 @@ log "5/6 Applicazione migration"
 rm -rf "$ROLLBACK_DIR"
 trap - ERR
 
+# ── TLS: CA locale dell'installazione (deploy/firedog-tls) ─────────────────
+# Le versioni precedenti usavano un self-signed CA:TRUE in /etc/ssl/firedog,
+# che dog_agent >= 1.3 rifiuta. firedog-tls lo copia da parte, emette CA e
+# certificato server e ripunta nginx (con nginx -t e ripristino). Mai
+# bloccante: se fallisce nginx resta sul certificato precedente.
+# FIREDOG_TLS_PROFILE=testing per i master di sviluppo/test.
+TLS_TOOL=/usr/local/sbin/firedog-tls
+ETC_DIR=/etc/sentinelsuite/firedog
+NGINX_SITE=/etc/nginx/sites-available/firedog
+TLS_NOTE=no
+if [ -f "$PKG_DIR/deploy/firedog-tls" ] && grep -q "ssl_certificate" "$NGINX_SITE" 2>/dev/null; then
+  install -m 0755 -o root -g root "$PKG_DIR/deploy/firedog-tls" "$TLS_TOOL"
+  install -m 0644 -o root -g root "$PKG_DIR/deploy/firedog-tls-renew.service" \
+    "$PKG_DIR/deploy/firedog-tls-renew.timer" /etc/systemd/system/
+  [ -d "$ETC_DIR" ] || install -d -m 0700 -o root -g root "$ETC_DIR"
+  if [ ! -f "$ETC_DIR/tls.conf" ]; then
+    profile="${FIREDOG_TLS_PROFILE:-production}"
+    case "$profile" in production|testing) ;; *) profile=production ;; esac
+    cat > "$ETC_DIR/tls.conf" <<CONF
+# Profilo dei certificati TLS di FireDog (firedog-tls).
+# production: CA 10 anni, certificato server 397 giorni.
+# testing: solo sviluppo e test interni; soggetti marcati TESTING,
+#          CA 12 mesi, certificato server 6 mesi.
+PROFILE=$profile
+# SERVER_NAME=<ip-o-nome>: se vuoto si usa quello del certificato attuale.
+# MANAGED=no: certificato fornito dall'amministratore (PKI aziendale),
+# firedog-tls non lo tocca.
+MANAGED=yes
+CONF
+    chmod 0644 "$ETC_DIR/tls.conf"
+  fi
+  [ -f "$ETC_DIR/tls/ca.crt" ] && HAD_CA=yes || HAD_CA=no
+  if "$TLS_TOOL" ensure; then
+    [ "$HAD_CA" = no ] && TLS_NOTE=yes
+  else
+    echo "ATTENZIONE: certificato TLS non aggiornato, nginx usa quello precedente." >&2
+    echo "Verifica con: sudo $TLS_TOOL ensure" >&2
+  fi
+  systemctl daemon-reload
+  systemctl enable --now firedog-tls-renew.timer >/dev/null 2>&1 || true
+fi
+
 # ── 6. Riavvia e verifica ────────────────────────────────────────────────────
 log "6/6 Riavvio e verifica"
 systemctl start firedog-backend firedog-celery firedog-celerybeat
@@ -205,6 +253,17 @@ if [ "$CODE" = "405" ]; then
    Servizi: systemctl status firedog-backend firedog-celery firedog-celerybeat
 ────────────────────────────────────────────────────────────────────
 EOF
+  if [ "$TLS_NOTE" = yes ]; then
+    cat <<EOF
+ Certificato HTTPS nuovo, firmato dalla CA locale di questa installazione
+ ($TLS_TOOL info per l'impronta):
+   - browser: ricarica la pagina e accetta il nuovo certificato, o importa
+     la CA da Impostazioni > API Keys Agent > "Certificato del master";
+   - dog_agent 1.3+: imposta la CA (https://<master>/api/tls/ca.pem) in
+     ca_cert, sezione [agent] di agent.conf.
+────────────────────────────────────────────────────────────────────
+EOF
+  fi
 else
   cat <<EOF
 

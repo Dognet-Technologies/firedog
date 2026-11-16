@@ -326,14 +326,15 @@ class FirewallManager:
         
         rule_parts.extend(['-j', 'ACCEPT'])
         
+        comment = self.sanitize_comment(comment)
         if comment:
-            rule_parts.extend(['-m', 'comment', '--comment', comment[:256]])
+            rule_parts.extend(['-m', 'comment', '--comment', comment])
         
         try:
             self.run_command(rule_parts)
             
             # Salva regola personalizzata
-            self.save_custom_rule(' '.join(rule_parts), comment)
+            self.save_custom_rule(rule_parts, comment)
             
             # Persisti regole
             self.save_rules()
@@ -374,12 +375,13 @@ class FirewallManager:
         
         rule_parts.extend(['-j', 'ACCEPT'])
         
+        comment = self.sanitize_comment(comment)
         if comment:
-            rule_parts.extend(['-m', 'comment', '--comment', comment[:256]])
+            rule_parts.extend(['-m', 'comment', '--comment', comment])
         
         try:
             self.run_command(rule_parts)
-            self.save_custom_rule(' '.join(rule_parts), comment)
+            self.save_custom_rule(rule_parts, comment)
             self.save_rules()
             
             dest_info = f" verso {dest_ip}" if dest_ip else ""
@@ -390,12 +392,29 @@ class FirewallManager:
             self.error("Impossibile aggiungere regola")
             return False
     
-    def save_custom_rule(self, rule: str, comment: str):
-        """Salva regola personalizzata nel file di configurazione"""
+    @staticmethod
+    def sanitize_comment(comment: str) -> str:
+        """Commento sicuro da salvare in custom_rules.conf.
+
+        firewall-init.sh rilegge il file al boot come root: niente newline
+        (spezzerebbe la riga), niente apici/backslash/$/backtick (il loader
+        accetta solo un commento finale tra apici singoli). Limite in byte:
+        xt_comment accetta al massimo 255 caratteri.
+        """
+        cleaned = ''.join(ch for ch in comment if ch.isprintable())
+        cleaned = re.sub(r"['\"\\`$]", '', cleaned).strip()
+        return cleaned.encode('utf-8')[:255].decode('utf-8', 'ignore')
+
+    def save_custom_rule(self, rule_parts: List[str], comment: str):
+        """Salva regola personalizzata nel file di configurazione.
+
+        La riga e' quotata con shlex.join: firewall-init.sh la valida e la
+        esegue come array di argomenti, mai con eval.
+        """
         with open(CONFIG['custom_rules'], 'a') as f:
             if comment:
                 f.write(f"# {comment}\n")
-            f.write(f"{rule}\n")
+            f.write(f"{shlex.join(rule_parts)}\n")
     
     def remove_rule(self, chain: str, rule_num: int):
         """Rimuove regola per numero"""
@@ -540,8 +559,13 @@ class FirewallManager:
         
         try:
             with open(CONFIG['rules_file'], 'r') as f:
-                self.run_command(['iptables-restore'], check=True)
-                # Passa il contenuto via stdin
+                # Prima di questo fix c'era anche una chiamata precedente
+                # a `iptables-restore` senza stdin (eredita quello del
+                # processo padre, tipicamente vuoto) con check=True: se
+                # quella falliva, l'eccezione interrompeva l'esecuzione
+                # PRIMA di arrivare qui, lasciando il vero ripristino (con
+                # il contenuto del file via stdin) mai eseguito (HIGH
+                # trovato in code review, 2026-11).
                 subprocess.run(
                     ['iptables-restore'],
                     input=f.read(),
@@ -891,8 +915,12 @@ class FirewallManager:
             # Ordina per score
             threats.sort(key=lambda x: x['score'], reverse=True)
 
-        except Exception:
-            pass
+        except Exception as e:
+            # Prima di questo fix un errore qui produceva silenziosamente
+            # una lista vuota/parziale indistinguibile da "nessuna
+            # minaccia", senza nulla nei log per capire perché (HIGH
+            # trovato in code review, 2026-11).
+            self.warning(f"get_threats_data: errore nell'estrazione minacce: {e}")
 
         return threats
 
@@ -1117,8 +1145,8 @@ class FirewallManager:
             result['udp']['out_packets'] = col('Udp', 'OutDatagrams')
             result['icmp']['in_packets'] = col('Icmp', 'InMsgs')
             result['icmp']['out_packets'] = col('Icmp', 'OutMsgs')
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"get_protocol_stats: errore lettura /proc/net/snmp: {e}")
         return result
 
     def get_system_info(self) -> Dict:
@@ -1148,8 +1176,8 @@ class FirewallManager:
             with open('/proc/uptime', 'r') as f:
                 info['uptime_seconds'] = int(float(f.read().split()[0]))
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"get_system_info: errore lettura informazioni di sistema: {e}")
 
         return info
 
@@ -1226,8 +1254,8 @@ class FirewallManager:
                     'rx_packets': stats.get('rx_packets', 0),
                     'tx_packets': stats.get('tx_packets', 0),
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"get_interfaces: errore enumerazione interfacce di rete: {e}")
 
         return interfaces
 
@@ -1252,8 +1280,8 @@ class FirewallManager:
                     'rx_packets': int(rx.get('packets', 0) or 0),
                     'tx_packets': int(tx.get('packets', 0) or 0),
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"_get_interface_stats: errore lettura contatori NIC: {e}")
         return stats
 
     def check_for_updates(self) -> Dict:

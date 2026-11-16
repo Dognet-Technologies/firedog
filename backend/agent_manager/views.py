@@ -3,6 +3,7 @@ Views per agent_manager app
 REST API per gestione agent
 """
 
+import logging
 import secrets
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -11,6 +12,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import models
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+
+from accounts.permissions import IsAdminUser, IsAdminOrReadOnly
 
 from .models import (
     AgentAPIKey,
@@ -25,8 +28,14 @@ from .serializers import (
     AgentConnectionSerializer,
     AgentCommandSerializer,
     AgentHeartbeatSerializer,
+    validate_command_payload,
 )
 from targets.models import Target
+
+logger = logging.getLogger("firedog.agent_manager")
+
+# Limite per timeout_seconds dei comandi inviati a un gruppo.
+MAX_COMMAND_TIMEOUT_SECONDS = 3600
 
 
 class AgentAPIKeyViewSet(viewsets.ModelViewSet):
@@ -36,7 +45,12 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
 
     queryset = AgentAPIKey.objects.all()
     serializer_class = AgentAPIKeySerializer
-    permission_classes = [IsAuthenticated]
+    # Generare/attivare/disattivare/recuperare la chiave fleet-wide non ha
+    # alcun caso d'uso per il ruolo Reporter (sola lettura) — nemmeno la
+    # lista/metadata delle chiavi, dato che è proprio da qui che un
+    # Reporter poteva leggere a quali target è associata una chiave prima
+    # di questo fix (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     @action(detail=False, methods=["post"])
     def generate(self, request):
@@ -132,8 +146,12 @@ class AgentAPIKeyViewSet(viewsets.ModelViewSet):
             raw_key = api_key.decrypt_key()
             return Response({"raw_key": raw_key, "key_id": api_key.id})
         except Exception as e:
+            # Il dettaglio dell'eccezione va solo nel log server-side, non
+            # nella risposta al client (HIGH trovato in code review,
+            # 2026-11); prima di questo fix non veniva nemmeno loggato.
+            logger.error(f"Failed to decrypt AgentAPIKey {api_key.pk}: {e}")
             return Response(
-                {"error": f"Failed to decrypt key: {str(e)}"},
+                {"error": "Impossibile decifrare la chiave"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -145,7 +163,10 @@ class PairingSessionViewSet(viewsets.ModelViewSet):
 
     queryset = PairingSession.objects.all()
     serializer_class = PairingSessionSerializer
-    permission_classes = [IsAuthenticated]
+    # Avviare un pairing è un'azione operativa (aggiunge un nuovo target
+    # monitorato): sola lettura per Reporter, scrittura solo Admin
+    # (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     def get_queryset(self):
         """Filtra per target se specificato"""
@@ -247,7 +268,11 @@ class AgentConnectionViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = AgentConnection.objects.all()
     serializer_class = AgentConnectionSerializer
-    permission_classes = [IsAuthenticated]
+    # ReadOnlyModelViewSet a livello di modello, ma `disconnect` sotto è una
+    # vera azione mutante (forza la disconnessione di un agent reale) —
+    # IsAdminOrReadOnly la restringe ad Admin senza toccare list/retrieve
+    # (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     @action(detail=False, methods=["get"])
     def online(self, request):
@@ -297,7 +322,10 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
 
     queryset = AgentCommand.objects.all()
     serializer_class = AgentCommandSerializer
-    permission_classes = [IsAuthenticated]
+    # create/retry/send_to_group inviano comandi arbitrari (firewall,
+    # config) a host reali — sola lettura per Reporter, scrittura solo
+    # Admin (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     def get_queryset(self):
         """Filtra per target se specificato"""
@@ -435,6 +463,24 @@ class AgentCommandViewSet(viewsets.ModelViewSet):
         if not group or not action:
             return Response(
                 {"error": "group and action are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # A differenza di create(), questo endpoint costruiva AgentCommand
+        # direttamente da request.data senza passare dal serializer —
+        # bypassando la validazione del payload per ogni target del
+        # gruppo (HIGH trovato in code review, 2026-11).
+        try:
+            validate_command_payload(action, payload)
+        except ValueError as e:
+            return Response({"error": f"payload non valido: {e}"}, status=status.HTTP_400_BAD_REQUEST)
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, int)
+            or not 1 <= timeout_seconds <= MAX_COMMAND_TIMEOUT_SECONDS
+        ):
+            return Response(
+                {"error": f"timeout_seconds deve essere un intero tra 1 e {MAX_COMMAND_TIMEOUT_SECONDS}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

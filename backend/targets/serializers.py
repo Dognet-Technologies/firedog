@@ -252,7 +252,7 @@ class WhitelistEntrySerializer(serializers.ModelSerializer):
                 # Singolo IP
                 ipaddress.ip_address(value)
         except ValueError as e:
-            raise serializers.ValidationError(f"IP o subnet non valido: {str(e)}")
+            raise serializers.ValidationError(f"IP o subnet non valido: {e!s}")
 
         return value
 
@@ -291,6 +291,11 @@ class WhitelistEntryCreateSerializer(serializers.ModelSerializer):
             "description",
             "added_by",
         ]
+        # `added_by` è impostato lato server dall'utente autenticato
+        # (perform_create), non più dal client — un client non deve poter
+        # attribuire l'azione a qualcun altro (MEDIUM trovato in code
+        # review, 2026-11).
+        read_only_fields = ["added_by"]
 
     def validate_ip_address(self, value):
         """Valida IP o CIDR"""
@@ -308,7 +313,7 @@ class WhitelistEntryCreateSerializer(serializers.ModelSerializer):
             else:
                 ipaddress.ip_address(value)
         except ValueError as e:
-            raise serializers.ValidationError(f"IP o subnet non valido: {str(e)}")
+            raise serializers.ValidationError(f"IP o subnet non valido: {e!s}")
 
         return value
 
@@ -363,7 +368,7 @@ class BlockedIPSerializer(serializers.ModelSerializer):
         try:
             ipaddress.ip_address(value)
         except ValueError as e:
-            raise serializers.ValidationError(f"IP address non valido: {str(e)}")
+            raise serializers.ValidationError(f"IP address non valido: {e!s}")
 
         return value
 
@@ -424,13 +429,17 @@ class BlockedIPCreateSerializer(serializers.ModelSerializer):
             "threat_score",
             "expires_at",
         ]
+        # `blocked_by` è impostato lato server dall'utente autenticato
+        # (perform_create), non più dal client (MEDIUM trovato in code
+        # review, 2026-11).
+        read_only_fields = ["blocked_by"]
 
     def validate_ip_address(self, value):
         """Valida IP"""
         try:
             ipaddress.ip_address(value)
         except ValueError as e:
-            raise serializers.ValidationError(f"IP address non valido: {str(e)}")
+            raise serializers.ValidationError(f"IP address non valido: {e!s}")
         return value
 
 

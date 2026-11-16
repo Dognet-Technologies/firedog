@@ -43,7 +43,7 @@ ptyprocess==0.7.0
 pure_eval==0.2.3
 pycparser==2.23
 Pygments==2.20.0
-PyJWT==2.14.0
+PyJWT==2.15.0
 pytest==9.0.3
 pytest-django==4.8.0
 python-crontab==3.3.0

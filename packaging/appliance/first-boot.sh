@@ -7,14 +7,15 @@
 # Progettato per essere idempotente se interrotto e rilanciato.
 #
 # A differenza dell'equivalente SentinelCore, qui si rigenera ANCHE il
-# certificato TLS self-signed: quello generato in fase di build (provision.sh)
-# porta il CN/SAN dell'IP del builder, non del clone — ogni istanza deployata
-# ha un IP reale diverso e deve avere il proprio certificato.
+# CA locale e certificato TLS: quelli creati in fase di build (provision.sh)
+# portano l'IP del builder e la sua chiave di CA — ogni istanza deployata ha
+# un IP reale diverso e deve avere la propria CA e il proprio certificato.
 set -euo pipefail
 
 INSTALL_DIR=/opt/firedog
 ENV_FILE="$INSTALL_DIR/backend/.env"
-TLS_DIR=/etc/ssl/firedog
+TLS_ETC_DIR=/etc/sentinelsuite/firedog
+LEGACY_TLS_DIR=/etc/ssl/firedog
 DB_NAME=firedog
 DB_USER=firedog
 LOG=/var/log/firedog-first-boot.log
@@ -81,18 +82,18 @@ echo "[6/9] Aggiornamento credenziali DB..."
 sudo -u postgres psql -v ON_ERROR_STOP=1 \
     -c "ALTER ROLE $DB_USER PASSWORD '$NEW_DB_PASS';" >/dev/null
 
-# ── 7. Rigenera certificato TLS per l'IP reale del clone ────────────────────
-echo "[7/9] Rigenerazione certificato TLS ($SERVER_IP)..."
-mkdir -p "$TLS_DIR"
-SAN_TYPE="DNS"
-echo "$SERVER_IP" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && SAN_TYPE="IP"
-openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
-    -keyout "$TLS_DIR/firedog.key" -out "$TLS_DIR/firedog.crt" \
-    -subj "/CN=$SERVER_IP" \
-    -addext "subjectAltName=$SAN_TYPE:$SERVER_IP" >/dev/null 2>&1
-chmod 600 "$TLS_DIR/firedog.key"
-chmod 644 "$TLS_DIR/firedog.crt"
+# ── 7. CA e certificato TLS propri del clone ────────────────────────────────
+# L'immagine esce da provision.sh con la CA del builder: tenerla vorrebbe dire
+# la STESSA chiave privata della CA su ogni appliance. Si cancella e si
+# rifà tutto per l'IP reale del clone (deploy/firedog-tls).
+echo "[7/9] CA locale e certificato TLS ($SERVER_IP)..."
+case "$TLS_ETC_DIR" in /etc/sentinelsuite/*) rm -rf "$TLS_ETC_DIR/tls" ;; esac
+rm -rf /var/lib/firedog/tls "$LEGACY_TLS_DIR"
+if [ -f "$TLS_ETC_DIR/tls.conf" ]; then
+    sed -i "s/^SERVER_NAME=.*/SERVER_NAME=${SERVER_IP}/" "$TLS_ETC_DIR/tls.conf"
+fi
 sed -i "s/server_name .*/server_name ${SERVER_IP};/" /etc/nginx/sites-available/firedog
+/usr/local/sbin/firedog-tls ensure --name "$SERVER_IP"
 nginx -t && systemctl reload nginx
 
 # ── 8. Riavvia i servizi con la nuova config, verifica admin ────────────────
@@ -151,7 +152,8 @@ cat > /etc/issue.d/firedog.issue <<ISSUE
 ║            FireDog — Credenziali iniziali istanza             ║
 ╠══════════════════════════════════════════════════════════════╣
   URL:        https://$SERVER_IP/
-  (certificato self-signed: il browser avviserà al primo accesso)
+  (certificato della CA locale dell'appliance: il browser avvisa finché non
+   importi la CA da Impostazioni > API Keys Agent)
 $CRED_BLOCK
 ╚══════════════════════════════════════════════════════════════╝
 
@@ -163,7 +165,8 @@ cat > /etc/motd <<MOTD
 ║            FireDog — Credenziali iniziali istanza             ║
 ╠══════════════════════════════════════════════════════════════╣
   URL:        https://$SERVER_IP/
-  (certificato self-signed: il browser avviserà al primo accesso)
+  (certificato della CA locale dell'appliance: il browser avvisa finché non
+   importi la CA da Impostazioni > API Keys Agent)
 $CRED_BLOCK
 ╚══════════════════════════════════════════════════════════════╝
 MOTD

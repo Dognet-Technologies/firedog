@@ -9,6 +9,8 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 import logging
 
+from accounts.permissions import IsAdminOrReadOnly
+
 from .models import Target
 from .serializers import TargetSerializer, TargetListSerializer, TargetCreateSerializer
 from audit.models import AuditLog
@@ -30,7 +32,7 @@ from .serializers import (
     FirewallStatsSerializer,
     NetworkInterfaceSerializer,
 )
-from .services import record_blocked_ip, unblock_ip as unblock_ip_service
+from .services import dispatch_unblock, record_blocked_ip, unblock_ip as unblock_ip_service
 
 logger = logging.getLogger("firedog.targets")
 
@@ -39,7 +41,10 @@ class TargetViewSet(viewsets.ModelViewSet):
     """ViewSet per gestione Target"""
 
     queryset = Target.objects.all()
-    permission_classes = [IsAuthenticated]
+    # destroy() fa hard-delete reale; sync_rules/update_threat_config
+    # dispatchano comandi a host reali — sola lettura per Reporter,
+    # scrittura solo Admin (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     serializer_class = TargetSerializer
     filterset_fields = ["status", "ip_address"]
@@ -91,7 +96,7 @@ class TargetViewSet(viewsets.ModelViewSet):
             )
 
         except Exception as e:
-            logger.error(f"Error deleting target {target_ip}: {str(e)}", exc_info=True)
+            logger.error(f"Error deleting target {target_ip}: {e!s}", exc_info=True)
             return Response(
                 {"success": False, "error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -224,7 +229,10 @@ class WhitelistEntryViewSet(viewsets.ModelViewSet):
     - GET /api/whitelist/by_target/ - Filtra per target
     """
 
-    permission_classes = [IsAuthenticated]
+    # create/update/destroy + deactivate/activate sono tutte mutazioni
+    # reali sulla whitelist di un target — sola lettura per Reporter,
+    # scrittura solo Admin (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["target", "is_active"]
 
@@ -240,7 +248,12 @@ class WhitelistEntryViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Crea entry con logging audit"""
-        entry = serializer.save()
+        # `added_by` è impostato SEMPRE lato server dall'utente autenticato:
+        # prima era un campo client-settable e il frontend ci scriveva la
+        # stringa letterale 'current_user', vanificando la tracciabilità —
+        # e un client malevolo avrebbe potuto attribuire l'azione a
+        # chiunque (MEDIUM trovato in code review, 2026-11).
+        entry = serializer.save(added_by=self.request.user.username)
 
         # Log audit
         AuditLog.log_action(
@@ -345,7 +358,10 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
     - POST /api/blocked-ips/cleanup_expired/ - Rimuovi blocchi scaduti
     """
 
-    permission_classes = [IsAuthenticated]
+    # create/destroy + unblock/cleanup_expired sono mutazioni reali sui
+    # blocchi firewall — sola lettura per Reporter, scrittura solo Admin
+    # (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["target", "is_active", "block_reason"]
 
@@ -361,7 +377,11 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Crea blocco con logging audit e ThreatLog companion se non-manual."""
-        block = serializer.save()
+        # `blocked_by` impostato SEMPRE lato server — stesso principio di
+        # WhitelistEntryViewSet.perform_create (MEDIUM trovato in code
+        # review, 2026-11: il frontend inviava la stringa letterale
+        # 'current_user').
+        block = serializer.save(blocked_by=self.request.user.username)
         record_blocked_ip(
             block, user=self.request.user, ip_address=self.request.META.get("REMOTE_ADDR")
         )
@@ -381,6 +401,9 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
             old_values={"ip_address": ip_address, "target": target_id},
         )
 
+        if instance.is_active:
+            # Eliminare un blocco attivo deve toglierlo anche dal firewall.
+            dispatch_unblock(instance)
         instance.delete()
         logger.info(f"IP block removed: {ip_address} on target {target_id}")
 
@@ -475,6 +498,7 @@ class BlockedIPViewSet(viewsets.ModelViewSet):
 
         for block in expired_blocks:
             block.unblock(unblocked_by="system")
+            dispatch_unblock(block)
 
         # Log audit
         AuditLog.log_action(

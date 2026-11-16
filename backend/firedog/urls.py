@@ -5,7 +5,9 @@ URL Configuration per FireDog
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
+
+from accounts.views import RateLimitedTokenObtainPairView
 
 # Import ViewSets
 from rules.views import FirewallRuleViewSet
@@ -34,6 +36,7 @@ from mcp.views import MCPView, MCPAPIKeyViewSet
 # Import Log Views
 from api.views import LogAPIView, LogSourcesAPIView
 from api.views_system import SystemUpdateCheckView, SystemUpdateInstallView, SystemVersionView
+from api.views_tls import TlsCaCertificateView, TlsInfoView
 from api.views_dashboard import FleetTrafficView, FleetGeoView, FleetActivityView
 
 # Router per API REST
@@ -64,13 +67,15 @@ urlpatterns = [
     # Admin
     path("admin/", admin.site.urls),
     # JWT Authentication
-    path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/token/", RateLimitedTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     # Log APIs
     path("api/logs/", LogAPIView.as_view(), name="logs"),
     path("api/logs/sources/", LogSourcesAPIView.as_view(), name="logs-sources"),
     # System update (git pull + build + migrate + restart)
     path("api/system/version/", SystemVersionView.as_view(), name="system-version"),
+    path("api/tls/ca.pem", TlsCaCertificateView.as_view(), name="tls-ca"),
+    path("api/settings/tls/", TlsInfoView.as_view(), name="tls-info"),
     path("api/system/update/check/", SystemUpdateCheckView.as_view(), name="system-update-check"),
     path("api/system/update/install/", SystemUpdateInstallView.as_view(), name="system-update-install"),
     # Dashboard aggregations

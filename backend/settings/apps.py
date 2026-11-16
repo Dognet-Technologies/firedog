@@ -23,7 +23,6 @@ class SettingsConfig(AppConfig):
         # tabella system_settings esista, e romperebbe le migrazioni. Le
         # chiavi mancanti restano semplicemente assenti finché il frontend
         # non fa il primo salvataggio (usa i default locali fino ad allora).
-        pass
 
     def _initialize_default_settings(self):
         """Crea impostazioni default se non esistono"""
@@ -49,9 +48,7 @@ class SettingsConfig(AppConfig):
             "maxLoginAttempts": {"value": 5, "category": "security"},
             "enableMFA": {"value": False, "category": "security"},
             # Monitoring
-            "scanInterval": {"value": 60, "category": "monitoring"},
             "logRetention": {"value": 30, "category": "monitoring"},
-            "enableAutoBlock": {"value": True, "category": "monitoring"},
             "alertNotificationMinScore": {"value": 8, "category": "monitoring"},
             "pcapSavePath": {"value": "/var/log/ulogd", "category": "monitoring"},
             "pcapAnalysisTool": {"value": "tcpdump", "category": "monitoring"},

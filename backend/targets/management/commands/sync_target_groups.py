@@ -71,7 +71,7 @@ class Command(BaseCommand):
                     target_group, created = TargetGroup.objects.get_or_create(
                         name=group_name,
                         defaults={
-                            "description": f"Auto-created from target gruppo field",
+                            "description": "Auto-created from target gruppo field",
                             "color": self._get_default_color(target.gruppo),
                             "icon": self._get_default_icon(target.gruppo),
                         },

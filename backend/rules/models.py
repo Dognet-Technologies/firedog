@@ -3,13 +3,58 @@ Models per l'app Rules
 Gestione delle regole firewall iptables
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.core.validators import (
     validate_ipv46_address,
     MinValueValidator,
     MaxValueValidator,
+    RegexValidator,
 )
 from targets.models import Target
+
+# Nomi interfaccia Linux validi: alfanumerici + `.`/`:`/`-`/`_` (VLAN
+# sub-interface, alias legacy, nomi bridge/custom), mai vuoto, mai un
+# leading `-` (verrebbe letto come opzione da iptables sul lato agent —
+# stesso principio di validate_fw_word in dog_agent/src/firewall/mod.rs,
+# applicato qui anche a monte, al boundary dell'API). A differenza di
+# port/source_ip/dest_ip/protocol/action/chain, `interface` non aveva
+# alcuna validazione (HIGH trovato in code review, 2026-11).
+# \A...\Z e non ^...$: in Python `$` accetta anche un newline finale.
+validate_interface_name = RegexValidator(
+    regex=r"\A[A-Za-z0-9][A-Za-z0-9_.:-]{0,49}\Z",
+    message="Nome interfaccia non valido: solo alfanumerici, '.', ':', '-', '_', senza leading '-'.",
+)
+
+RULE_COMMENT_MAX_BYTES = 255  # limite di xt_comment
+
+
+def validate_rule_comment(value):
+    """Commento iptables: arriva all'agent e finisce in iptables-save.
+
+    Niente caratteri di controllo (un newline spezza il file salvato da
+    iptables-save e quindi il restore al boot), niente apici/backslash
+    (quoting di iptables-save), al massimo 255 byte. Prima non era validato
+    da nessuna parte.
+    """
+    if value is None or value == "":
+        return
+    if not isinstance(value, str):
+        raise ValidationError("Il commento deve essere una stringa.")
+    if not value.isprintable() or any(ch in value for ch in "\"'\\`$"):
+        raise ValidationError(
+            "Commento non valido: niente caratteri di controllo, apici, backslash, $ o backtick."
+        )
+    if len(value.encode("utf-8")) > RULE_COMMENT_MAX_BYTES:
+        raise ValidationError(f"Commento troppo lungo (max {RULE_COMMENT_MAX_BYTES} byte).")
+
+
+def sanitize_rule_comment(value):
+    """Versione "ripulita" per i commenti generati dal server (es. il marker
+    `[group:NOME]`, dove NOME non passa da validate_rule_comment): toglie
+    i caratteri ammessi da validate_rule_comment e tronca a 255 byte."""
+    cleaned = "".join(ch for ch in (value or "") if ch.isprintable() and ch not in "\"'\\`$")
+    return cleaned.strip().encode("utf-8")[:RULE_COMMENT_MAX_BYTES].decode("utf-8", "ignore")
 
 
 class FirewallRule(models.Model):
@@ -90,12 +135,16 @@ class FirewallRule(models.Model):
 
     # Metadata
     comment = models.CharField(
-        max_length=256, blank=True, help_text="Commento descrittivo della regola"
+        max_length=256,
+        blank=True,
+        validators=[validate_rule_comment],
+        help_text="Commento descrittivo della regola",
     )
 
     interface = models.CharField(
         max_length=50,
         blank=True,
+        validators=[validate_interface_name],
         help_text=(
             "NIC specifica su cui applicare la regola (es. eth0). Vuoto = "
             "tutto l'host (comportamento storico, invariato per le regole "

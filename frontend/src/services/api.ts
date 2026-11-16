@@ -25,7 +25,17 @@ import type {
 } from '../types';
 
 
-   export interface SystemSetting {
+   export interface TlsInfo {
+  managed: boolean;
+  profile?: 'production' | 'testing';
+  server_name?: string;
+  server_not_after?: string;
+  ca_subject?: string;
+  ca_not_after?: string;
+  ca_fingerprint_sha256?: string;
+}
+
+export interface SystemSetting {
      id: number;
      key: string;
      value: any;
@@ -170,15 +180,28 @@ class ApiService {
     const refreshToken = localStorage.getItem('refresh_token');
     if (!refreshToken) return null;
 
+    const refreshUrl = `${API_BASE_URL.replace('/api', '')}/api/token/refresh/`;
+    const requestRefresh = async (token: string): Promise<string> => {
+      const response = await axios.post(refreshUrl, { refresh: token });
+      const { access, refresh } = response.data;
+      localStorage.setItem('access_token', access);
+      // ROTATE_REFRESH_TOKENS + blacklist: il refresh token usato non vale
+      // più, va salvato quello nuovo (prima veniva ignorato).
+      if (refresh) localStorage.setItem('refresh_token', refresh);
+      return access as string;
+    };
+
     this.refreshInflight = (async () => {
       try {
-        const response = await axios.post(
-          `${API_BASE_URL.replace('/api', '')}/api/token/refresh/`,
-          { refresh: refreshToken },
-        );
-        const { access } = response.data;
-        localStorage.setItem('access_token', access);
-        return access as string;
+        return await requestRefresh(refreshToken);
+      } catch (err) {
+        // Un'altra scheda può aver ruotato il token nel frattempo: in quel
+        // caso localStorage ha già quello nuovo, si riprova una volta.
+        const latest = localStorage.getItem('refresh_token');
+        if (latest && latest !== refreshToken) {
+          return await requestRefresh(latest);
+        }
+        throw err;
       } finally {
         // Reset DOPO che la promise risolve, così richieste arrivate durante
         // il refresh vedono ancora la stessa inflight; nuove richieste dopo
@@ -625,6 +648,12 @@ class ApiService {
 
   async getSystemVersion(): Promise<{ version: string }> {
     const response = await this.api.get('/system/version/');
+    return response.data;
+  }
+
+  // CA locale dell'installazione (deploy/firedog-tls): profilo, impronta e scadenze.
+  async getTlsInfo(): Promise<TlsInfo> {
+    const response = await this.api.get('/settings/tls/');
     return response.data;
   }
 

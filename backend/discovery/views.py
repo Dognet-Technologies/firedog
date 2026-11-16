@@ -9,6 +9,9 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
 from django.utils import timezone
 import logging
+
+from accounts.permissions import IsAdminOrReadOnly
+
 from .models import DiscoveredHost
 from .serializers import DiscoveredHostSerializer, DiscoveredHostListSerializer
 from targets.models import Target
@@ -21,7 +24,12 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
     """ViewSet per gestione Discovered Hosts"""
 
     queryset = DiscoveredHost.objects.all()
-    permission_classes = [IsAuthenticated]
+    # start_scan/bulk_import/bulk_delete/import_to_target/clear_old sono
+    # tutte azioni operative/distruttive (inclusa l'esecuzione di una
+    # scan di rete reale e l'import come Target veri) — sola lettura per
+    # Reporter, scrittura solo Admin (gap della stessa classe del
+    # CRITICAL su controllo accessi trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     serializer_class = DiscoveredHostSerializer
     pagination_class = None
 
@@ -368,9 +376,9 @@ class DiscoveredHostViewSet(viewsets.ModelViewSet):
             )
 
         except Exception as e:
-            logger.error(f"Bulk delete error: {str(e)}")
+            logger.error(f"Bulk delete error: {e!s}")
             return Response(
-                {"error": f"Failed to delete hosts: {str(e)}"},
+                {"error": f"Failed to delete hosts: {e!s}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

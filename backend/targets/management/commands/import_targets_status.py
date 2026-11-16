@@ -93,7 +93,7 @@ class Command(BaseCommand):
                     error_count += 1
             except Exception as e:
                 logger.exception(f"Errore import target {target.id}: {e}")
-                self.stdout.write(self.style.ERROR(f"  ✗ {target.hostname}: {str(e)}"))
+                self.stdout.write(self.style.ERROR(f"  ✗ {target.hostname}: {e!s}"))
                 error_count += 1
 
         # Summary
@@ -155,7 +155,7 @@ class Command(BaseCommand):
             # Validazione base sicurezza
             if not self.validate_json_data(data):
                 self.stdout.write(
-                    self.style.ERROR(f"    ✗ JSON non valido o non sicuro")
+                    self.style.ERROR("    ✗ JSON non valido o non sicuro")
                 )
                 return "error"
 
@@ -209,11 +209,11 @@ class Command(BaseCommand):
                 return "success"
 
         except json.JSONDecodeError as e:
-            self.stdout.write(self.style.ERROR(f"    ✗ JSON non valido: {str(e)}"))
+            self.stdout.write(self.style.ERROR(f"    ✗ JSON non valido: {e!s}"))
             return "error"
         except Exception as e:
             logger.exception(f"Error importing target {target.id}: {e}")
-            self.stdout.write(self.style.ERROR(f"    ✗ Errore: {str(e)}"))
+            self.stdout.write(self.style.ERROR(f"    ✗ Errore: {e!s}"))
             return "error"
 
     def validate_json_data(self, data):
