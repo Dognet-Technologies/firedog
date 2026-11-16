@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import './Settings.css';
 import api from '../services/api';
 import MCPKeysTab from '../components/Settings/MCPKeysTab';
+import MasterCertificateCard from '../components/Settings/MasterCertificateCard';
 import { useNotifications } from '../contexts/NotificationContext';
 import type { NotificationConfig, SmtpInfo } from '../types';
 
@@ -2230,6 +2231,8 @@ const Settings: React.FC = () => {
           Genera Nuova API Key
         </button>
       </div>
+
+      <MasterCertificateCard />
 
       {loadingAgentKeys ? (
         <div className="loading-state">

@@ -29,6 +29,10 @@ DEBUG = config("DEBUG", default=False, cast=bool)
 
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",")
 
+# Parte pubblica della CA locale (ca.crt, tls-info.json) pubblicata da
+# deploy/firedog-tls: la serve api/views_tls.py agli agent.
+TLS_PUBLIC_DIR = config("FIREDOG_TLS_PUBLIC_DIR", default="/var/lib/firedog/tls")
+
 # Application definition
 INSTALLED_APPS = [
     "daphne",

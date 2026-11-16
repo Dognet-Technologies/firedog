@@ -1,0 +1,15 @@
+[Unit]
+Description=FireDog - rinnovo del certificato TLS del server (CA locale)
+
+[Service]
+Type=oneshot
+# Rinnova il certificato server se scade entro 30 giorni; la CA non cambia,
+# quindi agent e browser che si fidano della CA non vanno toccati.
+ExecStart=/usr/local/sbin/firedog-tls renew
+# Scrive solo in /etc/sentinelsuite e /var/lib/firedog (e ricarica nginx via
+# systemd): /usr e /boot restano in sola lettura, niente /tmp condiviso né
+# nuovi privilegi.
+ProtectSystem=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true

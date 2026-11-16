@@ -189,6 +189,44 @@ log "5/6 Applicazione migration"
 rm -rf "$ROLLBACK_DIR"
 trap - ERR
 
+# ── TLS: CA locale dell'installazione (deploy/firedog-tls) ─────────────────
+# Le versioni precedenti usavano un self-signed CA:TRUE in /etc/ssl/firedog,
+# che dog_agent >= 1.3 rifiuta. firedog-tls lo copia da parte, emette CA e
+# certificato server e ripunta nginx (con nginx -t e ripristino). Mai
+# bloccante: se fallisce nginx resta sul certificato precedente.
+# FIREDOG_TLS_PROFILE=testing per i master di sviluppo/test.
+TLS_TOOL=/usr/local/sbin/firedog-tls
+ETC_DIR=/etc/sentinelsuite/firedog
+NGINX_SITE=/etc/nginx/sites-available/firedog
+if [ -f "$PKG_DIR/deploy/firedog-tls" ] && grep -q "ssl_certificate" "$NGINX_SITE" 2>/dev/null; then
+  install -m 0755 -o root -g root "$PKG_DIR/deploy/firedog-tls" "$TLS_TOOL"
+  install -m 0644 -o root -g root "$PKG_DIR/deploy/firedog-tls-renew.service" \
+    "$PKG_DIR/deploy/firedog-tls-renew.timer" /etc/systemd/system/
+  [ -d "$ETC_DIR" ] || install -d -m 0700 -o root -g root "$ETC_DIR"
+  if [ ! -f "$ETC_DIR/tls.conf" ]; then
+    profile="${FIREDOG_TLS_PROFILE:-production}"
+    case "$profile" in production|testing) ;; *) profile=production ;; esac
+    cat > "$ETC_DIR/tls.conf" <<CONF
+# Profilo dei certificati TLS di FireDog (firedog-tls).
+# production: CA 10 anni, certificato server 397 giorni.
+# testing: solo sviluppo e test interni; soggetti marcati TESTING,
+#          CA 12 mesi, certificato server 6 mesi.
+PROFILE=$profile
+# SERVER_NAME=<ip-o-nome>: se vuoto si usa quello del certificato attuale.
+# MANAGED=no: certificato fornito dall'amministratore (PKI aziendale),
+# firedog-tls non lo tocca.
+MANAGED=yes
+CONF
+    chmod 0644 "$ETC_DIR/tls.conf"
+  fi
+  if ! "$TLS_TOOL" ensure; then
+    echo "ATTENZIONE: certificato TLS non aggiornato, nginx usa quello precedente." >&2
+    echo "Verifica con: sudo $TLS_TOOL ensure" >&2
+  fi
+  systemctl daemon-reload
+  systemctl enable --now firedog-tls-renew.timer >/dev/null 2>&1 || true
+fi
+
 # ── 6. Riavvia e verifica ────────────────────────────────────────────────────
 log "6/6 Riavvio e verifica"
 systemctl start firedog-backend firedog-celery firedog-celerybeat

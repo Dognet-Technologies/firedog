@@ -25,7 +25,17 @@ import type {
 } from '../types';
 
 
-   export interface SystemSetting {
+   export interface TlsInfo {
+  managed: boolean;
+  profile?: 'production' | 'testing';
+  server_name?: string;
+  server_not_after?: string;
+  ca_subject?: string;
+  ca_not_after?: string;
+  ca_fingerprint_sha256?: string;
+}
+
+export interface SystemSetting {
      id: number;
      key: string;
      value: any;
@@ -638,6 +648,12 @@ class ApiService {
 
   async getSystemVersion(): Promise<{ version: string }> {
     const response = await this.api.get('/system/version/');
+    return response.data;
+  }
+
+  // CA locale dell'installazione (deploy/firedog-tls): profilo, impronta e scadenze.
+  async getTlsInfo(): Promise<TlsInfo> {
+    const response = await this.api.get('/settings/tls/');
     return response.data;
   }
 
