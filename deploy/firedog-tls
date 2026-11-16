@@ -303,6 +303,16 @@ remove_legacy_dir() {
     echo "$LEGACY_TLS_DIR rimossa (copia in $PRIVATE_DIR/legacy-*)"
 }
 
+# Un --name esplicito diverso da SERVER_NAME in tls.conf (es. il master ha
+# cambiato IP) va ricordato: il rinnovo automatico usa SERVER_NAME, e senza
+# questo tornerebbe a emettere il certificato per il vecchio indirizzo.
+remember_name() {
+    [ -f "$TLS_CONF" ] && [ -n "$SERVER_NAME" ] && [ "$SERVER_NAME" != "$1" ] || return 0
+    sed -i "s/^\([[:space:]]*SERVER_NAME=\).*/\1$1/" "$TLS_CONF"
+    SERVER_NAME="$1"
+    echo "SERVER_NAME aggiornato a $1 in $TLS_CONF"
+}
+
 cmd_ensure() {
     local name="${1:-}"
     load_conf
@@ -312,6 +322,7 @@ cmd_ensure() {
     fi
     [ -n "$name" ] || name="${SERVER_NAME:-$(current_name)}"
     validate_name "$name"
+    remember_name "$name"
     prepare_dirs
 
     NGINX_CHANGED=no
