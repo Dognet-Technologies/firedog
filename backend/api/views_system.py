@@ -52,7 +52,8 @@ class SystemVersionView(APIView):
 class SystemUpdateCheckView(APIView):
     """GET /api/system/update/check/ — versione corrente vs disponibile su GitHub."""
 
-    permission_classes = [IsAuthenticated]
+    # Admin: esegue git fetch e mostra il path di installazione.
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
         if not (REPO_ROOT / ".git").exists():
@@ -85,8 +86,17 @@ class SystemUpdateCheckView(APIView):
         # branch effettivamente checkoutato solo se UPDATE_BRANCH non è impostata.
         branch = os.environ.get("UPDATE_BRANCH", "").strip()
         if not branch:
-            rc, branch, _ = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=REPO_ROOT)
-            branch = branch.strip() or "HEAD"
+            rc, branch, _ = _run(["git", "symbolic-ref", "--short", "-q", "HEAD"], cwd=REPO_ROOT)
+            branch = branch.strip()
+        if not branch:
+            # HEAD staccato: update.sh si fermerebbe, meglio dirlo subito.
+            return Response(
+                {
+                    "ok": False,
+                    "error": "Il clone non è su una branch (HEAD staccato): imposta UPDATE_BRANCH.",
+                },
+                status=200,
+            )
 
         rc, local_sha, _ = _run(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT)
         rc, remote_sha, _ = _run(["git", "rev-parse", f"origin/{branch}"], cwd=REPO_ROOT)

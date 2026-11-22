@@ -5,10 +5,57 @@ Log Streaming in tempo reale
 
 import json
 import asyncio
+import logging
 import os
+from urllib.parse import parse_qs
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+LOG_VIEWER_GROUPS = ("Admin", "Reporter")
+MAX_HISTORY_LINES = 5000
+
+
+def _token_from_scope(scope):
+    query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
+    values = query.get("token") or []
+    return values[0] if values else None
+
+
+@database_sync_to_async
+def _load_log_viewer(user_id):
+    from django.contrib.auth.models import User
+
+    user = User.objects.filter(id=user_id, is_active=True).first()
+    if user is None:
+        return None
+    if user.is_superuser or user.groups.filter(name__in=LOG_VIEWER_GROUPS).exists():
+        return user
+    return None
+
+
+async def authenticate_ws(scope):
+    """Utente attivo con ruolo Admin/Reporter dal JWT in query string, o None.
+
+    Il token non viene mai scritto nei log (prima finivano su stdout, quindi
+    nel journal, sia la query string sia i primi 20 caratteri del token).
+    """
+    token = _token_from_scope(scope)
+    if not token:
+        return None
+    try:
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        user_id = AccessToken(token)["user_id"]
+    except Exception:
+        logger.info("log WS: token non valido o scaduto")
+        return None
+    user = await _load_log_viewer(user_id)
+    if user is None:
+        logger.info("log WS: utente %s inattivo o senza ruolo", user_id)
+    return user
 
 
 class LogStreamConsumer(AsyncWebsocketConsumer):
@@ -18,52 +65,13 @@ class LogStreamConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         """Accetta connessione WebSocket"""
-        print("WebSocket connection attempt...")
-
-        # Estrai token dall'URL
-        query_string = self.scope.get("query_string", b"").decode()
-        print(f"Query string: {query_string}")
-
-        params = {}
-        if query_string:
-            for param in query_string.split("&"):
-                if "=" in param:
-                    key, value = param.split("=", 1)
-                    params[key] = value
-
-        token = params.get("token")
-        print(f"Token received: {token[:20] if token else 'None'}...")
-
-        if not token:
-            print("No token provided, closing connection")
+        user = await authenticate_ws(self.scope)
+        if user is None:
             await self.close()
             return
-
-        # Valida il token JWT
-        try:
-            from rest_framework_simplejwt.tokens import AccessToken
-
-            access_token = AccessToken(token)
-            user_id = access_token["user_id"]
-            print(f"Token valid, user_id: {user_id}")
-
-            user = await self.get_user(user_id)
-
-            if not user:
-                print("User not found, closing connection")
-                await self.close()
-                return
-
-            self.scope["user"] = user
-            print(f"User authenticated: {user.username}")
-
-        except Exception as e:
-            print(f"WebSocket auth failed: {e}")
-            await self.close()
-            return
+        self.scope["user"] = user
 
         await self.accept()
-        print("WebSocket connection accepted!")
 
         # Invia messaggio di benvenuto
         await self.send(
@@ -78,7 +86,6 @@ class LogStreamConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         """Chiude connessione"""
-        print(f"WebSocket disconnected: {close_code}")
         self.streaming = False
 
     async def receive(self, text_data):
@@ -156,21 +163,12 @@ class LogStreamConsumer(AsyncWebsocketConsumer):
                 # Attendi prima di controllare nuovi log
                 await asyncio.sleep(0.5)
 
-            except Exception as e:
+            except Exception:
+                logger.exception("log stream: errore di lettura")
                 await self.send(
-                    text_data=json.dumps({"type": "error", "message": str(e)})
+                    text_data=json.dumps({"type": "error", "message": "Log read error"})
                 )
                 await asyncio.sleep(1)
-
-    @database_sync_to_async
-    def get_user(self, user_id):
-        """Recupera utente dal database"""
-        from django.contrib.auth.models import User
-
-        try:
-            return User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return None
 
 
 class LogHistoryConsumer(AsyncWebsocketConsumer):
@@ -180,50 +178,23 @@ class LogHistoryConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         """Accetta connessione"""
-        # Estrai token dall'URL
-        query_string = self.scope.get("query_string", b"").decode()
-        params = {}
-        if query_string:
-            for param in query_string.split("&"):
-                if "=" in param:
-                    key, value = param.split("=", 1)
-                    params[key] = value
-
-        token = params.get("token")
-
-        if not token:
+        user = await authenticate_ws(self.scope)
+        if user is None:
             await self.close()
             return
-
-        try:
-            from rest_framework_simplejwt.tokens import AccessToken
-
-            access_token = AccessToken(token)
-            user_id = access_token["user_id"]
-            user = await self.get_user(user_id)
-
-            if not user:
-                await self.close()
-                return
-
-            self.scope["user"] = user
-
-        except Exception:
-            await self.close()
-            return
+        self.scope["user"] = user
 
         await self.accept()
 
     async def disconnect(self, close_code):
         """Chiude connessione"""
-        pass
 
     async def receive(self, text_data):
         """Riceve richieste di storico"""
         try:
             data = json.loads(text_data)
             source = data.get("source", "django")
-            lines = data.get("lines", 100)
+            lines = max(1, min(int(data.get("lines", 100)), MAX_HISTORY_LINES))
 
             # Leggi ultime N righe
             logs = await self.get_last_lines(source, lines)
@@ -234,8 +205,9 @@ class LogHistoryConsumer(AsyncWebsocketConsumer):
                 )
             )
 
-        except Exception as e:
-            await self.send(text_data=json.dumps({"type": "error", "message": str(e)}))
+        except Exception:
+            logger.exception("log history: richiesta non valida")
+            await self.send(text_data=json.dumps({"type": "error", "message": "Invalid request"}))
 
     async def get_last_lines(self, source, n=100):
         """Recupera ultime N righe da un file di log"""
@@ -259,13 +231,3 @@ class LogHistoryConsumer(AsyncWebsocketConsumer):
                 return [line.strip() for line in lines[-n:] if line.strip()]
         except Exception:
             return []
-
-    @database_sync_to_async
-    def get_user(self, user_id):
-        """Recupera utente dal database"""
-        from django.contrib.auth.models import User
-
-        try:
-            return User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return None

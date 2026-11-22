@@ -5,16 +5,115 @@ File: backend/settings/tasks.py
 Tasks asincroni per invio notifiche email/Slack/Discord
 """
 
+from datetime import timedelta
+
 from celery import shared_task
 from django.utils import timezone
+import ipaddress
 import logging
 import smtplib
+import socket
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from urllib.parse import urlparse
 import requests
+from requests.adapters import HTTPAdapter
 
 logger = logging.getLogger("firedog.notifications")
+
+
+class WebhookUrlError(ValueError):
+    """URL webhook non valido o che risolve a un indirizzo non consentito."""
+
+
+def _is_forbidden_ip(ip) -> bool:
+    if getattr(ip, "ipv4_mapped", None) is not None:
+        ip = ip.ipv4_mapped
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def _validate_webhook_url(url: str):
+    """Difesa SSRF sui webhook Slack/Discord configurabili dall'admin:
+    richiede https, rifiuta userinfo nell'URL, risolve l'host e rifiuta
+    indirizzi privati/loopback/link-local/riservati (es. 169.254.169.254,
+    i metadata cloud). L'endpoint che configura questi URL è già
+    Admin-only, ma un admin compromesso/ingannato non deve poter usare
+    questo campo come oracolo SSRF verso la rete interna (MEDIUM trovato
+    in code review, 2026-11).
+
+    Ritorna l'IP validato: _post_webhook si connette a QUELLO, senza una
+    seconda risoluzione DNS che un DNS malevolo potrebbe far puntare a un
+    indirizzo interno (DNS rebinding, seconda review 2026-11)."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise WebhookUrlError("il webhook deve usare https://")
+    if parsed.username or parsed.password:
+        raise WebhookUrlError("userinfo non consentito nell'URL del webhook")
+    hostname = parsed.hostname
+    if not hostname:
+        raise WebhookUrlError("host del webhook mancante")
+
+    try:
+        addrinfo = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as e:
+        raise WebhookUrlError(f"impossibile risolvere l'host del webhook: {e}")
+
+    ips = [ipaddress.ip_address(sockaddr[0]) for *_rest, sockaddr in addrinfo]
+    for ip in ips:
+        if _is_forbidden_ip(ip):
+            raise WebhookUrlError(f"l'host del webhook risolve a un IP non consentito: {ip}")
+    if not ips:
+        raise WebhookUrlError("l'host del webhook non risolve a nessun indirizzo")
+    return ips[0]
+
+
+class _PinnedHostAdapter(HTTPAdapter):
+    """Connessione all'IP gia' validato, con SNI e verifica del certificato
+    sull'hostname originale."""
+
+    def __init__(self, hostname, **kwargs):
+        self._hostname = hostname
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs["server_hostname"] = self._hostname
+        kwargs["assert_hostname"] = self._hostname
+        super().init_poolmanager(*args, **kwargs)
+
+
+def _post_webhook(url: str, payload: dict):
+    """POST JSON al webhook verso l'IP validato da _validate_webhook_url."""
+    ip = _validate_webhook_url(url)
+    parsed = urlparse(url)
+    host = f"[{ip}]" if ip.version == 6 else str(ip)
+    port = f":{parsed.port}" if parsed.port else ""
+    pinned_url = parsed._replace(netloc=f"{host}{port}").geturl()
+    with requests.Session() as session:
+        session.trust_env = False  # niente proxy da variabili d'ambiente
+        session.mount("https://", _PinnedHostAdapter(parsed.hostname))
+        return session.post(
+            pinned_url,
+            json=payload,
+            timeout=10,
+            allow_redirects=False,
+            headers={"Host": f"{parsed.hostname}{port}"},
+        )
+
+
+def _webhook_error(response) -> str:
+    """Solo lo status al chiamante: il corpo della risposta di un host
+    arbitrario non deve tornare indietro (oracolo SSRF). Un estratto va nel
+    log."""
+    logger.error("webhook HTTP %s: %s", response.status_code, response.text[:200])
+    return f"Status {response.status_code}"
 
 
 # ==================== EMAIL TASKS ====================
@@ -91,14 +190,14 @@ def send_email_notification(subject, message, recipients, config):
         return {"success": True}
 
     except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication error: {str(e)}")
-        return {"success": False, "error": f"Autenticazione SMTP fallita: {str(e)}"}
+        logger.error(f"SMTP Authentication error: {e!s}")
+        return {"success": False, "error": f"Autenticazione SMTP fallita: {e!s}"}
 
     except ssl.SSLCertVerificationError as e:
         # Non eredita da smtplib.SMTPException: senza questo except finirebbe
         # nel generico sotto con un messaggio criptico invece di indicare la
         # causa reale e la soluzione (il campo esiste apposta per questo).
-        logger.error(f"SMTP TLS certificate error: {str(e)}")
+        logger.error(f"SMTP TLS certificate error: {e!s}")
         return {
             "success": False,
             "error": (
@@ -110,11 +209,11 @@ def send_email_notification(subject, message, recipients, config):
         }
 
     except smtplib.SMTPException as e:
-        logger.error(f"SMTP error: {str(e)}")
-        return {"success": False, "error": f"Errore SMTP: {str(e)}"}
+        logger.error(f"SMTP error: {e!s}")
+        return {"success": False, "error": f"Errore SMTP: {e!s}"}
 
     except Exception as e:
-        logger.error(f"Email send error: {str(e)}", exc_info=True)
+        logger.error(f"Email send error: {e!s}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -139,22 +238,26 @@ def send_slack_notification(message, webhook_url):
             "icon_emoji": ":dog:",
         }
 
-        response = requests.post(webhook_url, json=payload, timeout=10)
+        response = _post_webhook(webhook_url, payload)
 
         if response.status_code == 200:
             logger.info("Slack notification sent successfully")
             return {"success": True}
         else:
-            error_msg = f"Status {response.status_code}: {response.text}"
+            error_msg = _webhook_error(response)
             logger.error(f"Slack webhook error: {error_msg}")
             return {"success": False, "error": error_msg}
 
+    except WebhookUrlError as e:
+        logger.error(f"Slack webhook URL non valido: {e}")
+        return {"success": False, "error": str(e)}
+
     except requests.RequestException as e:
-        logger.error(f"Slack request error: {str(e)}")
+        logger.error(f"Slack request error: {e!s}")
         return {"success": False, "error": str(e)}
 
     except Exception as e:
-        logger.error(f"Slack send error: {str(e)}", exc_info=True)
+        logger.error(f"Slack send error: {e!s}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -179,22 +282,26 @@ def send_discord_notification(message, webhook_url):
             "avatar_url": "https://via.placeholder.com/128/FF6B35/FFFFFF?text=FD",
         }
 
-        response = requests.post(webhook_url, json=payload, timeout=10)
+        response = _post_webhook(webhook_url, payload)
 
         if response.status_code in [200, 204]:
             logger.info("Discord notification sent successfully")
             return {"success": True}
         else:
-            error_msg = f"Status {response.status_code}: {response.text}"
+            error_msg = _webhook_error(response)
             logger.error(f"Discord webhook error: {error_msg}")
             return {"success": False, "error": error_msg}
 
+    except WebhookUrlError as e:
+        logger.error(f"Discord webhook URL non valido: {e}")
+        return {"success": False, "error": str(e)}
+
     except requests.RequestException as e:
-        logger.error(f"Discord request error: {str(e)}")
+        logger.error(f"Discord request error: {e!s}")
         return {"success": False, "error": str(e)}
 
     except Exception as e:
-        logger.error(f"Discord send error: {str(e)}", exc_info=True)
+        logger.error(f"Discord send error: {e!s}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -300,7 +407,7 @@ Se ricevi questo messaggio, la configurazione è corretta!
         return result
 
     except Exception as e:
-        logger.error(f"Test notification error: {str(e)}", exc_info=True)
+        logger.error(f"Test notification error: {e!s}", exc_info=True)
         return {"success": False, "error": str(e)}
 
 
@@ -406,7 +513,7 @@ def send_alert_notification(self, alert_type, message, target_id=None):
         return results
 
     except Exception as e:
-        logger.error(f"Send alert error: {str(e)}", exc_info=True)
+        logger.error(f"Send alert error: {e!s}", exc_info=True)
 
         # Retry con backoff esponenziale
         raise self.retry(exc=e, countdown=60 * (2**self.request.retries))
@@ -415,64 +522,142 @@ def send_alert_notification(self, alert_type, message, target_id=None):
 # ==================== HELPER FUNCTIONS ====================
 
 
-def trigger_threat_alert(threat, severity):
-    """
-    Helper per triggerare alert da minaccia rilevata
+# Impostazioni > Monitoraggio > "Soglia invio alert" è su scala 1-10 nella UI,
+# gli score delle minacce su 0-100: 8/10 = score >= 80.
+ALERT_MIN_SCORE_DEFAULT = 8
+ALERT_MIN_SCORE_RANGE = (1, 10)
 
-    Args:
-        threat: Istanza ThreatLog
-        severity: 'CRITICAL' o 'HIGH'
-    """
+
+def alert_min_threat_score():
+    """Score minimo (0-100) sotto il quale una minaccia non genera notifiche."""
     from settings.models import SystemSettings
 
-    # Verifica soglia minaccia (soglia GLOBALE di invio alert — non va
-    # confusa con agentThreatScoring.autoBlockThreshold, la soglia di
-    # auto-block per-target lato agent, o col vecchio nome "threatThreshold"
-    # mai davvero seedato/usato altrove).
-    threat_threshold = SystemSettings.get_setting("alertNotificationMinScore", 8)
+    raw = SystemSettings.get_setting("alertNotificationMinScore", ALERT_MIN_SCORE_DEFAULT)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = ALERT_MIN_SCORE_DEFAULT
+    low, high = ALERT_MIN_SCORE_RANGE
+    return max(low, min(high, value)) * 10
 
-    if threat.threat_score < threat_threshold:
-        return  # Sotto soglia, non inviare alert
 
-    alert_type = f"threat_{severity.lower()}"
+def trigger_threat_alert(threat):
+    """
+    Notifica (email/Slack/Discord) per una minaccia high/critical sopra la
+    soglia di Impostazioni > Monitoraggio. Chiamata da threats.ingest al
+    primo rilevamento o quando la severità sale. Ritorna True se accodata.
+    """
+    if threat.severity not in ("high", "critical"):
+        return False
+    if threat.threat_score < alert_min_threat_score():
+        return False
 
+    reasons = ", ".join(threat.reasons or []) or "n/d"
     message = f"""
-⚠️ THREAT DETECTED ⚠️
+⚠️ MINACCIA RILEVATA
 
 Target: {threat.target.hostname} ({threat.target.ip_address})
-Severity: {severity}
-Score: {threat.threat_score}/10
-Type: {threat.threat_type}
-Source IP: {threat.source_ip}
-Timestamp: {threat.detected_at.strftime('%Y-%m-%d %H:%M:%S')}
+Severità: {threat.severity.upper()}
+Score: {threat.threat_score}/100
+Tipo: {reasons}
+IP sorgente: {threat.source_ip}
+Rilevata: {threat.detected_at.strftime('%Y-%m-%d %H:%M:%S')}
 
-Details:
 {threat.description}
     """.strip()
 
-    # Invia alert asincrono
     send_alert_notification.delay(
-        alert_type=alert_type, message=message, target_id=threat.target.id
+        alert_type=f"threat_{threat.severity}", message=message, target_id=threat.target.id
     )
+    return True
 
 
-def trigger_target_offline_alert(target):
-    """
-    Helper per triggerare alert target offline
-
-    Args:
-        target: Istanza Target
-    """
+def trigger_target_offline_alert(target, minutes):
+    """Notifica target offline (chiamata da agent_manager.tasks.check_agent_health)."""
+    last_seen = target.last_seen.strftime('%Y-%m-%d %H:%M:%S') if target.last_seen else "mai"
     message = f"""
 🔴 TARGET OFFLINE
 
 Hostname: {target.hostname}
 IP: {target.ip_address}
-Last seen: {target.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') if target.last_heartbeat else 'Never'}
+Ultimo contatto: {last_seen}
 
-Il target non risponde da più di {target.heartbeat_interval} minuti.
+L'agent non risponde da più di {minutes} minuti.
     """.strip()
 
     send_alert_notification.delay(
         alert_type="target_offline", message=message, target_id=target.id
     )
+
+
+# ==================== CONSERVAZIONE LOG ====================
+
+# Impostazioni > Monitoraggio > "Conservazione log (giorni)". Stesso
+# intervallo accettato dalla UI e da bulk_update.
+LOG_RETENTION_DEFAULT_DAYS = 30
+LOG_RETENTION_RANGE = (7, 365)
+# Comandi conclusi: quelli pending/sent/executing restano finché finiscono.
+FINISHED_COMMAND_STATUSES = ("success", "failed", "timeout")
+
+
+def log_retention_days():
+    from settings.models import SystemSettings
+
+    raw = SystemSettings.get_setting("logRetention", LOG_RETENTION_DEFAULT_DAYS)
+    low, high = LOG_RETENTION_RANGE
+    # bool è un int in Python: True non deve diventare "1 giorno".
+    if isinstance(raw, bool):
+        return LOG_RETENTION_DEFAULT_DAYS
+    try:
+        days = int(raw)
+    except (TypeError, ValueError):
+        return LOG_RETENTION_DEFAULT_DAYS
+    return max(low, min(high, days))
+
+
+def _retention_querysets(cutoff):
+    """Storico che cresce nel tempo. Restano: audit log, IP bloccati, regole,
+    target, host scoperti (stato, non storico)."""
+    from agent_manager.models import AgentCommand
+    from settings.models import DatabaseCleanupLog, NotificationLog
+    from targets.models import Alert, FirewallStats, NetworkFlow, Statistics
+    from threats.models import ThreatLog
+
+    return [
+        # updated_at: una minaccia ancora attiva viene aggiornata a ogni reinvio.
+        ThreatLog.objects.filter(updated_at__lt=cutoff),
+        Alert.objects.filter(created_at__lt=cutoff),
+        NotificationLog.objects.filter(sent_at__lt=cutoff),
+        AgentCommand.objects.filter(created_at__lt=cutoff, status__in=FINISHED_COMMAND_STATUSES),
+        Statistics.objects.filter(collected_at__lt=cutoff),
+        FirewallStats.objects.filter(collected_at__lt=cutoff),
+        NetworkFlow.objects.filter(last_seen__lt=cutoff),
+        DatabaseCleanupLog.objects.filter(executed_at__lt=cutoff),
+    ]
+
+
+@shared_task
+def apply_log_retention():
+    """Ogni notte: cancella lo storico più vecchio di logRetention giorni.
+    Ritorna il numero di righe cancellate (cascade escluse)."""
+    from settings.models import DatabaseCleanupLog
+
+    days = log_retention_days()
+    cutoff = timezone.now() - timedelta(days=days)
+    deleted = 0
+    try:
+        for queryset in _retention_querysets(cutoff):
+            _, per_model = queryset.delete()
+            deleted += per_model.get(queryset.model._meta.label, 0)
+    except Exception as e:
+        logger.exception("Conservazione log fallita")
+        DatabaseCleanupLog.objects.create(
+            cleanup_type="all", records_deleted=deleted, retention_days=days,
+            success=False, error_message=str(e)[:500],
+        )
+        raise
+    DatabaseCleanupLog.objects.create(
+        cleanup_type="all", records_deleted=deleted, retention_days=days, success=True
+    )
+    logger.info("Conservazione log: %d righe più vecchie di %d giorni cancellate", deleted, days)
+    return deleted

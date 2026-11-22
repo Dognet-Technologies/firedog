@@ -9,9 +9,14 @@ e sono state rimosse: gli endpoint reali vivono in targets/threats/audit views.
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from accounts.permissions import IsReporterOrAdmin
 from django.conf import settings
+import logging
 import os
+
+logger = logging.getLogger(__name__)
+
+MAX_LOG_LINES = 5000
 
 
 class LogAPIView(APIView):
@@ -19,14 +24,18 @@ class LogAPIView(APIView):
     API per recuperare log
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsReporterOrAdmin]
 
     def get(self, request):
         """
         GET /api/logs/?source=django&lines=100
         """
         source = request.query_params.get("source", "django")
-        lines = int(request.query_params.get("lines", 100))
+        try:
+            lines = int(request.query_params.get("lines", 100))
+        except (TypeError, ValueError):
+            return Response({"error": "lines deve essere un intero"}, status=400)
+        lines = max(1, min(lines, MAX_LOG_LINES))
 
         logs_dir = settings.LOGS_DIR
 
@@ -53,8 +62,9 @@ class LogAPIView(APIView):
             return Response(
                 {"source": source, "logs": last_lines, "total_lines": len(last_lines)}
             )
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
+        except OSError:
+            logger.exception("lettura log %s fallita", source)
+            return Response({"error": "Impossibile leggere il log"}, status=500)
 
 
 class LogSourcesAPIView(APIView):
@@ -62,7 +72,7 @@ class LogSourcesAPIView(APIView):
     API per elencare sorgenti log disponibili
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsReporterOrAdmin]
 
     def get(self, request):
         """

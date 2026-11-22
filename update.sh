@@ -22,7 +22,10 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BRANCH="${UPDATE_BRANCH:-develop-v1.0.0}"
+# Branch da seguire: UPDATE_BRANCH, altrimenti quella su cui si trova il clone.
+# Stessa regola di SystemUpdateCheckView, cosi' controllo e installazione
+# guardano sempre la stessa branch.
+BRANCH="${UPDATE_BRANCH:-}"
 BACKEND_DIR="$REPO_DIR/backend"
 FRONTEND_DIR="$REPO_DIR/frontend"
 VENV="$BACKEND_DIR/venv"
@@ -33,8 +36,12 @@ warn() { echo -e "${YELLOW}[!!]${NC}  $*"; }
 fail() { echo -e "${RED}[KO]${NC}  $*"; exit 1; }
 step() { echo -e "\n${YELLOW}──────${NC} $* ${YELLOW}──────${NC}"; }
 
-[[ -d "$REPO_DIR/.git" ]] || fail "$REPO_DIR non è un git clone (re-init con: git init && git remote add origin … && git fetch && git reset --hard origin/$BRANCH)"
+[[ -d "$REPO_DIR/.git" ]] || fail "$REPO_DIR non è un git clone (re-init con: git init && git remote add origin … && git fetch && git reset --hard origin/<branch>)"
 command -v git >/dev/null  || fail "git non trovato"
+if [[ -z "$BRANCH" ]]; then
+    BRANCH="$(git -C "$REPO_DIR" symbolic-ref --short -q HEAD)" \
+        || fail "il clone non è su una branch (HEAD staccato): imposta UPDATE_BRANCH"
+fi
 command -v node >/dev/null || fail "node non trovato"
 command -v npm >/dev/null  || fail "npm non trovato"
 

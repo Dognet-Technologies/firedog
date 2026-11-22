@@ -1,0 +1,34 @@
+/* Scheda "Certificato del master" (Impostazioni > API Keys Agent). */
+.master-cert {
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border-primary);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.master-cert-testing { border-left-color: var(--status-warning); }
+.master-cert-unmanaged { color: var(--text-secondary); border-left-color: var(--border-primary); }
+.master-cert-header { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.master-cert-header h3 { margin: 0; font-size: 1rem; }
+.master-cert-badge {
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--status-warning);
+  border-radius: 999px;
+  color: var(--status-warning);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.master-cert-hint { margin: 0.6rem 0 0.9rem; color: var(--text-secondary); max-width: 70ch; line-height: 1.5; }
+.master-cert-hint code, .master-cert-fp code { font-family: ui-monospace, 'JetBrains Mono', monospace; }
+.master-cert-grid { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1.5rem; margin: 0 0 1rem; }
+.master-cert-grid dt { color: var(--text-tertiary); }
+.master-cert-grid dd { margin: 0; overflow-wrap: anywhere; }
+.master-cert-fp { display: flex; align-items: flex-start; gap: 0.5rem; }
+.master-cert-fp code { font-size: 0.8rem; word-break: break-all; }
+.master-cert-error { color: var(--status-danger); }
+@media (max-width: 640px) {
+  .master-cert-grid { grid-template-columns: 1fr; }
+}

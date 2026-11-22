@@ -2,7 +2,8 @@
 #
 # FireDog — installer del master (backend Django + frontend React + Celery +
 # nginx). Scripting automatico dei passi manuali documentati in INSTALL.md,
-# più generazione di un certificato TLS self-signed (HTTPS di default).
+# più CA locale dell'installazione e certificato server (HTTPS di default,
+# vedi deploy/firedog-tls).
 #
 # Uso:
 #   sudo ./deploy/install.sh [opzioni]
@@ -17,6 +18,9 @@
 #   --admin-email <email>       default: admin@localhost
 #   --admin-password <pw>       default: generata (openssl rand)
 #   --skip-tls                  installa senza HTTPS (nginx solo :80)
+#   --tls-profile <profilo>     production (default) o testing: solo per
+#                               sviluppo e test interni (certificati marcati
+#                               TESTING, CA 12 mesi, server 6 mesi)
 #   --force                     reinstalla anche se DB/utente esistono già
 #   -h, --help                  mostra questa guida
 #
@@ -41,6 +45,7 @@ ADMIN_USER="${FIREDOG_ADMIN_USER:-admin}"
 ADMIN_EMAIL="${FIREDOG_ADMIN_EMAIL:-admin@localhost}"
 ADMIN_PASSWORD="${FIREDOG_ADMIN_PASSWORD:-}"
 SKIP_TLS="${FIREDOG_SKIP_TLS:-false}"
+TLS_PROFILE="${FIREDOG_TLS_PROFILE:-production}"
 FORCE=false
 
 while [ $# -gt 0 ]; do
@@ -53,6 +58,7 @@ while [ $# -gt 0 ]; do
         --admin-email)    ADMIN_EMAIL="$2"; shift 2 ;;
         --admin-password) ADMIN_PASSWORD="$2"; shift 2 ;;
         --skip-tls)       SKIP_TLS=true; shift ;;
+        --tls-profile)    TLS_PROFILE="$2"; shift 2 ;;
         --force)          FORCE=true; shift ;;
         -h|--help)        sed -n '1,25p' "$0"; exit 0 ;;
         *) die "Argomento sconosciuto: $1 (usa --help)" ;;
@@ -63,7 +69,9 @@ done
 
 DB_NAME="firedog"
 DB_USER="firedog"
-TLS_DIR="/etc/ssl/firedog"
+CREDS_DIR="/etc/sentinelsuite/firedog"
+TLS_TOOL="/usr/local/sbin/firedog-tls"
+CREDS_TOOL="/usr/local/lib/sentinelsuite/initial-credentials.sh"
 
 # ── auto-detect server name (stesso metodo di sentinelcore, funziona offline) ─
 if [ -z "$SERVER_NAME" ]; then
@@ -72,7 +80,7 @@ if [ -z "$SERVER_NAME" ]; then
 fi
 [ -z "$SERVER_NAME" ] && die "Impossibile rilevare l'IP, passa --server-name"
 
-echo "Install dir: $INSTALL_DIR   |   Utente: $INSTALL_USER   |   Server name: $SERVER_NAME   |   TLS: $([ "$SKIP_TLS" = true ] && echo NO || echo 'sì (self-signed)')"
+echo "Install dir: $INSTALL_DIR   |   Utente: $INSTALL_USER   |   Server name: $SERVER_NAME   |   TLS: $([ "$SKIP_TLS" = true ] && echo NO || echo "sì (CA locale, profilo $TLS_PROFILE)")"
 
 # ── funzioni riusate anche da packaging/appliance/first-boot.sh ─────────────
 
@@ -109,23 +117,41 @@ write_env() {
     chown "$INSTALL_USER:$INSTALL_USER" "$env_file"
 }
 
-# Genera un certificato self-signed per $SERVER_NAME. Rieseguibile: sovrascrive.
-generate_tls_cert() {
-    mkdir -p "$TLS_DIR"
-    local san_type="DNS"
-    echo "$SERVER_NAME" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && san_type="IP"
-    openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
-        -keyout "$TLS_DIR/firedog.key" -out "$TLS_DIR/firedog.crt" \
-        -subj "/CN=$SERVER_NAME" \
-        -addext "subjectAltName=$san_type:$SERVER_NAME" >/dev/null 2>&1
-    chmod 600 "$TLS_DIR/firedog.key"
-    chmod 644 "$TLS_DIR/firedog.crt"
+# CA locale + certificato server per $SERVER_NAME (deploy/firedog-tls), con
+# il timer giornaliero di rinnovo. Rieseguibile: tls.conf si scrive solo se
+# manca, firedog-tls ensure emette solo ciò che manca o va rinnovato.
+setup_tls() {
+    case "$TLS_PROFILE" in production|testing) ;; *) die "--tls-profile: production o testing" ;; esac
+    install -m 0755 -o root -g root "$REPO_ROOT/deploy/firedog-tls" "$TLS_TOOL"
+    install -m 0644 -o root -g root "$REPO_ROOT/deploy/firedog-tls-renew.service" \
+        "$REPO_ROOT/deploy/firedog-tls-renew.timer" /etc/systemd/system/
+    [ -d "$CREDS_DIR" ] || install -d -m 0700 -o root -g root "$CREDS_DIR"
+    if [ ! -f "$CREDS_DIR/tls.conf" ]; then
+        cat > "$CREDS_DIR/tls.conf" <<CONF
+# Profilo dei certificati TLS di FireDog (firedog-tls).
+# production: CA 10 anni, certificato server 397 giorni.
+# testing: solo sviluppo e test interni; soggetti marcati TESTING,
+#          CA 12 mesi, certificato server 6 mesi.
+PROFILE=$TLS_PROFILE
+SERVER_NAME=$SERVER_NAME
+# MANAGED=no: certificato fornito dall'amministratore (PKI aziendale),
+# firedog-tls non lo tocca.
+MANAGED=yes
+CONF
+        chmod 0644 "$CREDS_DIR/tls.conf"
+    fi
+    "$TLS_TOOL" ensure --name "$SERVER_NAME"
+    systemctl daemon-reload
+    systemctl enable --now firedog-tls-renew.timer >/dev/null 2>&1 || warn "timer di rinnovo TLS non attivato"
 }
 
 # ── 1/9 dipendenze ───────────────────────────────────────────────────────────
 log "1/9 Dipendenze di sistema"
-apt-get update -qq
-apt-get install -y -qq python3-venv build-essential libpq-dev postgresql redis-server nginx openssl arp-scan >/dev/null
+# FIREDOG_SKIP_APT: dal .deb le dipendenze arrivano da Depends (dpkg tiene il lock).
+if [ "${FIREDOG_SKIP_APT:-false}" != true ]; then
+    apt-get update -qq
+    apt-get install -y -qq python3-venv build-essential libpq-dev postgresql redis-server nginx openssl arp-scan >/dev/null
+fi
 
 # ── 2/9 utente di installazione ──────────────────────────────────────────────
 log "2/9 Utente di sistema ($INSTALL_USER)"
@@ -138,8 +164,10 @@ chown -R "$INSTALL_USER:$INSTALL_USER" "$INSTALL_DIR"
 
 # Discovery (backend/discovery/tasks.py) lancia `sudo arp-scan` dal worker
 # Celery — arp-scan richiede privilegi raw-socket, il worker gira come
-# $INSTALL_USER non privilegiato. NOPASSWD limitato al solo binario
-# (path assoluto), validato con visudo prima di attivarlo.
+# $INSTALL_USER non privilegiato. NOPASSWD limitato al wrapper root-owned
+# che accetta solo una rete CIDR, validato con visudo prima di attivarlo.
+install -d -m 0755 -o root -g root /usr/local/lib/firedog
+install -m 0755 -o root -g root "$REPO_ROOT/deploy/arp-scan-wrapper.sh" /usr/local/lib/firedog/arp-scan-wrapper
 SUDOERS_TMP="$(mktemp)"
 sed "s#__FIREDOG_USER__#${INSTALL_USER}#g" "$REPO_ROOT/deploy/sudoers-arp-scan" > "$SUDOERS_TMP"
 if visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1; then
@@ -180,11 +208,15 @@ write_env "$SECRET_KEY" "$DB_PASSWORD" "$TLS_ENABLED_VAL"
 [ -n "$ADMIN_PASSWORD" ] || ADMIN_PASSWORD="$(generate_secret)"
 sudo -u "$INSTALL_USER" venv/bin/python manage.py migrate --noinput
 sudo -u "$INSTALL_USER" venv/bin/python manage.py collectstatic --noinput -v0
-DJANGO_SUPERUSER_USERNAME="$ADMIN_USER" \
-DJANGO_SUPERUSER_EMAIL="$ADMIN_EMAIL" \
-DJANGO_SUPERUSER_PASSWORD="$ADMIN_PASSWORD" \
-    sudo -E -u "$INSTALL_USER" venv/bin/python manage.py createsuperuser --noinput || \
+ADMIN_CREATED=false
+if DJANGO_SUPERUSER_USERNAME="$ADMIN_USER" \
+   DJANGO_SUPERUSER_EMAIL="$ADMIN_EMAIL" \
+   DJANGO_SUPERUSER_PASSWORD="$ADMIN_PASSWORD" \
+       sudo -E -u "$INSTALL_USER" venv/bin/python manage.py createsuperuser --noinput; then
+    ADMIN_CREATED=true
+else
     warn "createsuperuser fallito (magari l'utente esiste già da un --force)"
+fi
 
 sudo -u "$INSTALL_USER" venv/bin/python manage.py check
 
@@ -203,20 +235,38 @@ fi
 
 # ── 6/9 certificato TLS ───────────────────────────────────────────────────────
 if [ "$SKIP_TLS" = false ]; then
-    log "6/9 Certificato TLS self-signed"
-    generate_tls_cert
+    log "6/9 CA locale e certificato TLS"
+    setup_tls
 else
     log "6/9 Certificato TLS — saltato (--skip-tls)"
 fi
 
 # ── 7/9 systemd ───────────────────────────────────────────────────────────────
 log "7/9 Unit systemd"
-for unit in firedog-backend firedog-celery firedog-celerybeat; do
+for unit in firedog-backend.service firedog-celery.service firedog-celerybeat.service \
+            firedog-initial-credentials.service firedog-initial-credentials.timer; do
     sed -e "s#__FIREDOG_USER__#${INSTALL_USER}#g" -e "s#__FIREDOG_DIR__#${INSTALL_DIR}#g" \
-        "$REPO_ROOT/deploy/${unit}.service" > "/etc/systemd/system/${unit}.service"
+        "$REPO_ROOT/deploy/${unit}" > "/etc/systemd/system/${unit}"
 done
 systemctl daemon-reload
 systemctl enable --now firedog-backend firedog-celery firedog-celerybeat
+
+# Le credenziali admin vanno in un file solo root e mai a schermo: sotto apt
+# l'output finisce in /var/log/apt/term.log. Il timer cancella il file appena
+# la password viene cambiata.
+CREDS_FILE=""
+if [ "$ADMIN_CREATED" = true ]; then
+    # Fuori da $INSTALL_DIR: quella cartella e' dell'utente di servizio e lo
+    # script gira come root dal timer.
+    install -D -m 0755 -o root -g root "$REPO_ROOT/deploy/initial-credentials.sh" "$CREDS_TOOL"
+    if printf '%s\n' "$ADMIN_PASSWORD" | "$CREDS_TOOL" save \
+            "$CREDS_DIR" "$DB_NAME" auth_user password "$ADMIN_USER"; then
+        CREDS_FILE="$CREDS_DIR/initial-credentials"
+        systemctl enable --now firedog-initial-credentials.timer
+    else
+        warn "Salvataggio delle credenziali iniziali non riuscito"
+    fi
+fi
 
 # ── 8/9 nginx ─────────────────────────────────────────────────────────────────
 log "8/9 nginx"
@@ -253,8 +303,14 @@ fi
 [ "$CODE" = "200" ] || warn "Homepage risponde $CODE (atteso 200) — controlla i log dei servizi"
 
 echo -e "\n${GREEN}=== FireDog installato ===${NC}"
-[ "$SKIP_TLS" = false ] && echo -e "${YELLOW}Certificato self-signed: il browser avviserà 'connessione non sicura' al primo accesso — è atteso, accetta l'eccezione.${NC}"
+[ "$SKIP_TLS" = false ] && echo -e "${YELLOW}Certificato firmato dalla CA locale di questa installazione: il browser avvisa finché non importi la CA (Impostazioni > API Keys Agent, o $TLS_TOOL info per l'impronta).${NC}"
 echo "URL:            $([ "$SKIP_TLS" = true ] && echo "http://${SERVER_NAME}/" || echo "https://${SERVER_NAME}/")"
-echo "Admin:          $ADMIN_USER / $ADMIN_PASSWORD"
-echo "DB password:    $DB_PASSWORD"
-echo -e "${YELLOW}Annota queste credenziali ora — non verranno ristampate.${NC}"
+if [ -n "$CREDS_FILE" ]; then
+    echo "Admin:          utente $ADMIN_USER, password in $CREDS_FILE"
+    echo "                (sudo cat $CREDS_FILE: leggibile solo da root)"
+    echo -e "${YELLOW}Cambia la password al primo accesso: il file si cancella da solo.${NC}"
+elif [ "$ADMIN_CREATED" = true ]; then
+    echo -e "${YELLOW}Admin $ADMIN_USER creato ma senza file credenziali: reimposta la password con${NC}"
+    echo "                sudo -u $INSTALL_USER $INSTALL_DIR/backend/venv/bin/python $INSTALL_DIR/backend/manage.py changepassword $ADMIN_USER"
+fi
+echo "Password DB:    in $INSTALL_DIR/backend/.env"

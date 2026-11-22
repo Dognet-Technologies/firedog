@@ -34,6 +34,11 @@ const Threats: React.FC = () => {
   // Dettaglio minaccia selezionata
   const [selectedThreat, setSelectedThreat] = useState<ThreatLog | null>(null);
   const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
+  // Sync pcap on-demand: al click di "Dettagli" chiediamo subito un export
+  // fresco al target (stesso meccanismo di "Sync Rules"), poi ri-fetchiamo
+  // il singolo threat per mostrare pcap_detail aggiornato — non aspettiamo
+  // il prossimo ciclo di 5 minuti.
+  const [syncingPcap, setSyncingPcap] = useState<boolean>(false);
 
   // Aggiorna il filtro target quando cambia il target globale
   useEffect(() => {
@@ -101,6 +106,27 @@ const Threats: React.FC = () => {
   const openDetail = (threat: ThreatLog) => {
     setSelectedThreat(threat);
     setShowDetailModal(true);
+
+    // Chiede un export fresco al target (stesso comando di "Sync Rules" in
+    // Target Detail) invece di aspettare il prossimo ciclo periodico di 5
+    // minuti — poi ri-fetcha il singolo threat per il pcap_detail aggiornato.
+    // Best-effort: se il target è offline o la sync fallisce, il modal resta
+    // comunque utilizzabile con l'ultimo pcap_detail noto (se presente).
+    setSyncingPcap(true);
+    apiService.syncTargetRules(threat.target)
+      .catch((err) => console.error('Sync pcap detail fallita:', err))
+      .finally(() => {
+        setTimeout(async () => {
+          try {
+            const fresh = await apiService.getThreat(threat.id);
+            setSelectedThreat((prev) => (prev && prev.id === threat.id ? fresh : prev));
+          } catch (err) {
+            console.error('Refetch threat dopo sync fallito:', err);
+          } finally {
+            setSyncingPcap(false);
+          }
+        }, 1800);
+      });
   };
 
   const getSeverityColor = (severity: string): string => {
@@ -116,6 +142,16 @@ const Threats: React.FC = () => {
       default:
         return '#8e91a1';
     }
+  };
+
+  // Stesse soglie di ThreatLog.severity_level (backend/threats/models.py) —
+  // top_attackers espone solo max_score (aggregato), non una severity già
+  // calcolata, quindi la derivo qui con la stessa formula.
+  const scoreToSeverity = (score: number): string => {
+    if (score >= 80) return 'critical';
+    if (score >= 60) return 'high';
+    if (score >= 30) return 'medium';
+    return 'low';
   };
 
   const formatDate = (dateString: string): string => {
@@ -185,64 +221,62 @@ const Threats: React.FC = () => {
       )}
 
       {/* Filtri */}
-      <div className="filters-section">
-        <h3>Filtri</h3>
-        <div className="filters-grid">
-          <div className="filter-group">
-            <label>Severity</label>
-            <select
-              value={filters.severity || ''}
-              onChange={(e) => handleFilterChange('severity', e.target.value || undefined)}
-              className="filter-select"
-            >
-              <option value="">Tutte</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
-
-          <div className="filter-group">
-            <label>Stato</label>
-            <select
-              value={filters.is_resolved === undefined ? '' : filters.is_resolved ? 'resolved' : 'unresolved'}
-              onChange={(e) => {
-                const value = e.target.value;
-                handleFilterChange('is_resolved', value === '' ? undefined : value === 'resolved');
-              }}
-              className="filter-select"
-            >
-              <option value="">Tutte</option>
-              <option value="unresolved">Non Risolte</option>
-              <option value="resolved">Risolte</option>
-            </select>
-          </div>
-
-          <div className="filter-group">
-            <label>IP Sorgente</label>
-            <input
-              type="text"
-              placeholder="es. 192.168.1.100"
-              value={filters.source_ip || ''}
-              onChange={(e) => handleFilterChange('source_ip', e.target.value || undefined)}
-              className="filter-input"
-            />
-          </div>
-
-          <div className="filter-group">
-            <label>Score Minimo</label>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              placeholder="0-100"
-              value={filters.min_score || ''}
-              onChange={(e) => handleFilterChange('min_score', e.target.value ? parseInt(e.target.value) : undefined)}
-              className="filter-input"
-            />
-          </div>
+      <div className="filters-toolbar">
+        <div className="filter-item">
+          <label>Severity</label>
+          <select
+            value={filters.severity || ''}
+            onChange={(e) => handleFilterChange('severity', e.target.value || undefined)}
+            className="filter-select"
+          >
+            <option value="">Tutte</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
         </div>
+
+        <div className="filter-item">
+          <label>Stato</label>
+          <select
+            value={filters.is_resolved === undefined ? '' : filters.is_resolved ? 'resolved' : 'unresolved'}
+            onChange={(e) => {
+              const value = e.target.value;
+              handleFilterChange('is_resolved', value === '' ? undefined : value === 'resolved');
+            }}
+            className="filter-select"
+          >
+            <option value="">Tutte</option>
+            <option value="unresolved">Non Risolte</option>
+            <option value="resolved">Risolte</option>
+          </select>
+        </div>
+
+        <div className="filter-item">
+          <label>IP Sorgente</label>
+          <input
+            type="text"
+            placeholder="es. 192.168.1.100"
+            value={filters.source_ip || ''}
+            onChange={(e) => handleFilterChange('source_ip', e.target.value || undefined)}
+            className="filter-input"
+          />
+        </div>
+
+        <div className="filter-item filter-item-narrow">
+          <label>Score Min.</label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            placeholder="0-100"
+            value={filters.min_score || ''}
+            onChange={(e) => handleFilterChange('min_score', e.target.value ? parseInt(e.target.value) : undefined)}
+            className="filter-input"
+          />
+        </div>
+
         <button className="btn-apply-filters" onClick={applyFilters} disabled={loading}>
           {loading ? 'Caricamento...' : 'Applica Filtri'}
         </button>
@@ -252,14 +286,37 @@ const Threats: React.FC = () => {
       {stats && stats.top_attackers.length > 0 && (
         <div className="top-attackers-section">
           <h3>Top Attackers</h3>
-          <div className="attackers-grid">
-            {stats.top_attackers.slice(0, 5).map((attacker, index) => (
-              <div key={index} className="attacker-card">
-                <div className="attacker-rank">#{index + 1}</div>
-                <div className="attacker-ip">{attacker.source_ip}</div>
-                <div className="attacker-count">{attacker.count} attacchi</div>
-              </div>
-            ))}
+          <div className="attackers-list">
+            {stats.top_attackers.slice(0, 5).map((attacker, index) => {
+              const maxCount = stats.top_attackers[0].count || 1;
+              const barPct = Math.max(6, Math.round((attacker.count / maxCount) * 100));
+              const color = getSeverityColor(scoreToSeverity(attacker.max_score));
+              return (
+                <div key={index} className="attacker-row">
+                  <div className="attacker-rank" style={{ color, borderColor: `${color}66` }}>
+                    {index + 1}
+                  </div>
+                  <div className="attacker-main">
+                    <div className="attacker-top-line">
+                      <span className="attacker-ip">{attacker.source_ip}</span>
+                      <span className="attacker-count">{attacker.count} {attacker.count === 1 ? 'evento' : 'eventi'}</span>
+                    </div>
+                    <div className="attacker-bar-track">
+                      <div
+                        className="attacker-bar-fill"
+                        style={{ width: `${barPct}%`, background: color }}
+                      />
+                    </div>
+                  </div>
+                  <div
+                    className="attacker-score-pill"
+                    style={{ background: `${color}22`, color, border: `1px solid ${color}66` }}
+                  >
+                    {attacker.max_score}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -422,6 +479,34 @@ const Threats: React.FC = () => {
                   <span className="status-resolved">✓ Risolta il {selectedThreat.resolved_at ? formatDate(selectedThreat.resolved_at) : 'N/A'}</span>
                 ) : (
                   <span className="status-active">● Attiva</span>
+                )}
+              </div>
+
+              <div className="detail-row full-width pcap-detail-section">
+                <span className="detail-label">
+                  Analisi pcap
+                  {syncingPcap && <span className="pcap-sync-badge">sync in corso…</span>}
+                </span>
+                {selectedThreat.pcap_detail && Object.keys(selectedThreat.pcap_detail).length > 0 ? (
+                  <>
+                    {Object.entries(selectedThreat.pcap_detail).map(([key, entry]) => (
+                      <details key={key} className="pcap-detail-block">
+                        <summary>{entry.label}</summary>
+                        <pre className="pcap-detail-output">{entry.output}</pre>
+                      </details>
+                    ))}
+                    {selectedThreat.pcap_detail_updated_at && (
+                      <span className="pcap-detail-updated">
+                        Ultimo aggiornamento: {formatDate(selectedThreat.pcap_detail_updated_at)}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <div className="pcap-detail-empty">
+                    {syncingPcap
+                      ? 'Richiesta di sync inviata al target, in attesa di risposta…'
+                      : 'Nessun comando tcpdump abilitato per questo pannello — configurali in Settings > Analisi pcap.'}
+                  </div>
                 )}
               </div>
             </div>

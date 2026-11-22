@@ -1,0 +1,354 @@
+/* ============================================================================
+ * Login standard SentinelSuite — file IDENTICO in tutti i tool della suite.
+ * Il colore del tool arriva da [data-tool]; tutto il resto e' condiviso.
+ *
+ * - testo nei campi con contrasto AA (>= 4.5:1), niente blur sopra al testo
+ * - scala 0.8 ovunque: FireDog ha gia' `zoom: 0.8` su <html> e azzera
+ *   --ss-login-zoom, cosi' la pagina ha la stessa misura in tutti i tool
+ * ============================================================================ */
+
+.ss-login[data-tool='sentinelcore'] {
+  --ss-accent: #00a3e0;
+  --ss-accent-rgb: 0, 163, 224;
+  --ss-accent-text: #4cc3f0;
+  --ss-on-accent: #04202d;
+  --ss-grad-from: #4cc3f0;
+  --ss-grad-to: #00a3e0;
+}
+
+.ss-login[data-tool='firedog'] {
+  --ss-accent: #d32f2f;
+  --ss-accent-rgb: 211, 47, 47;
+  --ss-accent-text: #ff6b66;
+  --ss-on-accent: #ffffff;
+  --ss-grad-from: #d32f2f;
+  --ss-grad-to: #b71c1c;
+}
+
+.ss-login[data-tool='cybershepherd'] {
+  --ss-accent: #2dbe8c;
+  --ss-accent-rgb: 45, 190, 140;
+  --ss-accent-text: #4fd6a6;
+  --ss-on-accent: #06231a;
+  --ss-grad-from: #4fd6a6;
+  --ss-grad-to: #2dbe8c;
+}
+
+.ss-login[data-tool='intellidog'] {
+  --ss-accent: #a78bfa;
+  --ss-accent-rgb: 167, 139, 250;
+  --ss-accent-text: #c4b1fc;
+  --ss-on-accent: #1b1238;
+  --ss-grad-from: #c4b1fc;
+  --ss-grad-to: #a78bfa;
+}
+
+.ss-login {
+  zoom: var(--ss-login-zoom, 0.8);
+  min-height: 125vh;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  box-sizing: border-box;
+  background:
+    radial-gradient(60% 60% at 50% 0%, rgba(var(--ss-accent-rgb), 0.12), transparent 70%),
+    #0b0d12;
+  color: #e6e9ef;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+.ss-login__main {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.ss-login__panel {
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+  background: #161922;
+  border: 1px solid #262a36;
+  border-radius: 14px;
+  padding: 32px 28px 28px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 24px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+/* ── brand ─────────────────────────────────────────────────────────────────── */
+.ss-login__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.ss-login__logo {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: rgba(var(--ss-accent-rgb), 0.12);
+  border: 1px solid rgba(var(--ss-accent-rgb), 0.4);
+  border-radius: 12px;
+  box-shadow: 0 6px 16px -6px rgba(var(--ss-accent-rgb), 0.4);
+}
+
+.ss-login__title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--ss-accent-text);
+}
+
+.ss-login__subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #8a93a6;
+}
+
+/* ── form ──────────────────────────────────────────────────────────────────── */
+.ss-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ss-login__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ss-login__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b3bccc;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ss-login__hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #b3bccc;
+}
+
+.ss-login__input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;
+  padding: 0 14px;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+  color: #f5f7fb;
+  background: #1f2330;
+  border: 1px solid #2e3344;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  -webkit-text-fill-color: #f5f7fb;
+  caret-color: var(--ss-accent-text);
+}
+
+.ss-login__input::placeholder {
+  color: #7a8396;
+  -webkit-text-fill-color: #7a8396;
+  opacity: 1;
+}
+
+.ss-login__input:hover:not(:disabled) {
+  border-color: #3a4156;
+}
+
+.ss-login__input:focus {
+  border-color: var(--ss-accent-text);
+  background: #232838;
+  box-shadow: 0 0 0 3px rgba(var(--ss-accent-rgb), 0.22);
+}
+
+.ss-login__input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Autofill di Chrome/Edge: rimuove il giallo, mantiene il tema */
+.ss-login__input:-webkit-autofill,
+.ss-login__input:-webkit-autofill:hover,
+.ss-login__input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f5f7fb;
+  -webkit-box-shadow: 0 0 0 1000px #1f2330 inset;
+  box-shadow: 0 0 0 1000px #1f2330 inset;
+  caret-color: var(--ss-accent-text);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.ss-login__input-wrap {
+  position: relative;
+}
+
+.ss-login__input--password {
+  padding-right: 44px;
+}
+
+.ss-login__toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--ss-accent-text);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.ss-login__toggle:hover {
+  background: #2a3041;
+}
+
+.ss-login__row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ss-login__link {
+  padding: 0;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ss-accent-text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.ss-login__link:hover {
+  text-decoration: underline;
+}
+
+/* ── submit ────────────────────────────────────────────────────────────────── */
+.ss-login__submit {
+  margin-top: 4px;
+  height: 46px;
+  padding: 0 16px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--ss-on-accent);
+  background: linear-gradient(135deg, var(--ss-grad-from), var(--ss-grad-to));
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 80ms ease, filter 120ms ease, box-shadow 120ms ease;
+  box-shadow: 0 6px 18px -8px rgba(var(--ss-accent-rgb), 0.55);
+}
+
+.ss-login__submit:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 10px 24px -10px rgba(var(--ss-accent-rgb), 0.7);
+}
+
+.ss-login__submit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ss-login__submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.ss-login__secondary {
+  height: 40px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #b3bccc;
+  background: transparent;
+  border: 1px solid #2e3344;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.ss-login__secondary:hover:not(:disabled) {
+  background: #1f2330;
+}
+
+/* ── alert (errore) ────────────────────────────────────────────────────────── */
+.ss-login__alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #ffd6cc;
+  background: rgba(255, 76, 76, 0.1);
+  border: 1px solid rgba(255, 76, 76, 0.4);
+  border-radius: 8px;
+}
+
+/* ── footer ────────────────────────────────────────────────────────────────── */
+.ss-login__footer {
+  padding: 20px 24px 24px;
+  border-top: 1px solid #1d212c;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8a93a6;
+}
+
+.ss-login__footer-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ss-login__footer-brand strong {
+  color: #e6e9ef;
+  font-weight: 600;
+}
+
+.ss-login__footer-text {
+  max-width: 780px;
+  margin: 0 auto 4px;
+}
+
+.ss-login__footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+  margin-top: 8px;
+}
+
+.ss-login__footer-links a {
+  color: var(--ss-accent-text);
+  text-decoration: none;
+}
+
+.ss-login__footer-links a:hover {
+  text-decoration: underline;
+}
+
+.ss-login__link:focus-visible,
+.ss-login__secondary:focus-visible,
+.ss-login__submit:focus-visible,
+.ss-login__footer-links a:focus-visible {
+  outline: 2px solid var(--ss-accent-text);
+  outline-offset: 2px;
+}

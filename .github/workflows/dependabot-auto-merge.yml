@@ -4,7 +4,7 @@ name: Dependabot Auto-Merge
 # which is required for Dependabot PRs (pull_request runs read-only for bots).
 on:
   pull_request_target:
-    branches: [main, stabile]
+    branches: [main]
 
 permissions:
   contents: write

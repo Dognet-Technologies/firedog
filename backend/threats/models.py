@@ -73,6 +73,25 @@ class ThreatLog(models.Model):
         default=list, help_text="Motivi del threat score (lista di stringhe)"
     )
 
+    pcap_detail = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Output dei comandi tcpdump curati (vedi Settings > pcapThreatCommands) "
+            "eseguiti sul target contro input_dropped.pcap filtrato per source_ip. "
+            "Forma: {command_key: {label, output}}. Popolato dallo stesso export "
+            "periodico di FirewallStats (ogni 5 minuti) e dal sync on-demand "
+            "(pulsante Dettagli / Sync Rules) — mai calcolato lato server, il pcap "
+            "vive solo sul target."
+        ),
+    )
+
+    pcap_detail_updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp dell'ultimo aggiornamento di pcap_detail",
+    )
+
     description = models.TextField(
         blank=True, help_text="Descrizione dettagliata della minaccia"
     )

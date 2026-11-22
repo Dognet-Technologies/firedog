@@ -6,13 +6,15 @@ Gestione configurazioni e database
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
+from accounts.permissions import IsAdminOrReadOnly, IsAdminUser
 from django.db import connection, transaction
 from django.utils import timezone
 from django.contrib.auth import update_session_auth_hash
 from datetime import timedelta
 import logging
-from .tasks import send_test_notification
+import shlex
+from .tasks import ALERT_MIN_SCORE_RANGE, LOG_RETENTION_RANGE, send_test_notification
 from .models import (
     SystemSettings,
     DatabaseCleanupLog,
@@ -48,8 +50,44 @@ PCAP_SETTINGS_KEYS = {
     "pcapSavePath": "pcap_save_path",
     "pcapAnalysisTool": "pcap_analysis_tool",
     "pcapCustomFilters": "pcap_custom_filters",
+    "pcapThreatCommands": "pcap_threat_commands",
 }
 MAX_PCAP_FILTERS = 5
+MAX_PCAP_FILTER_LENGTH = 200
+
+# Whitelist dei comandi tcpdump curati per il pannello Dettagli minaccia —
+# stessa whitelist di VALID_THREAT_COMMAND_KEYS in
+# dog_agent/src/targets/firedog.rs e di _pcap_threat_command_specs in
+# firedog-package/firewall-manager.py. A differenza di pcapCustomFilters
+# l'utente sceglie da un multi-select (Settings.tsx), mai testo libero:
+# qui validiamo che siano esattamente queste chiavi, non sintassi BPF.
+VALID_PCAP_THREAT_COMMAND_KEYS = {"summary", "tcp_flags", "timing", "hex_dump", "icmp"}
+
+
+def _validate_pcap_filter_string(filter_str: str) -> str | None:
+    """Ritorna un messaggio d'errore se il filtro NON è accettabile, None
+    se è valido. Stessa regola (e stesso motivo) di validate_pcap_filter()
+    in firedog-package/firewall-manager.py — duplicata qui, non importabile
+    da un repo a un altro: il target esegue questo filtro passandolo come
+    UN SOLO argomento a tcpdump/tshark (mai shlex.split in più argv), ma
+    bloccare qui — prima ancora che il filtro venga salvato e pushato a
+    qualunque target — è la prima rete, non l'unica. Un token che inizia
+    con '-' non è mai sintassi BPF/display-filter legittima (keyword/
+    operatori/valori, mai flag): bloccarlo previene che un filtro tipo
+    "-C 1 -z /path/evil and host X" diventi mai eseguibile, qualora in
+    futuro un punto qualsiasi della pipeline lo tokenizzasse per errore.
+    """
+    if not filter_str or not filter_str.strip():
+        return "il filtro non può essere vuoto"
+    if len(filter_str) > MAX_PCAP_FILTER_LENGTH:
+        return f"supera la lunghezza massima di {MAX_PCAP_FILTER_LENGTH} caratteri"
+    try:
+        tokens = shlex.split(filter_str)
+    except ValueError as e:
+        return f"sintassi non valida: {e}"
+    if any(tok.startswith("-") for tok in tokens):
+        return "non può contenere token che iniziano con '-' (riservato a flag, non ammessi in un filtro)"
+    return None
 
 
 def _build_pcap_sync_payload(settings_data: dict) -> tuple[dict, dict]:
@@ -80,8 +118,51 @@ def _build_pcap_sync_payload(settings_data: dict) -> tuple[dict, dict]:
                 errors[ui_key] = "deve essere una lista di stringhe"
                 continue
             value = value[:MAX_PCAP_FILTERS]
+            filter_errors = [
+                f"'{f}': {msg}"
+                for f in value
+                if (msg := _validate_pcap_filter_string(f)) is not None
+            ]
+            if filter_errors:
+                errors[ui_key] = "; ".join(filter_errors)
+                continue
+        elif agent_key == "pcap_threat_commands":
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                errors[ui_key] = "deve essere una lista di stringhe"
+                continue
+            unknown = [v for v in value if v not in VALID_PCAP_THREAT_COMMAND_KEYS]
+            if unknown:
+                errors[ui_key] = f"chiavi sconosciute: {', '.join(unknown)}"
+                continue
         payload[agent_key] = value
     return payload, errors
+
+
+# Impostazioni > Monitoraggio con un intervallo valido (stessi limiti della
+# UI e di settings.tasks): validate PRIMA di salvare, un valore fuori
+# intervallo è un 400 e non viene scritto.
+MONITORING_INT_RANGES = {
+    "logRetention": LOG_RETENTION_RANGE,
+    "alertNotificationMinScore": ALERT_MIN_SCORE_RANGE,
+}
+# Tolte (review 2026-11-16): salvate ma mai lette da nessuna parte.
+# "Blocco automatico" vive per target (agentThreatScoring.autoBlockEnabled),
+# l'intervallo di scansione è quello dell'agent.
+REMOVED_SETTINGS_KEYS = {"scanInterval", "enableAutoBlock"}
+
+
+def _validate_monitoring_settings(settings_data: dict) -> dict[str, str]:
+    errors: dict[str, str] = {}
+    for key in REMOVED_SETTINGS_KEYS & settings_data.keys():
+        errors[key] = "impostazione rimossa: non ha effetto"
+    for key, (low, high) in MONITORING_INT_RANGES.items():
+        if key not in settings_data:
+            continue
+        value = settings_data[key]
+        # bool è un int in Python: True/False non sono numeri validi qui.
+        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+            errors[key] = f"deve essere un intero tra {low} e {high}"
+    return errors
 
 
 def _sync_pcap_settings_to_targets(settings_data: dict) -> dict | None:
@@ -132,7 +213,10 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
 
     queryset = SystemSettings.objects.all()
     serializer_class = SystemSettingsSerializer
-    permission_classes = [IsAuthenticated]
+    # bulk_update/reset (e create/update/destroy) modificano la
+    # configurazione di sistema — sola lettura per Reporter, scrittura
+    # solo Admin (CRITICAL trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     def get_queryset(self):
         """Filtra impostazioni in base a categoria"""
@@ -176,6 +260,10 @@ class SystemSettingsViewSet(viewsets.ModelViewSet):
 
         settings_data = serializer.validated_data["settings"]
         category = serializer.validated_data.get("category", "general")
+
+        invalid = _validate_monitoring_settings(settings_data)
+        if invalid:
+            return Response({"settings": invalid}, status=status.HTTP_400_BAD_REQUEST)
 
         updated_settings = []
 
@@ -252,7 +340,11 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
     - GET /api/settings/database/cleanup-logs/ - Log pulizie
     """
 
-    permission_classes = [IsAuthenticated]
+    # cleanup/test-connection sono azioni distruttive/operative (cleanup
+    # può cancellare l'audit trail) — sola lettura (stats/cleanup-logs)
+    # per Reporter, scrittura solo Admin (CRITICAL trovato in code
+    # review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     @action(detail=False, methods=["get"])
     def stats(self, request):
@@ -300,7 +392,7 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
                 from targets.models import Statistics
 
                 statistics_count = Statistics.objects.count()
-            except:
+            except Exception:
                 statistics_count = 0
 
             stats_data = {
@@ -321,9 +413,13 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
             return Response(serializer.data)
 
         except Exception as e:
+            # Il dettaglio dell'eccezione va solo nel log server-side, non
+            # nella risposta al client (poteva esporre dettagli interni
+            # come nomi tabella/connessione — HIGH trovato in code
+            # review, 2026-11).
             logger.error(f"Failed to get database stats: {e}")
             return Response(
-                {"error": f"Errore recupero statistiche: {str(e)}"},
+                {"error": "Errore recupero statistiche database"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -367,7 +463,7 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
             return Response(
                 {
                     "status": "error",
-                    "message": f"Errore connessione: {str(e)}",
+                    "message": f"Errore connessione: {e!s}",
                     "latency_ms": 0,
                     "database_name": "",
                     "database_version": "",
@@ -403,7 +499,12 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
                 if cleanup_type in ["audit_logs", "all"]:
                     from audit.models import AuditLog
 
-                    queryset = AuditLog.objects.filter(timestamp__lt=cutoff_date)
+                    # AuditLog non ha un campo `timestamp`: il campo reale è
+                    # `created_at` — con quello sbagliato questo ramo falliva
+                    # sempre con un'eccezione (bug trovato scrivendo i test
+                    # di regressione per il fix di controllo accessi,
+                    # 2026-11), rendendo "audit_logs"/"all" sempre rotti.
+                    queryset = AuditLog.objects.filter(created_at__lt=cutoff_date)
                     count = queryset.count()
                     if not dry_run:
                         queryset.delete()
@@ -429,8 +530,8 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
                         if not dry_run:
                             queryset.delete()
                         records_deleted += count
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning("Pulizia Statistics fallita: %s", e)
 
                 if cleanup_type in ["discovered_hosts", "all"]:
                     from discovery.models import DiscoveredHost
@@ -491,7 +592,7 @@ class DatabaseManagementViewSet(viewsets.ViewSet):
                 )
 
             return Response(
-                {"error": f"Errore pulizia database: {str(e)}"},
+                {"error": "Errore durante la pulizia del database, vedi i log server-side"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -522,6 +623,13 @@ class NotificationViewSet(viewsets.ViewSet):
     - GET    /api/settings/notifications/smtp-info/
     """
 
+    # Nota: importava rest_framework.permissions.IsAdminUser (check su
+    # is_staff) invece di accounts.permissions.IsAdminUser (check sul
+    # gruppo "Admin" usato ovunque altrove in questo progetto) — con
+    # utenti is_staff=False che pure appartengono al gruppo Admin,
+    # questa view li rifiutava mentre le altre li accettavano
+    # correttamente. Corretto import, trovato durante la stessa review
+    # di code review, 2026-11.
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     @action(detail=False, methods=["get", "put"])
@@ -600,7 +708,7 @@ class NotificationViewSet(viewsets.ViewSet):
                 )
 
         except Exception as e:
-            logger.error(f"Test notification error: {str(e)}", exc_info=True)
+            logger.error(f"Test notification error: {e!s}", exc_info=True)
             return Response(
                 {"success": False, "error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -711,6 +819,8 @@ class UserManagementViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [IsAuthenticated]
+    # Nessun limite di default; change_password lo imposta per la sua action.
+    throttle_scope = None
 
     @action(detail=False, methods=["get"])
     def profile(self, request):
@@ -767,7 +877,9 @@ class UserManagementViewSet(viewsets.ViewSet):
             }
         )
 
-    @action(detail=False, methods=["put"])
+    # throttle_scope: la password attuale verificata qui era un secondo
+    # oracolo di brute-force senza limiti (il login e' gia' limitato).
+    @action(detail=False, methods=["put"], throttle_scope="password_change")
     def change_password(self, request):
         """
         PUT /api/settings/user/change-password/

@@ -2,8 +2,9 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from accounts.permissions import IsAdminOrReadOnly
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Count
+from django.db.models import Count, Max
 from .models import ThreatLog
 from .serializers import (
     ThreatLogSerializer,
@@ -13,7 +14,13 @@ from .serializers import (
 
 class ThreatLogViewSet(viewsets.ModelViewSet):
     queryset = ThreatLog.objects.all()
-    permission_classes = [IsAuthenticated]
+    # ModelViewSet standard: create/update/destroy permetterebbero a un
+    # Reporter di falsificare o cancellare record di minacce reali
+    # (cover delle proprie tracce) — il ruolo Reporter è documentato
+    # come sola lettura (accounts/permissions.py), questo ViewSet non lo
+    # rispettava (stessa classe del CRITICAL su controllo accessi
+    # trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["target", "severity", "is_blocked", "is_resolved", "source_ip"]
 
@@ -41,7 +48,7 @@ class ThreatLogViewSet(viewsets.ModelViewSet):
             "unresolved_threats": queryset.filter(is_resolved=False).count(),
             "top_attackers": list(
                 queryset.values("source_ip")
-                .annotate(count=Count("id"))
+                .annotate(count=Count("id"), max_score=Max("threat_score"))
                 .order_by("-count")[:10]
             ),
             "recent_threats": ThreatLogListSerializer(

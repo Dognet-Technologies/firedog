@@ -45,6 +45,15 @@ app.conf.beat_schedule = {
         "task": "agent_manager.tasks.check_critical_threats",
         "schedule": crontab(minute="*/10"),  # Every 10 minutes
     },
+    # Impostazioni > Monitoraggio > Conservazione log
+    "apply-log-retention": {
+        "task": "settings.tasks.apply_log_retention",
+        "schedule": crontab(minute="15", hour="3"),  # Daily
+    },
+    "flush-expired-jwt": {
+        "task": "accounts.tasks.flush_expired_tokens",
+        "schedule": crontab(minute="30", hour="3"),  # Daily
+    },
 }
 
 

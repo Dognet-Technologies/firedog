@@ -1,0 +1,9 @@
+#!/bin/bash
+# Su rimozione ferma i servizi; database, .env e /opt/firedog restano intatti.
+set -euo pipefail
+
+if [ "${1:-}" = "remove" ]; then
+    systemctl stop firedog-backend firedog-celery firedog-celerybeat 2>/dev/null || true
+    systemctl disable --now firedog-initial-credentials.timer 2>/dev/null || true
+    systemctl disable --now firedog-tls-renew.timer 2>/dev/null || true
+fi

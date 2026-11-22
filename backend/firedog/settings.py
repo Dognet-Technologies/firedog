@@ -29,6 +29,10 @@ DEBUG = config("DEBUG", default=False, cast=bool)
 
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1").split(",")
 
+# Parte pubblica della CA locale (ca.crt, tls-info.json) pubblicata da
+# deploy/firedog-tls: la serve api/views_tls.py agli agent.
+TLS_PUBLIC_DIR = config("FIREDOG_TLS_PUBLIC_DIR", default="/var/lib/firedog/tls")
+
 # Application definition
 INSTALLED_APPS = [
     "daphne",
@@ -41,6 +45,9 @@ INSTALLED_APPS = [
     # Third party apps
     "rest_framework",
     "rest_framework_simplejwt",
+    # Senza questa app BLACKLIST_AFTER_ROTATION non fa nulla: il refresh
+    # token appena ruotato restava valido fino alla scadenza.
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "django_filters",
     "django_celery_beat",
@@ -62,6 +69,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Primo: tutto cio' che segue (throttle DRF, audit) vede l'IP reale del
+    # client invece di 127.0.0.1 di nginx (vedi firedog/client_ip.py).
+    "firedog.client_ip.RealIPMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -154,6 +164,38 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
     ),
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
+    # ScopedRateThrottle non limita nulla di default: si applica solo alle
+    # view con un `throttle_scope` esplicito (vedi accounts/views.py per il
+    # login). Nessun rate limit esisteva prima su /api/token/, un vettore
+    # di brute-force su username+password (HIGH trovato in code review,
+    # 2026-11) — a differenza del pairing WS degli agent, già limitato
+    # separatamente in agent_manager/pairing_rate_limit.py.
+    "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "10/min",
+        "password_change": "5/min",
+    },
+    # 0 = il throttle identifica il client da REMOTE_ADDR (gia' riscritto da
+    # RealIPMiddleware). Con il default None DRF usava l'intero header
+    # X-Forwarded-For, che il client controlla: throttle aggirabile.
+    "NUM_PROXIES": 0,
+}
+
+# Peer da cui accettare X-Real-IP (nginx locale). Aggiungere qui l'IP di un
+# reverse proxy esterno se FireDog non e' dietro l'nginx installato.
+TRUSTED_PROXY_IPS = ("127.0.0.1", "::1")
+
+# Backend Redis condiviso con CHANNEL_LAYERS (db diverso per non
+# sovrapporre le chiavi) — necessario perché le throttle class di DRF
+# usano la cache di Django, che di default è LocMemCache: per-processo,
+# non condivisa tra i worker ASGI/WSGI (stesso motivo per cui
+# agent_manager/pairing_rate_limit.py usa Redis direttamente invece
+# della cache di Django).
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/2",
+    }
 }
 
 # JWT Settings

@@ -33,11 +33,15 @@ class ThreatLogSerializer(serializers.ModelSerializer):
             "detected_at",
             "updated_at",
             "attack_description",
+            "pcap_detail",
+            "pcap_detail_updated_at",
         ]
         read_only_fields = [
             "detected_at",
             "updated_at",
             "resolved_at",
+            "pcap_detail",
+            "pcap_detail_updated_at",
         ]
 
 

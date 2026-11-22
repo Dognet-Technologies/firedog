@@ -71,7 +71,7 @@ SSH_PROTECT_BAN_DURATION="0"
 # ── Controllo aggiornamenti pacchetto target ─────────────────────────────
 # Ogni quanti giorni firewall-manager controlla se è disponibile una
 # versione più recente del pacchetto target (confronta il file VERSION
-# locale con quello pubblicato su stabile — nessuna chiamata di rete se
+# locale con quello pubblicato su main — nessuna chiamata di rete se
 # lasciato vuoto/"0", comportamento di default). Il controllo è passivo:
 # segnala solo, non installa nulla da solo — l'aggiornamento resta un
 # `get-firedog.sh`/update.sh manuale o pianificato separatamente.

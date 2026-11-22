@@ -7,14 +7,15 @@
 # Progettato per essere idempotente se interrotto e rilanciato.
 #
 # A differenza dell'equivalente SentinelCore, qui si rigenera ANCHE il
-# certificato TLS self-signed: quello generato in fase di build (provision.sh)
-# porta il CN/SAN dell'IP del builder, non del clone — ogni istanza deployata
-# ha un IP reale diverso e deve avere il proprio certificato.
+# CA locale e certificato TLS: quelli creati in fase di build (provision.sh)
+# portano l'IP del builder e la sua chiave di CA — ogni istanza deployata ha
+# un IP reale diverso e deve avere la propria CA e il proprio certificato.
 set -euo pipefail
 
 INSTALL_DIR=/opt/firedog
 ENV_FILE="$INSTALL_DIR/backend/.env"
-TLS_DIR=/etc/ssl/firedog
+TLS_ETC_DIR=/etc/sentinelsuite/firedog
+LEGACY_TLS_DIR=/etc/ssl/firedog
 DB_NAME=firedog
 DB_USER=firedog
 LOG=/var/log/firedog-first-boot.log
@@ -64,7 +65,8 @@ NEW_DB_PASS="$(openssl rand -hex 24)"
 NEW_SECRET_KEY="$(openssl rand -hex 32)"
 ADMIN_USER="admin"
 ADMIN_PASS="FireDog2026!!"
-ROOT_PASS="FireDog1st!"
+SSH_USER="microcyber"
+SSH_PASS="FireDog1st!"
 
 # ── 5. Aggiorna backend/.env ─────────────────────────────────────────────────
 echo "[5/9] Aggiornamento .env..."
@@ -80,18 +82,18 @@ echo "[6/9] Aggiornamento credenziali DB..."
 sudo -u postgres psql -v ON_ERROR_STOP=1 \
     -c "ALTER ROLE $DB_USER PASSWORD '$NEW_DB_PASS';" >/dev/null
 
-# ── 7. Rigenera certificato TLS per l'IP reale del clone ────────────────────
-echo "[7/9] Rigenerazione certificato TLS ($SERVER_IP)..."
-mkdir -p "$TLS_DIR"
-SAN_TYPE="DNS"
-echo "$SERVER_IP" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' && SAN_TYPE="IP"
-openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
-    -keyout "$TLS_DIR/firedog.key" -out "$TLS_DIR/firedog.crt" \
-    -subj "/CN=$SERVER_IP" \
-    -addext "subjectAltName=$SAN_TYPE:$SERVER_IP" >/dev/null 2>&1
-chmod 600 "$TLS_DIR/firedog.key"
-chmod 644 "$TLS_DIR/firedog.crt"
+# ── 7. CA e certificato TLS propri del clone ────────────────────────────────
+# L'immagine esce da provision.sh con la CA del builder: tenerla vorrebbe dire
+# la STESSA chiave privata della CA su ogni appliance. Si cancella e si
+# rifà tutto per l'IP reale del clone (deploy/firedog-tls).
+echo "[7/9] CA locale e certificato TLS ($SERVER_IP)..."
+case "$TLS_ETC_DIR" in /etc/sentinelsuite/*) rm -rf "$TLS_ETC_DIR/tls" ;; esac
+rm -rf /var/lib/firedog/tls "$LEGACY_TLS_DIR"
+if [ -f "$TLS_ETC_DIR/tls.conf" ]; then
+    sed -i "s/^SERVER_NAME=.*/SERVER_NAME=${SERVER_IP}/" "$TLS_ETC_DIR/tls.conf"
+fi
 sed -i "s/server_name .*/server_name ${SERVER_IP};/" /etc/nginx/sites-available/firedog
+/usr/local/sbin/firedog-tls ensure --name "$SERVER_IP"
 nginx -t && systemctl reload nginx
 
 # ── 8. Riavvia i servizi con la nuova config, verifica admin ────────────────
@@ -129,17 +131,18 @@ if [ "$ADMIN_STATUS" = "OK" ]; then
     Password: $ADMIN_PASS
 
   SSH / Console:
-    Utente:   root
-    Password: $ROOT_PASS
+    Utente:   $SSH_USER (sudo; root non accede)
+    Password: $SSH_PASS
 
-  CAMBIA entrambe le password al primo accesso."
+  CAMBIA entrambe le password al primo accesso e conservale:
+  questa schermata sparira' dopo il cambio."
 else
     CRED_BLOCK="  Credenziali web admin: verifica non riuscita.
   Vedi: $LOG
 
   SSH / Console:
-    Utente:   root
-    Password: $ROOT_PASS"
+    Utente:   $SSH_USER (sudo; root non accede)
+    Password: $SSH_PASS"
 fi
 
 mkdir -p /etc/issue.d
@@ -149,7 +152,8 @@ cat > /etc/issue.d/firedog.issue <<ISSUE
 ║            FireDog — Credenziali iniziali istanza             ║
 ╠══════════════════════════════════════════════════════════════╣
   URL:        https://$SERVER_IP/
-  (certificato self-signed: il browser avviserà al primo accesso)
+  (certificato della CA locale dell'appliance: il browser avvisa finché non
+   importi la CA da Impostazioni > API Keys Agent)
 $CRED_BLOCK
 ╚══════════════════════════════════════════════════════════════╝
 
@@ -161,7 +165,8 @@ cat > /etc/motd <<MOTD
 ║            FireDog — Credenziali iniziali istanza             ║
 ╠══════════════════════════════════════════════════════════════╣
   URL:        https://$SERVER_IP/
-  (certificato self-signed: il browser avviserà al primo accesso)
+  (certificato della CA locale dell'appliance: il browser avvisa finché non
+   importi la CA da Impostazioni > API Keys Agent)
 $CRED_BLOCK
 ╚══════════════════════════════════════════════════════════════╝
 MOTD
@@ -170,14 +175,12 @@ echo ""
 cat /etc/motd
 echo ""
 
-# ── Forza il cambio password root al primo login ─────────────────────────────
-# Ultimo step, non prima: gira come root e usa `sudo -u postgres` allo step 6
-# — sudo rivalida sempre l'account CHIAMANTE (root) via PAM anche se sei già
-# root, e una password già scaduta fa fallire chauthtok in modo non
-# interattivo, interrompendo tutto il first-boot a metà (stesso motivo già
-# documentato nell'equivalente SentinelCore).
-echo "Forzo il cambio password di root al prossimo login..."
-chage -d 0 root
+# ── Forza il cambio password al primo login ──────────────────────────────────
+echo "Forzo il cambio password di $SSH_USER al prossimo login..."
+chage -d 0 "$SSH_USER"
+
+# Solo adesso: prima del chage il controllo vedrebbe una password gia' cambiata.
+systemctl enable --now firedog-clear-credentials.path
 
 systemctl disable firedog-first-boot.service
 echo "=== first-boot completato — servizio disabilitato. ==="

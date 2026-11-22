@@ -2,9 +2,9 @@ name: Lint & Code Quality
 
 on:
   push:
-    branches: [main, stabile]
+    branches: [main]
   pull_request:
-    branches: [main, stabile]
+    branches: [main]
 
 jobs:
   python-lint:

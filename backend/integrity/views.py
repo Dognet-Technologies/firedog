@@ -2,13 +2,18 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from accounts.permissions import IsAdminOrReadOnly
 from .models import FileIntegrity
 from .serializers import FileIntegritySerializer, FileIntegrityListSerializer
 
 
 class FileIntegrityViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = FileIntegrity.objects.all()
-    permission_classes = [IsAuthenticated]
+    # `approve` sopprime un alert di integrità file reale — decisione di
+    # sicurezza, non lettura: sola lettura per Reporter, approvazione
+    # solo Admin (stessa classe del CRITICAL su controllo accessi
+    # trovato in code review, 2026-11).
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
 
     def get_serializer_class(self):
         if self.action == "list":

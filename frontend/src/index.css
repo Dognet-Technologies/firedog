@@ -13,6 +13,9 @@
      ovunque serva un full-bleed verticale. */
   --vh-full: 125vh;
 
+  /* Il login standard SentinelSuite scala a 0.8: qui lo fa gia' <html>. */
+  --ss-login-zoom: 1;
+
   /* === COLOR SYSTEM === */
   
   /* Background Colors */

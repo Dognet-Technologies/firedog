@@ -28,8 +28,39 @@ THREAT_FROM_REASON = {
 }
 
 
+def _dispatch_block_command(block, action):
+    """Invia block_ip/unblock_ip all'agent del target. Best-effort: con
+    l'agent offline il blocco resta registrato solo nel DB (log warning).
+
+    Prima di questo fix "Blocca IP" (UI e MCP) scriveva solo il DB e il
+    comando non partiva mai: l'IP restava raggiungibile mentre la UI lo
+    mostrava come bloccato.
+    """
+    from agent_manager.services import (
+        AgentNotConnected,
+        InvalidCommandPayload,
+        dispatch_command_to_agent,
+    )
+
+    meta = {"blocked_ip_id": block.id} if action == "block_ip" else {}
+    try:
+        dispatch_command_to_agent(
+            block.target,
+            action,
+            {"ip": block.ip_address, "direction": "INPUT"},
+            meta=meta,
+        )
+        return True
+    except AgentNotConnected as e:
+        logger.warning("%s %s registrato solo nel DB: %s", action, block.ip_address, e)
+    except InvalidCommandPayload as e:
+        logger.error("%s %s non inviato: %s", action, block.ip_address, e)
+    return False
+
+
 def record_blocked_ip(block, *, user=None, ip_address=None):
-    """Audit log + ThreatLog companion per un BlockedIP appena creato."""
+    """Audit log + ThreatLog companion per un BlockedIP appena creato, e
+    invio del blocco all'agent. Ritorna True se il comando e' partito."""
     AuditLog.log_action(
         action="create",
         description=f"Blocked IP {block.ip_address} (reason: {block.block_reason})",
@@ -63,6 +94,7 @@ def record_blocked_ip(block, *, user=None, ip_address=None):
         "IP blocked: %s on target %s - Reason: %s",
         block.ip_address, block.target.id, block.block_reason,
     )
+    return _dispatch_block_command(block, "block_ip")
 
 
 def unblock_ip(block, *, user=None, ip_address=None):
@@ -81,4 +113,10 @@ def unblock_ip(block, *, user=None, ip_address=None):
         ip_address=ip_address,
     )
     logger.info("IP unblocked: %s on target %s", block.ip_address, block.target.id)
+    _dispatch_block_command(block, "unblock_ip")
     return True
+
+
+def dispatch_unblock(block):
+    """Rimozione dal firewall per un blocco eliminato mentre era attivo."""
+    return _dispatch_block_command(block, "unblock_ip")

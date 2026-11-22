@@ -6,7 +6,7 @@ name: Release
 #
 # Un suffisso nel tag (es. v1.1.0-beta, v1.1.0-rc1) marca automaticamente la
 # release come "Pre-release" su GitHub — canale di test per chi vuole provare
-# funzionalità non ancora passate su stabile, senza bisogno di un branch
+# funzionalità non ancora passate su main, senza bisogno di un branch
 # persistente dedicato. Stesso meccanismo di SentinelCore (packaging/release.yml
 # là), qui adattato per lo stack Django/React invece di Rust.
 #

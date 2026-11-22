@@ -3,7 +3,7 @@
 Piattaforma di gestione centralizzata del firewall per flotte di host Linux — policy DROP di default, regole distribuite in tempo reale, analisi del traffico con threat scoring, e un **server MCP** che espone tutto ad agenti AI autorizzati.
 
 [![Release](https://img.shields.io/github/v/release/Dognet-Technologies/firedog)](https://github.com/Dognet-Technologies/firedog/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#-licenza)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](#-licenza)
 
 > **Guide di installazione:**
 > - Master (backend Django + frontend React + Celery + nginx): [INSTALL.md](INSTALL.md)
@@ -12,8 +12,55 @@ Piattaforma di gestione centralizzata del firewall per flotte di host Linux — 
 >
 > Installazione rapida di un target:
 > ```bash
-> curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh | sudo bash
+> curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/main/firedog-package/get-firedog.sh | sudo bash
 > ```
+
+## 🧪 Build settimanali
+
+La branch `prerelease` è il canale di test: ogni push produce un solo pacchetto `.deb` per Debian 13.
+Si scarica da **Actions → Prerelease → ultimo run → Artifacts** (`firedog-deb`, serve il login a GitHub; gli artefatti restano 30 giorni).
+
+```bash
+sudo apt install ./firedog_<versione>_amd64.deb
+```
+
+Usa `apt`, non `dpkg -i`, così installa anche le dipendenze. Il primo install configura master e database; sopra un'installazione esistente esegue backup del DB e migration. Le build settimanali servono per i test: per la produzione usa le release.
+
+## 🆕 Novità in v1.5.1
+
+- **Sicurezza**: aggiornate le dipendenze segnalate da Dependabot. Il backend passa a **Django 5.2 LTS**, con DRF, PyJWT, Celery e pacchetti collegati; sul frontend sono corrette le vulnerabilità con fix disponibile. Restano `react-router` (serve la migrazione alla v7) e alcune voci della toolchain `react-scripts`.
+
+## 🆕 Novità in v1.5.0
+
+- **Identità SentinelSuite** — nuova pagina di login condivisa fra i tool della suite, favicon ufficiale, titolo scheda `FireDog | SentinelSuite` e footer con i riferimenti Dognet Technologies.
+- **Pacchetto `.deb`** — vedi [Build settimanali](#-build-settimanali).
+- **Appliance: accesso con `microcyber`** — il login SSH passa dall'utente `microcyber` con sudo; root è bloccato e `PermitRootLogin` è disattivato. Le credenziali iniziali spariscono da console e motd appena cambi la password.
+- **Rimosso** "Ricordami" dal login: non aveva alcun effetto.
+
+## 🆕 Novità in v1.4.0
+
+- **Dettagli minaccia** — pannello con l'output tcpdump ricavato dal pcap.
+- **Supporto Fedora** (`dnf`) nell'installer, verificato su Fedora 44.
+
+## 🆕 Novità in v1.3.0
+
+- **Pagina Threats ridisegnata** — filtri orizzontali e Top Attackers come classifica.
+
+## 🆕 Novità in v1.2.2
+
+- **Sicurezza**: corretta una possibile esecuzione di comandi come root sui target tramite i filtri pcap custom. Aggiorna master e target.
+
+## 🆕 Novità in v1.2.1
+
+- **Fix**: la Discovery non funzionava perché il sudoers di `arp-scan` indicava un utente inesistente.
+
+## 🆕 Novità in v1.2.0
+
+- **Aggiornamento di tarball e appliance** — nuovo [`deploy/upgrade.sh`](deploy/upgrade.sh), con backup del DB e rollback se le migration falliscono.
+- **Target Detail** — totali dei pacchetti droppati in/out e legenda del traffico cliccabile.
+- **Fix**: le regole firewall sparivano dalla UI quando la lettura di iptables falliva.
+- **Fix**: le regole non si sincronizzavano in automatico per un `PATH` mancante in `/etc/cron.d/firedog`.
+- **Fix**: `upgrade.sh` poteva fermarsi lasciando i servizi spenti; ora ripristina lo stato precedente.
 
 ## 🆕 Novità in v1.1.0
 
@@ -46,7 +93,7 @@ FireDog è un sistema a **tre componenti**, ciascuno con un ruolo preciso:
 |---|---|---|
 | **Master** | un host/VM dedicato | Backend Django + frontend React: policy editor, dashboard di traffico in tempo reale, API REST, **server MCP** |
 | **Strumenti firewall** | ogni target, in `/opt/sentinelsuite/firedog` | `firewall-manager` (CLI regole), `traffic-analyzer` (threat scoring su PCAP), `firewall-init.sh` (policy DROP + protezioni) |
-| **dog-agent** | ogni target, `/usr/bin/dog-agent` | Binario Rust statico condiviso con CyberSheppard/SentinelCore: pairing a 2 fasi col master, poi push di heartbeat/statistiche/minacce via WebSocket ed esecuzione dei comandi regola |
+| **dog-agent** | ogni target, `/usr/bin/dog-agent` | Binario Rust statico condiviso con CyberShepherd/SentinelCore: pairing a 2 fasi col master, poi push di heartbeat/statistiche/minacce via WebSocket ed esecuzione dei comandi regola |
 
 Le regole create sul master vengono **dispatchate all'agent via WebSocket** in tempo reale; se l'agent non è connesso restano persistite (`is_synced=false`) e si riconciliano alla riconnessione — nessun accesso SSH è mai coinvolto in questo percorso.
 
@@ -115,13 +162,13 @@ curl -sk -X POST https://<master>/api/mcp \
 
 **Master (server web):**
 ```bash
-git clone --branch stabile https://github.com/Dognet-Technologies/firedog.git
+git clone --branch main https://github.com/Dognet-Technologies/firedog.git
 cd firedog && cat INSTALL.md
 ```
 
 **Target (strumenti firewall — Debian/Ubuntu o openSUSE/SLES):**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/get-firedog.sh -o get-firedog.sh
+curl -fsSL https://raw.githubusercontent.com/Dognet-Technologies/firedog/main/firedog-package/get-firedog.sh -o get-firedog.sh
 less get-firedog.sh              # ispeziona prima di eseguire
 sudo bash get-firedog.sh         # oppure: sudo bash get-firedog.sh --skip-init
 ```
@@ -324,7 +371,7 @@ Apri una [issue](https://github.com/Dognet-Technologies/firedog/issues) con: des
 
 ## 📄 Licenza
 
-Questo progetto è rilasciato sotto licenza MIT.
+Questo progetto è rilasciato sotto licenza **AGPL-3.0** — vedi [LICENSE](LICENSE).
 
 ## ⚠️ Disclaimer
 

@@ -37,7 +37,7 @@ CONFIG = {
     # '1.0.1' hardcoded e non si è mai più mosso da lì).
     'version_file': '/opt/sentinelsuite/firedog/VERSION',
     'update_check_state': '/opt/sentinelsuite/firedog/data/update_check.json',
-    'update_check_url': 'https://raw.githubusercontent.com/Dognet-Technologies/firedog/stabile/firedog-package/VERSION',
+    'update_check_url': 'https://raw.githubusercontent.com/Dognet-Technologies/firedog/main/firedog-package/VERSION',
 }
 
 # Porte comuni e servizi
@@ -103,14 +103,25 @@ def load_firedog_conf(path: str = None) -> Dict[str, str]:
 # 'tshark', validato a runtime in analyze_dropped_traffic (fallback a tcpdump
 # se il binario scelto non è installato). PCAP_FILTER_N (N=1..5): stringhe di
 # filtro custom, sintassi opaca al tool scelto (BPF per tcpdump, display
-# filter per tshark) — nessuna validazione semantica, stessa responsabilità di
-# chi le scrive di una query salvata.
+# filter per tshark). Validati per sicurezza (non per correttezza semantica
+# BPF/display-filter) in validate_pcap_filter(), chiamata da
+# analyze_with_custom_filter prima di ogni esecuzione — un filtro che
+# fallisce la validazione viene scartato con un warning, non eseguito.
 _firedog_conf = load_firedog_conf()
 if _firedog_conf.get('PCAP_SAVE_PATH'):
     CONFIG['log_dir'] = _firedog_conf['PCAP_SAVE_PATH']
 CONFIG['pcap_analysis_tool'] = _firedog_conf.get('PCAP_ANALYSIS_TOOL', 'tcpdump').strip() or 'tcpdump'
 CONFIG['pcap_custom_filters'] = [
     _firedog_conf[k] for k in sorted(_firedog_conf) if k.startswith('PCAP_FILTER_') and _firedog_conf[k]
+][:5]
+# PCAP_THREAT_CMD_N (N=1..5): chiavi dei comandi tcpdump curati da eseguire
+# per ogni IP già scorato come minaccia (pannello Dettagli lato UI) — a
+# differenza di PCAP_FILTER_N non sono testo libero ma una whitelist fissa
+# (vedi PCAP_THREAT_COMMAND_SPECS sotto), scelta in Settings con un
+# multi-select e scritta da dog_agent (vedi VALID_THREAT_COMMAND_KEYS in
+# dog_agent/src/targets/firedog.rs — stessa whitelist su entrambi i lati).
+CONFIG['pcap_threat_commands'] = [
+    _firedog_conf[k] for k in sorted(_firedog_conf) if k.startswith('PCAP_THREAT_CMD_') and _firedog_conf[k]
 ][:5]
 
 # Giorni tra un controllo aggiornamenti e il successivo (vedi check_for_updates
@@ -132,6 +143,71 @@ def read_local_version() -> str:
         return Path(CONFIG['version_file']).read_text().strip()
     except (FileNotFoundError, PermissionError, OSError):
         return ''
+
+
+MAX_PCAP_FILTER_LENGTH = 200
+
+
+def validate_pcap_filter(filter_str: str) -> Optional[str]:
+    """Ritorna un messaggio d'errore se il filtro pcap custom NON è
+    accettabile, altrimenti None.
+
+    Vincolo di sicurezza: nessun token (dopo shlex.split) può iniziare con
+    '-'. In sintassi BPF (tcpdump) o display-filter (tshark) legittima nessun
+    token valido inizia con '-' — sono sempre keyword/operatori/valori (es.
+    "host 1.2.3.4 and tcp port 22"). Bloccarlo previene l'injection di flag
+    tcpdump arbitrari (es. -z, che esegue un comando esterno se combinato con
+    -C/-G) qualora il filtro finisca mai per essere interpretato come più
+    argv separati — difesa in profondità: il chiamante deve comunque passare
+    il filtro come UN SOLO elemento di argv, mai splittato, questo controllo
+    è la seconda rete, non l'unica.
+    """
+    if not filter_str or not filter_str.strip():
+        return "il filtro non può essere vuoto"
+    if len(filter_str) > MAX_PCAP_FILTER_LENGTH:
+        return f"supera la lunghezza massima di {MAX_PCAP_FILTER_LENGTH} caratteri"
+    try:
+        tokens = shlex.split(filter_str)
+    except ValueError as e:
+        return f"sintassi non valida: {e}"
+    if any(tok.startswith('-') for tok in tokens):
+        return "non può contenere token che iniziano con '-' (riservato a flag, non ammessi in un filtro)"
+    return None
+
+
+def _pcap_threat_command_specs(pcap: str, ip: str) -> Dict[str, Dict]:
+    """Comandi tcpdump curati per il pannello Dettagli minaccia (una entry
+    per chiave di PCAP_THREAT_COMMAND_KEYS/VALID_THREAT_COMMAND_KEYS, stessa
+    whitelist lato dog_agent). A differenza di pcap_custom_filters questi
+    comandi sono interamente hardcoded: l'unico input esterno è `ip`, già
+    validato come indirizzo IP sintatticamente corretto dal chiamante
+    (ipaddress.ip_address non accetta spazi/metacaratteri), quindi passato
+    come un singolo elemento di argv — nessuna superficie di injection,
+    niente da validare con validate_pcap_filter qui.
+    """
+    filt = f'src host {ip}'
+    return {
+        'summary': {
+            'label': 'Riepilogo pacchetti',
+            'cmd': ['tcpdump', '-nn', '-c', '30', '-r', pcap, filt],
+        },
+        'tcp_flags': {
+            'label': 'Dettaglio flag TCP',
+            'cmd': ['tcpdump', '-nn', '-v', '-c', '30', '-r', pcap, f'{filt} and tcp'],
+        },
+        'timing': {
+            'label': 'Timing assoluto',
+            'cmd': ['tcpdump', '-nn', '-tttt', '-c', '30', '-r', pcap, filt],
+        },
+        'hex_dump': {
+            'label': 'Hex/ASCII dump (primi 20 pacchetti)',
+            'cmd': ['tcpdump', '-nn', '-X', '-c', '20', '-r', pcap, filt],
+        },
+        'icmp': {
+            'label': 'Attività ICMP',
+            'cmd': ['tcpdump', '-nn', '-c', '30', '-r', pcap, f'{filt} and icmp'],
+        },
+    }
 
 
 def _version_tuple(v: str) -> Tuple[int, ...]:
@@ -250,14 +326,15 @@ class FirewallManager:
         
         rule_parts.extend(['-j', 'ACCEPT'])
         
+        comment = self.sanitize_comment(comment)
         if comment:
-            rule_parts.extend(['-m', 'comment', '--comment', comment[:256]])
+            rule_parts.extend(['-m', 'comment', '--comment', comment])
         
         try:
             self.run_command(rule_parts)
             
             # Salva regola personalizzata
-            self.save_custom_rule(' '.join(rule_parts), comment)
+            self.save_custom_rule(rule_parts, comment)
             
             # Persisti regole
             self.save_rules()
@@ -298,12 +375,13 @@ class FirewallManager:
         
         rule_parts.extend(['-j', 'ACCEPT'])
         
+        comment = self.sanitize_comment(comment)
         if comment:
-            rule_parts.extend(['-m', 'comment', '--comment', comment[:256]])
+            rule_parts.extend(['-m', 'comment', '--comment', comment])
         
         try:
             self.run_command(rule_parts)
-            self.save_custom_rule(' '.join(rule_parts), comment)
+            self.save_custom_rule(rule_parts, comment)
             self.save_rules()
             
             dest_info = f" verso {dest_ip}" if dest_ip else ""
@@ -314,12 +392,29 @@ class FirewallManager:
             self.error("Impossibile aggiungere regola")
             return False
     
-    def save_custom_rule(self, rule: str, comment: str):
-        """Salva regola personalizzata nel file di configurazione"""
+    @staticmethod
+    def sanitize_comment(comment: str) -> str:
+        """Commento sicuro da salvare in custom_rules.conf.
+
+        firewall-init.sh rilegge il file al boot come root: niente newline
+        (spezzerebbe la riga), niente apici/backslash/$/backtick (il loader
+        accetta solo un commento finale tra apici singoli). Limite in byte:
+        xt_comment accetta al massimo 255 caratteri.
+        """
+        cleaned = ''.join(ch for ch in comment if ch.isprintable())
+        cleaned = re.sub(r"['\"\\`$]", '', cleaned).strip()
+        return cleaned.encode('utf-8')[:255].decode('utf-8', 'ignore')
+
+    def save_custom_rule(self, rule_parts: List[str], comment: str):
+        """Salva regola personalizzata nel file di configurazione.
+
+        La riga e' quotata con shlex.join: firewall-init.sh la valida e la
+        esegue come array di argomenti, mai con eval.
+        """
         with open(CONFIG['custom_rules'], 'a') as f:
             if comment:
                 f.write(f"# {comment}\n")
-            f.write(f"{rule}\n")
+            f.write(f"{shlex.join(rule_parts)}\n")
     
     def remove_rule(self, chain: str, rule_num: int):
         """Rimuove regola per numero"""
@@ -464,8 +559,13 @@ class FirewallManager:
         
         try:
             with open(CONFIG['rules_file'], 'r') as f:
-                self.run_command(['iptables-restore'], check=True)
-                # Passa il contenuto via stdin
+                # Prima di questo fix c'era anche una chiamata precedente
+                # a `iptables-restore` senza stdin (eredita quello del
+                # processo padre, tipicamente vuoto) con check=True: se
+                # quella falliva, l'eccezione interrompeva l'esecuzione
+                # PRIMA di arrivare qui, lasciando il vero ripristino (con
+                # il contenuto del file via stdin) mai eseguito (HIGH
+                # trovato in code review, 2026-11).
                 subprocess.run(
                     ['iptables-restore'],
                     input=f.read(),
@@ -523,9 +623,23 @@ class FirewallManager:
         """Esegue un filtro custom (BPF per tcpdump, display filter per
         tshark) definito dall'utente in settings, e stampa le righe risultanti
         (troncate a `limit`)."""
+        err = validate_pcap_filter(custom_filter)
+        if err:
+            self.warning(f"Filtro custom scartato (validazione fallita): {err}")
+            return
         try:
             if analyzer == 'tcpdump':
-                cmd = ['tcpdump', '-nn', '-r', pcap] + shlex.split(custom_filter)
+                # custom_filter passato come UN SOLO elemento di argv, mai
+                # shlex.split() in token separati: tcpdump concatena comunque
+                # gli argomenti posizionali in un'unica espressione filtro
+                # (stesso risultato per sintassi BPF legittima), ma uno split
+                # permetterebbe a un filtro tipo "-C 1 -z /path/evil and host
+                # X" di essere interpretato come FLAG separati — incluso -z,
+                # che esegue un comando esterno. La validate_pcap_filter sopra
+                # è una seconda rete (rifiuta comunque token con '-'), questo
+                # è il fix strutturale: mai passare input non fidato come più
+                # argv quando un singolo argv produce lo stesso filtro valido.
+                cmd = ['tcpdump', '-nn', '-r', pcap, custom_filter]
             else:
                 cmd = ['tshark', '-r', pcap, '-Y', custom_filter]
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -795,15 +909,51 @@ class FirewallManager:
                         'reasons': reasons,
                         'dest_port': dest_port,
                         'protocol': protocol,
+                        'pcap_detail': self.get_pcap_threat_detail(ip, pcap_input),
                     })
 
             # Ordina per score
             threats.sort(key=lambda x: x['score'], reverse=True)
 
-        except Exception:
-            pass
+        except Exception as e:
+            # Prima di questo fix un errore qui produceva silenziosamente
+            # una lista vuota/parziale indistinguibile da "nessuna
+            # minaccia", senza nulla nei log per capire perché (HIGH
+            # trovato in code review, 2026-11).
+            self.warning(f"get_threats_data: errore nell'estrazione minacce: {e}")
 
         return threats
+
+    def get_pcap_threat_detail(self, ip: str, pcap_input: str) -> Dict[str, Dict]:
+        """Esegue i comandi tcpdump curati abilitati in Settings
+        (CONFIG['pcap_threat_commands']) per un IP già scorato come
+        minaccia — alimenta il pannello Dettagli lato UI. {} se nessun
+        comando è abilitato (default: nessuno, costo zero finché l'admin
+        non ne attiva almeno uno) o se l'IP non supera una validazione
+        sintattica (difesa in profondità, vedi _pcap_threat_command_specs).
+        """
+        enabled = CONFIG.get('pcap_threat_commands') or []
+        if not enabled:
+            return {}
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            return {}
+
+        specs = _pcap_threat_command_specs(pcap_input, ip)
+        result: Dict[str, Dict] = {}
+        for key in enabled:
+            spec = specs.get(key)
+            if not spec:
+                continue
+            try:
+                proc = subprocess.run(spec['cmd'], capture_output=True, text=True, timeout=10)
+                lines = [ln for ln in proc.stdout.split('\n') if ln.strip()]
+                output = '\n'.join(lines[:50]) if lines else '(nessun pacchetto)'
+            except Exception as e:
+                output = f'Errore: {e}'
+            result[key] = {'label': spec['label'], 'output': output}
+        return result
 
     def parse_iptables_rules(self, chain: str) -> Optional[List[Dict]]:
         """Parsa regole iptables in formato strutturato.
@@ -995,8 +1145,8 @@ class FirewallManager:
             result['udp']['out_packets'] = col('Udp', 'OutDatagrams')
             result['icmp']['in_packets'] = col('Icmp', 'InMsgs')
             result['icmp']['out_packets'] = col('Icmp', 'OutMsgs')
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"get_protocol_stats: errore lettura /proc/net/snmp: {e}")
         return result
 
     def get_system_info(self) -> Dict:
@@ -1026,8 +1176,8 @@ class FirewallManager:
             with open('/proc/uptime', 'r') as f:
                 info['uptime_seconds'] = int(float(f.read().split()[0]))
 
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"get_system_info: errore lettura informazioni di sistema: {e}")
 
         return info
 
@@ -1104,8 +1254,8 @@ class FirewallManager:
                     'rx_packets': stats.get('rx_packets', 0),
                     'tx_packets': stats.get('tx_packets', 0),
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"get_interfaces: errore enumerazione interfacce di rete: {e}")
 
         return interfaces
 
@@ -1130,12 +1280,12 @@ class FirewallManager:
                     'rx_packets': int(rx.get('packets', 0) or 0),
                     'tx_packets': int(tx.get('packets', 0) or 0),
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            self.warning(f"_get_interface_stats: errore lettura contatori NIC: {e}")
         return stats
 
     def check_for_updates(self) -> Dict:
-        """Confronta la versione locale con quella pubblicata su `stabile`,
+        """Confronta la versione locale con quella pubblicata su `main`,
         al più una volta ogni UPDATE_CHECK_INTERVAL_DAYS (0 = disabilitato).
 
         Chiamato anche da export_json ad ogni invocazione (ogni 5 minuti via

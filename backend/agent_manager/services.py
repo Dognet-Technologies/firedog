@@ -31,6 +31,10 @@ class AgentNotConnected(Exception):
     """Sollevata quando un target non ha una connessione agent attiva."""
 
 
+class InvalidCommandPayload(ValueError):
+    """Payload non conforme allo schema dell'azione: il comando non parte."""
+
+
 def dispatch_command_to_agent(
     target,
     action: str,
@@ -38,7 +42,21 @@ def dispatch_command_to_agent(
     *,
     meta: dict[str, Any] | None = None,
 ) -> AgentCommand:
-    """Invia un comando all'agent del target via channel layer."""
+    """Invia un comando all'agent del target via channel layer.
+
+    Il payload viene validato QUI, nel punto da cui passano tutti i comandi:
+    prima solo l'endpoint generico e send_to_group lo facevano, mentre
+    add_rule dei gruppi, create_rule MCP e rules.perform_create arrivavano
+    all'agent senza controlli (es. comment mai validato). Solleva
+    InvalidCommandPayload (sottoclasse di ValueError).
+    """
+    from .serializers import validate_command_payload
+
+    try:
+        validate_command_payload(action, payload)
+    except ValueError as e:
+        raise InvalidCommandPayload(f"{action}: {e}") from e
+
     connection = AgentConnection.objects.filter(target=target, is_online=True).first()
     if not connection or not connection.websocket_channel:
         raise AgentNotConnected(
